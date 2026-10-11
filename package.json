@@ -23,7 +23,8 @@
     "job:reminders": "tsx src/worker/run-job.ts reminders",
     "job:teacher-reminders": "tsx src/worker/run-job.ts teacher-reminders",
     "job:daily-report": "tsx src/worker/run-job.ts daily-report",
-    "job:notifications": "tsx src/worker/run-job.ts notifications"
+    "job:notifications": "tsx src/worker/run-job.ts notifications",
+    "test:integration": "tsx scripts/test-integration.ts"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
