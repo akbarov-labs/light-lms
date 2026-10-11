@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { parsePriceHistory } from "@/lib/billing/sync";
-import { Badge, Card, EmptyState, PageHeader, Table, Td, Th, Tr } from "@/components/ui";
+import { Badge, Card, EmptyState, LinkButton, PageHeader, Table, Td, Th, Tr } from "@/components/ui";
 import { Field, FormGrid, Input, Textarea } from "@/components/fields";
 import { ActionForm, Modal, ModalForm, SubmitButton } from "@/components/client";
 import { PricingFields } from "./pricing-fields";
@@ -61,7 +61,12 @@ export default async function CoursesPage() {
     <>
       <PageHeader
         title={t("nav.courses")}
-        actions={canEdit && <Modal label={`+ ${t("courses.new")}`} title={t("courses.new")} wide><CourseForm ctx={ctx} /></Modal>}
+        actions={
+          <>
+            {ctx.can("export") && <LinkButton variant="secondary" href="/api/export/courses">{t("common.export")}</LinkButton>}
+            {canEdit && <Modal label={`+ ${t("courses.new")}`} title={t("courses.new")} wide><CourseForm ctx={ctx} /></Modal>}
+          </>
+        }
       />
       <Card pad={false}>
         {courses.length === 0 ? (

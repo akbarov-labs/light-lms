@@ -2,7 +2,7 @@ import { requireStaff, type Ctx } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatPhone } from "@/lib/phone";
 import { DEFAULT_PERMS, effectivePerms, PERMS, type RoleName } from "@/lib/perms";
-import { Badge, Card, Table, Td, Th, Tr } from "@/components/ui";
+import { Badge, Card, LinkButton, Table, Td, Th, Tr } from "@/components/ui";
 import { Checkbox, Field, FormGrid, Input, Select } from "@/components/fields";
 import { ActionForm, Modal, ModalForm, SubmitButton } from "@/components/client";
 import { saveStaffAction, toggleStaffArchiveAction } from "../actions";
@@ -63,9 +63,12 @@ export default async function StaffPage() {
     <Card
       pad={false}
       actions={
-        <Modal label={`+ ${t("settings.newStaff")}`} title={t("settings.newStaff")} wide>
-          <StaffForm ctx={ctx} branches={branches} />
-        </Modal>
+        <>
+          {ctx.can("export") && <LinkButton variant="secondary" size="sm" href="/api/export/staff">{t("common.export")}</LinkButton>}
+          <Modal label={`+ ${t("settings.newStaff")}`} title={t("settings.newStaff")} wide>
+            <StaffForm ctx={ctx} branches={branches} />
+          </Modal>
+        </>
       }
       title={t("settings.staff")}
     >

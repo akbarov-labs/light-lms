@@ -8,6 +8,7 @@ import { UserError } from "@/lib/user-error";
 import { enqueue, familyChats } from "@/lib/notify";
 import { msg } from "@/lib/messages";
 import { readSettings } from "@/lib/settings";
+import { advanceLeadsForStudent } from "./leads";
 
 export interface Actor {
   userId: string | null;
@@ -78,6 +79,7 @@ export async function enrollStudent(actor: Actor, input: EnrollInput, branchChec
       },
     });
     await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "Enrollment", entityId: e.id, action: input.trial ? "enroll.trial" : "enroll.active", after: e });
+    await advanceLeadsForStudent(tx, actor.centerId, student.id, input.trial ? "TRIAL_BOOKED" : "ENROLLED", actor.userId);
     if (input.trial) {
       const first = await tx.lesson.findFirst({
         where: { groupId: group.id, date: { gte: fromISODate(input.startDate) }, status: { not: "CANCELLED" } },
@@ -110,6 +112,7 @@ export async function activateEnrollment(actor: Actor, enrollmentId: string, dat
     const when = date ?? (await nextLessonDate(tx, e.groupId, todayISO())) ?? todayISO();
     const updated = await tx.enrollment.update({ where: { id: e.id }, data: { status: "ACTIVE", activatedAt: fromISODate(when) } });
     await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "Enrollment", entityId: e.id, action: "activate", before: { status: e.status }, after: { status: updated.status, activatedAt: when } });
+    await advanceLeadsForStudent(tx, actor.centerId, e.studentId, "ENROLLED", actor.userId);
     await syncEnrollment(e.id, { tx, userId: actor.userId });
   };
   if (tx) return run(tx);

@@ -31,6 +31,7 @@ export default async function SalaryPage({ searchParams }: { searchParams: Promi
           <>
             <LinkButton variant="secondary" href={`/salary?month=${shiftMonth(month, -1)}`}>← {shiftMonth(month, -1)}</LinkButton>
             <LinkButton variant="secondary" href={`/salary?month=${shiftMonth(month, 1)}`}>{shiftMonth(month, 1)} →</LinkButton>
+            {ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/salary?month=${month}`}>{t("common.export")}</LinkButton>}
           </>
         }
       />

@@ -9,6 +9,7 @@ import { readSettings } from "@/lib/settings";
 import { enqueue, familyChats } from "@/lib/notify";
 import { msg } from "@/lib/messages";
 import type { Actor } from "./enrollments";
+import { advanceLeadsForStudent } from "./leads";
 
 export type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
 
@@ -69,6 +70,7 @@ export async function saveAttendance(actor: Actor, lessonId: string, rows: Atten
         });
         if (settings.excusedAbsenceCredit && (before?.status === "EXCUSED") !== (r.status === "EXCUSED")) toSync.add(e.id);
 
+        if (e.status === "TRIAL" && (r.status === "PRESENT" || r.status === "LATE")) await advanceLeadsForStudent(tx, actor.centerId, e.studentId, "TRIAL_DONE", actor.userId);
         // Trial → active after N attended lessons (HANDOFF §6 Trial).
         if (e.status === "TRIAL" && (r.status === "PRESENT" || r.status === "LATE") && settings.trialLessons > 0) {
           const attended = await tx.attendance.count({ where: { enrollmentId: e.id, status: { in: ["PRESENT", "LATE"] } } });
@@ -81,6 +83,7 @@ export async function saveAttendance(actor: Actor, lessonId: string, rows: Atten
             const when = next ? toISODate(next.date) : addDays(date, 1);
             await tx.enrollment.update({ where: { id: e.id }, data: { status: "ACTIVE", activatedAt: fromISODate(when) } });
             await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "Enrollment", entityId: e.id, action: "activate.auto", after: { activatedAt: when, afterLessons: attended } });
+            await advanceLeadsForStudent(tx, actor.centerId, e.studentId, "ENROLLED", actor.userId);
             activated.push(e.id);
             toSync.add(e.id);
           }
