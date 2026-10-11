@@ -16,3 +16,12 @@ describe("csv", () => {
     expect(csvCell(-50000)).toBe("-50000");
   });
 });
+
+import { parseCsv } from "./csv-parse";
+
+describe("csv parse", () => {
+  it("reads quoted cells, BOM and ; separators", () => {
+    expect(parseCsv('﻿a,b\r\n"x, y","say ""hi"""\r\n')).toEqual([["a", "b"], ["x, y", 'say "hi"']]);
+    expect(parseCsv("Ism;Telefon\nAli;901234567\n\n")).toEqual([["Ism", "Telefon"], ["Ali", "901234567"]]);
+  });
+});

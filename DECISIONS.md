@@ -14,3 +14,22 @@
 2026-10-12 — Billing sync takes a Postgres advisory lock per enrollment — two concurrent syncs can't post the same delta twice.
 2026-10-12 — Allocation treats a REVERSAL like the entry it reverses (same unit/enrollment, opposite sign); keyless CREDITs count as wallet money.
 2026-10-12 — Extra center setting transferAsTrial (default false) — HANDOFF says "or TRIAL if the center wants".
+2026-10-12 — Course price changes are versioned (Course.priceHistory) and apply from a chosen date (default: next month) — a price edit never re-prices months already charged. Billing shape (pricing type, renewal, package size, installments) is locked once a course has enrollments; make a new course instead.
+2026-10-12 — Student.branchId (home branch) added — branch-scoped admins must see students who are not in a group yet; scoping = home branch OR any enrollment in the branch.
+2026-10-12 — Lesson.origDate/origStartTime remember a rescheduled lesson's original slot so lesson generation never recreates it.
+2026-10-12 — Branches, rooms and holidays need the `settings` switch (center setup); managers manage staff (only ADMIN/TEACHER roles, only switches they hold themselves).
+2026-10-12 — Changing a group's slots deletes future SCHEDULED lessons with no attendance and regenerates them; teacher/room changes move future lessons unless a substitute was set by hand.
+2026-10-12 — Holiday added → that day's untouched lessons are removed and billing re-synced; holiday removed → lessons regenerated.
+2026-10-12 — Finishing/archiving a group sets endDate=today (if empty) and removes its untouched future lessons.
+2026-10-12 — Discounts and price overrides are allowed with `students.edit` (sibling discounts are daily admin work); every change is audited.
+2026-10-12 — Expenses are never deleted: "reverse" sets reversedAt (needs payments.refund or archive); salary expenses can't be reversed while their payslip is PAID.
+2026-10-12 — Salary rule chosen = latest validFrom ≤ month start (spec); the rule form defaults to the 1st of the viewed month. Locked payslips can be unlocked (not PAID ones) by finance.view.
+2026-10-12 — Payme: the key identifies the center (center whose paymeKey matches); an expired (12h) pending transaction of the same family is auto-cancelled (reason 4) instead of blocking a new one; otherwise −31099.
+2026-10-12 — Public pay page /pay/<familyId> (cuid, unguessable) shows only the center name, first names and the debt, then redirects to Payme checkout; Telegram pay links point there.
+2026-10-12 — Lead stage follows the student automatically: trial booked → TRIAL_BOOKED, trial attended → TRIAL_DONE, activated → ENROLLED (never moves backwards or out of LOST).
+2026-10-12 — Debt reminders escalate on days 3/7/14/30 after the oldest unpaid charge; admins can also send one manually from Debtors (once per family per day).
+2026-10-12 — Public lead form: a repeat submission from a phone with an open lead becomes a note on that lead (no duplicates); honeypot field against bots.
+2026-10-12 — Worker runs the nightly job once on start, so a fresh install has lessons/charges immediately.
+2026-10-12 — DB integration tests use a separate `<db>_test` database (script drops/recreates only that schema); `npm test` stays DB-free.
+2026-10-12 — Docker on this Mac: the credential helper (keychain) hangs pulls in non-interactive shells; builds were run with a credential-free DOCKER_CONFIG (README → Troubleshooting).
+2026-10-12 — Student import (CSV/Excel-saved CSV): students join their group as ACTIVE with billing from the 1st of next month; the old system's balance becomes one keyless "opening balance" CHARGE (debt) or CREDIT (prepaid) — no double charge for the current month, and opening balances never count as revenue.

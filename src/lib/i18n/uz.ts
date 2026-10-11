@@ -531,6 +531,20 @@ export const uz = {
   "t.salarySoFar": "Shu oy hozircha",
   "t.lastPayslip": "Oxirgi oylik varaqasi",
   "t.notTeacher": "Siz o'qituvchi emassiz",
+  "import.title": "Excel / CSV dan import",
+  "import.hint": "Excel faylni \"CSV UTF-8\" qilib saqlang. Ustunlar tartibi: Familiya, Ism, Telefon, Ota-ona telefoni, Guruh kodi (#), Balans (qarz manfiy, masalan −300000). Birinchi qator sarlavha bo'lishi mumkin.",
+  "import.billingHint": "O'quvchi guruhga faol holatda qo'shiladi, to'lov keyingi oyning 1-sanasidan boshlanadi. Balans \"boshlang'ich qoldiq\" bo'lib yoziladi.",
+  "import.file": "CSV fayl",
+  "import.dryRun": "Faqat tekshirish (hech narsa yozilmaydi)",
+  "import.run": "Import qilish",
+  "import.result": "Qatorlar: {rows}. Qo'shildi: {created}. Xatolar: {errors}.",
+  "import.checked": "Tekshirildi — xatosiz qatorlar: {ok}, xatolar: {errors}.",
+  "import.row": "{n}-qator: {msg}",
+  "import.noGroup": "guruh #{code} topilmadi",
+  "import.noName": "ism yoki familiya yo'q",
+  "import.badBalance": "balans noto'g'ri",
+  "import.opening": "Boshlang'ich qoldiq (import)",
+  "import.button": "Import",
 } as const;
 
 export type DictKey = keyof typeof uz;

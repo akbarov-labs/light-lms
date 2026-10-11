@@ -37,7 +37,7 @@ export function ActionForm({
     <form ref={ref} action={formAction} className={className}>
       {children}
       {state?.error && <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">{state.error}</p>}
-      {state?.ok && (state.message || success) && <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{state.message || success}</p>}
+      {state?.ok && (state.message || success) && <p className="mt-2 whitespace-pre-line rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{state.message || success}</p>}
     </form>
   );
 }

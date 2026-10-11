@@ -237,7 +237,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               {events.map((ev) => (
                 <li key={ev.id} className="flex justify-between gap-3 px-4 py-2">
                   <span><code className="text-xs text-slate-600">{ev.entity}.{ev.action}</code></span>
-                  <span className="whitespace-nowrap text-xs text-slate-500">{formatDateTime(ev.createdAt)} · {ev.userId ? users.get(ev.userId) : "tizim"}</span>
+                  <span className="whitespace-nowrap text-xs text-slate-500">{formatDateTime(ev.createdAt)} · {ev.userId ? users.get(ev.userId) : t("audit.system")}</span>
                 </li>
               ))}
             </ul>

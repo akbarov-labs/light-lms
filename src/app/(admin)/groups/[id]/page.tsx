@@ -61,6 +61,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
           ctx.can("groups.edit") && (
             <>
               <LinkButton variant="secondary" href={`/groups/${id}/edit`}>{t("common.edit")}</LinkButton>
+              {(ctx.can("finance.view") || ctx.can("settings")) && <LinkButton variant="ghost" href={`/audit?entity=Group&entityId=${id}`}>{t("students.history")}</LinkButton>}
               {group.status === "ACTIVE" || group.status === "PLANNED" ? (
                 <ActionForm action={setGroupStatusAction}>
                   <input type="hidden" name="id" value={id} />

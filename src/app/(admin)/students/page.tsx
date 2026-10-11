@@ -58,6 +58,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
         actions={
           <>
             {ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/students?${exportQs}`}>{t("common.export")}</LinkButton>}
+            {ctx.can("students.edit") && <LinkButton variant="secondary" href="/students/import">{t("import.button")}</LinkButton>}
             {ctx.can("students.edit") && <LinkButton href="/students/new">+ {t("students.new")}</LinkButton>}
           </>
         }

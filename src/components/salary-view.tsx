@@ -43,7 +43,7 @@ export function SalaryBreakdown({ ctx, result, lessons, showLessons = true }: { 
                   <Tr key={l.lessonId}>
                     <Td className="whitespace-nowrap text-xs">{formatDate(l.date)}</Td>
                     <Td className="text-xs">{l.groupName}</Td>
-                    <Td className="text-xs">{l.students.map((s) => `${s.studentName}${s.trial ? " (sinov)" : ""}`).join(", ") || "—"}</Td>
+                    <Td className="text-xs">{l.students.map((s) => `${s.studentName}${s.trial ? ` (${t("enrollment.TRIAL").toLowerCase()})` : ""}`).join(", ") || "—"}</Td>
                     <Td className="whitespace-nowrap text-right text-xs">{formatMoney(Math.round(l.students.reduce((x, s) => x + s.value, 0)))}</Td>
                   </Tr>
                 ))}
