@@ -5,7 +5,7 @@ import { audit } from "@/lib/audit";
 import { fromISODate, toISODate, todayISO, type ISODate } from "@/lib/dates";
 import { readSettings } from "@/lib/settings";
 import { computeExpected, planSync } from "./engine";
-import type { BillingInput, LedgerDelta } from "./types";
+import type { BillingInput, EnrollmentTerms, LedgerDelta } from "./types";
 
 const enrollmentInclude = {
   freezes: true,
@@ -22,6 +22,28 @@ const enrollmentInclude = {
 export type EnrollmentForBilling = Prisma.EnrollmentGetPayload<{ include: typeof enrollmentInclude }>;
 
 const d = (v: Date | null | undefined): ISODate | null => (v ? toISODate(v) : null);
+
+const intOrNull = (v: unknown): number | null => (Number.isInteger(v) ? (v as number) : null);
+
+/** Group.priceHistory JSON → [{from, price|null}]. */
+export function parseGroupPrices(raw: unknown): { from: ISODate; price: number | null }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((r) => r && typeof r.from === "string").map((r) => ({ from: r.from, price: intOrNull(r.price) }));
+}
+
+/** Enrollment.termsHistory JSON → terms entries. */
+export function parseTermsHistory(raw: unknown): (EnrollmentTerms & { from: ISODate })[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((r) => r && typeof r.from === "string")
+    .map((r) => ({
+      from: r.from,
+      priceOverride: intOrNull(r.priceOverride),
+      discountPercent: intOrNull(r.discountPercent),
+      discountAmount: intOrNull(r.discountAmount),
+      discountUntil: typeof r.discountUntil === "string" ? r.discountUntil : null,
+    }));
+}
 
 /** Course.priceHistory JSON → [{from, price}], ignoring malformed rows. */
 export function parsePriceHistory(raw: unknown): { from: ISODate; price: number }[] {
@@ -64,6 +86,7 @@ export function buildInput(p: {
       endDate: d(g.endDate),
       priceOverride: g.priceOverride,
       slotWeekdays: g.slots.map((s) => s.weekday),
+      prices: parseGroupPrices(g.priceHistory),
     },
     enrollment: {
       id: enrollment.id,
@@ -76,6 +99,7 @@ export function buildInput(p: {
       discountAmount: enrollment.discountAmount,
       discountUntil: d(enrollment.discountUntil),
       freezes: enrollment.freezes.map((f) => ({ from: toISODate(f.fromDate), to: toISODate(f.toDate) })),
+      terms: parseTermsHistory(enrollment.termsHistory),
     },
     lessons: p.lessons.map((l) => ({ id: l.id, date: toISODate(l.date), status: l.status })),
     excusedLessonIds: p.excusedLessonIds,

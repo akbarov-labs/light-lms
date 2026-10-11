@@ -65,6 +65,7 @@ export function isChargeable(
   excusedLessonIds: Set<string>,
 ): boolean {
   if (lesson.status === "CANCELLED") return false;
+  if (lesson.date < enrollment.startDate) return false;
   if (!enrollment.activatedAt || lesson.date < enrollment.activatedAt) return false;
   if (enrollment.endDate && lesson.date > enrollment.endDate) return false;
   if (isFrozenOn(enrollment, lesson.date)) return false;

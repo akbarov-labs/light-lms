@@ -9,10 +9,11 @@ import { audit } from "@/lib/audit";
 import { formObject, zDate, zId, zOptDate, zOptId, zOptInt, zOptMoney, zStr } from "@/lib/forms";
 import { UserError } from "@/lib/user-error";
 import { assertBranch, type Ctx } from "@/lib/ctx";
-import { fromISODate, toISODate, todayISO } from "@/lib/dates";
+import { fromISODate, monthRange, shiftMonth, toISODate, todayISO } from "@/lib/dates";
+import type { Prisma } from "@prisma/client";
 import { validSlot, type WeeklySlot } from "@/lib/schedule";
 import { assertNoGroupClash, generateLessons, rebuildFutureLessons, trimLessonsAfter } from "@/lib/services/lessons";
-import { syncGroup } from "@/lib/billing/sync";
+import { parseGroupPrices, syncGroup } from "@/lib/billing/sync";
 
 const schema = z.object({
   id: zOptId,
@@ -25,6 +26,7 @@ const schema = z.object({
   endDate: zOptDate,
   capacity: zOptInt(1, 1000),
   priceOverride: zOptMoney,
+  priceFrom: zOptDate,
 });
 
 function readSlots(fd: FormData): WeeklySlot[] {
@@ -106,6 +108,14 @@ export async function updateGroupAction(_: ActionState, fd: FormData): Promise<A
         const key = (s: WeeklySlot) => `${s.weekday}|${s.startTime}|${s.endTime}`;
         const slotsChanged = g.slots.map(key).sort().join(",") !== slots.map(key).sort().join(",");
         const startChanged = toISODate(g.startDate) !== f.startDate;
+        let priceHistory = parseGroupPrices(g.priceHistory);
+        const newOverride = f.priceOverride ?? null;
+        if (newOverride !== g.priceOverride) {
+          // a new group price applies from the chosen date (default next month); charged months keep theirs
+          const from = f.priceFrom ?? monthRange(shiftMonth(today.slice(0, 7), 1)).start;
+          if (priceHistory.length === 0) priceHistory = [{ from: "2000-01-01", price: g.priceOverride }];
+          priceHistory = [...priceHistory.filter((h) => h.from < from), { from, price: newOverride }];
+        }
         const updated = await tx.group.update({
           where: { id: g.id },
           data: {
@@ -118,6 +128,7 @@ export async function updateGroupAction(_: ActionState, fd: FormData): Promise<A
             endDate: f.endDate ? fromISODate(f.endDate) : null,
             capacity: f.capacity ?? null,
             priceOverride: f.priceOverride ?? null,
+            priceHistory: priceHistory as unknown as Prisma.InputJsonValue,
             ...(g.status === "PLANNED" && f.startDate <= today ? { status: "ACTIVE" as const } : {}),
             ...(g.status === "FINISHED" && (!f.endDate || f.endDate >= today) ? { status: "ACTIVE" as const } : {}),
           },

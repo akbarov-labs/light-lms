@@ -376,3 +376,78 @@ describe("lessonValue (teacher % base)", () => {
     expect(lessonValue(input, id, false)).toMatchObject({ value: 100_000, key: "pkg:e1:2" });
   });
 });
+
+describe("review fixes", () => {
+  it("a price override set from October does not re-price August and September", () => {
+    const input = scenario({
+      asOf: "2026-10-05",
+      enrollment: {
+        activatedAt: "2026-08-01",
+        startDate: "2026-08-01",
+        priceOverride: 500_000,
+        terms: [
+          { from: "2000-01-01", priceOverride: null, discountPercent: null, discountAmount: null, discountUntil: null },
+          { from: "2026-10-01", priceOverride: 500_000, discountPercent: null, discountAmount: null, discountUntil: null },
+        ],
+      },
+      groupStart: "2026-08-01",
+    });
+    expect(computeExpected(input).map((u) => u.amount)).toEqual([600_000, 600_000, 500_000]);
+  });
+
+  it("a 100% discount from this month leaves earlier months owed", () => {
+    const input = scenario({
+      asOf: "2026-10-05",
+      groupStart: "2026-09-01",
+      enrollment: {
+        activatedAt: "2026-09-01",
+        startDate: "2026-09-01",
+        discountPercent: 100,
+        terms: [
+          { from: "2000-01-01", priceOverride: null, discountPercent: null, discountAmount: null, discountUntil: null },
+          { from: "2026-10-01", priceOverride: null, discountPercent: 100, discountAmount: null, discountUntil: null },
+        ],
+      },
+    });
+    expect(computeExpected(input).map((u) => u.amount)).toEqual([600_000, 0]);
+  });
+
+  it("group price override history applies from its date", () => {
+    const input = scenario({ asOf: "2026-11-05", groupPrice: 700_000 });
+    input.group.prices = [{ from: "2000-01-01", price: null }, { from: "2026-11-01", price: 700_000 }];
+    expect(computeExpected(input).map((u) => u.amount)).toEqual([600_000, 700_000]);
+  });
+
+  it("percent and fixed discounts never stack (percent wins)", () => {
+    expect(computeExpected(scenario({ asOf: "2026-10-01", enrollment: { discountPercent: 10, discountAmount: 50_000 } }))[0].amount).toBe(540_000);
+  });
+
+  it("an activation date before the start date never charges lessons before the student joined", () => {
+    const input = scenario({ asOf: "2026-10-20", enrollment: { startDate: "2026-10-20", activatedAt: "2026-10-01" } });
+    expect(computeExpected(input)[0].amount).toBe(round100((600_000 * 5) / 13));
+  });
+
+  it("whole course stays one package when the schedule shrinks", () => {
+    const c = { pricingType: "PACKAGE" as const, price: 2_400_000, packageLessons: null };
+    const base = scenario({ slots: MWF, asOf: "2026-12-20", course: c, groupStart: "2026-10-01", groupEnd: "2027-01-31", lessonsTo: "2026-11-30" });
+    // after November only Mon/Wed lessons were generated
+    const extra = generateLessonDates(MWF.filter((s) => s.weekday !== 5), "2026-12-01", "2026-12-31", new Set()).map((l) => ({ id: `x${l.date}`, date: l.date, status: "SCHEDULED" as const }));
+    const input = { ...base, lessons: [...base.lessons, ...extra], group: { ...base.group, slotWeekdays: [1, 3] } };
+    const units = computeExpected(input);
+    expect(units).toHaveLength(1);
+    expect(units[0].amount).toBe(2_400_000);
+  });
+
+  it("whole course without an end date is never charged twice", () => {
+    const c = { pricingType: "PACKAGE" as const, price: 2_400_000, packageLessons: null, durationMonths: 1 };
+    const units = computeExpected(scenario({ asOf: "2027-02-01", course: c, groupStart: "2026-10-01" }));
+    expect(units).toHaveLength(1);
+    expect(units[0].amount).toBe(2_400_000);
+  });
+
+  it("a package student leaving today is closed today", () => {
+    const pkg = { pricingType: "PACKAGE" as const, price: 1_200_000, packageLessons: 12 };
+    const units = computeExpected(scenario({ asOf: "2026-10-28", course: pkg, enrollment: { endDate: "2026-10-28", status: "LEFT" } }));
+    expect(units.reduce((s, u) => s + u.amount, 0)).toBe(1_200_000);
+  });
+});

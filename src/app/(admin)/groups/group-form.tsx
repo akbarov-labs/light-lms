@@ -49,6 +49,7 @@ export async function GroupForm({ ctx, group }: { ctx: Ctx; group?: Group & { sl
           <Field label={t("common.start")}><Input name="startDate" type="date" defaultValue={group ? toISODate(group.startDate) : todayISO()} required /></Field>
           <Field label={t("common.end")} hint={t("common.optional")}><Input name="endDate" type="date" defaultValue={group?.endDate ? toISODate(group.endDate) : ""} /></Field>
           <Field label={t("groups.priceOverride")} hint={t("common.optional")}><Input name="priceOverride" inputMode="numeric" defaultValue={group?.priceOverride ?? ""} /></Field>
+          {group && <Field label={t("groups.priceFrom")} hint={t("courses.priceFromHint")}><Input name="priceFrom" type="date" /></Field>}
         </FormGrid>
       </Card>
       <Card title={t("groups.schedule")}>

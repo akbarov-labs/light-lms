@@ -14,7 +14,7 @@ import { readSettings } from "@/lib/settings";
 import { fromISODate } from "@/lib/dates";
 import { generateLessons } from "@/lib/services/lessons";
 import { syncGroup } from "@/lib/billing/sync";
-import { assertBranch, type Ctx } from "@/lib/ctx";
+import { assertBranch, staffInScope, type Ctx } from "@/lib/ctx";
 
 // ---------------------------------------------------------------- center
 
@@ -245,6 +245,8 @@ export async function saveStaffAction(_: ActionState, fd: FormData): Promise<Act
         const u = await tx.user.findFirst({ where: { id: f.id, centerId: ctx.centerId }, include: { branches: true } });
         if (!u) throw new UserError("error.notFound");
         if (!canManageRole(ctx, u.role as RoleName)) throw new UserError("settings.cannotEditOwner");
+        // a branch manager edits only staff who work entirely inside their branches
+        if (!staffInScope(ctx, u.branches.map((b) => b.branchId))) throw new UserError("error.forbidden");
         if (u.id === ctx.userId && f.role !== u.role) throw new UserError("settings.cannotEditOwner");
         await tx.user.update({ where: { id: u.id }, data: { ...data, ...(f.password ? { passwordHash: await bcrypt.hash(f.password, 10) } : {}) } });
         await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: u.id, action: "update", before: { ...u, passwordHash: undefined }, after: { ...data, branchIds, passwordChanged: !!f.password } });
@@ -255,8 +257,9 @@ export async function saveStaffAction(_: ActionState, fd: FormData): Promise<Act
         await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: u.id, action: "create", after: { ...data, branchIds } });
         userId = u.id;
       }
-      await tx.userBranch.deleteMany({ where: { userId } });
-      if (branches.length) await tx.userBranch.createMany({ data: branches.map((b) => ({ userId, branchId: b.id })) });
+      // replace only the branch assignments this user controls
+      await tx.userBranch.deleteMany({ where: { userId, ...(ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) } });
+      if (branches.length) await tx.userBranch.createMany({ data: branches.map((b) => ({ userId, branchId: b.id })), skipDuplicates: true });
     });
     revalidatePath("/settings/staff");
   });
@@ -266,9 +269,10 @@ export async function toggleStaffArchiveAction(_: ActionState, fd: FormData): Pr
   return runAction("staff.manage", async (ctx) => {
     const id = zId.parse(fd.get("id"));
     if (id === ctx.userId) throw new UserError("settings.cannotArchiveSelf");
-    const u = await db.user.findFirst({ where: { id, centerId: ctx.centerId } });
+    const u = await db.user.findFirst({ where: { id, centerId: ctx.centerId }, include: { branches: true } });
     if (!u) throw new UserError("error.notFound");
     if (!canManageRole(ctx, u.role as RoleName)) throw new UserError("settings.cannotEditOwner");
+    if (!staffInScope(ctx, u.branches.map((b) => b.branchId))) throw new UserError("error.forbidden");
     await db.$transaction(async (tx) => {
       await tx.user.update({ where: { id }, data: { archivedAt: u.archivedAt ? null : new Date() } });
       await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: id, action: u.archivedAt ? "restore" : "archive" });

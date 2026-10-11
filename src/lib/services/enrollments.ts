@@ -3,7 +3,8 @@
 import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { addDays, fromISODate, toISODate, todayISO, type ISODate } from "@/lib/dates";
-import { syncEnrollment } from "@/lib/billing/sync";
+import type { Prisma } from "@prisma/client";
+import { parseTermsHistory, syncEnrollment } from "@/lib/billing/sync";
 import { UserError } from "@/lib/user-error";
 import { enqueue, familyChats } from "@/lib/notify";
 import { msg } from "@/lib/messages";
@@ -109,7 +110,8 @@ export async function activateEnrollment(actor: Actor, enrollmentId: string, dat
   const run = async (tx: Tx) => {
     const e = await loadEnrollment(tx, actor, enrollmentId);
     if (e.status !== "TRIAL") return;
-    const when = date ?? (await nextLessonDate(tx, e.groupId, todayISO())) ?? todayISO();
+    const picked = date ?? (await nextLessonDate(tx, e.groupId, todayISO())) ?? todayISO();
+    const when = picked < toISODate(e.startDate) ? toISODate(e.startDate) : picked;
     const updated = await tx.enrollment.update({ where: { id: e.id }, data: { status: "ACTIVE", activatedAt: fromISODate(when) } });
     await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "Enrollment", entityId: e.id, action: "activate", before: { status: e.status }, after: { status: updated.status, activatedAt: when } });
     await advanceLeadsForStudent(tx, actor.centerId, e.studentId, "ENROLLED", actor.userId);
@@ -143,6 +145,7 @@ export async function transferEnrollment(actor: Actor, enrollmentId: string, toG
         discountAmount: e.discountAmount,
         discountUntil: e.discountUntil,
         discountReason: e.discountReason,
+        // the price override belonged to the old group; only the discount moves along
       },
     });
     await tx.enrollment.update({
@@ -212,15 +215,26 @@ export interface PriceTerms {
   discountReason: string | null;
 }
 
-export async function setEnrollmentTerms(actor: Actor, enrollmentId: string, terms: PriceTerms): Promise<void> {
+/**
+ * New price / discount for an enrollment, effective for billing units starting on/after `from`.
+ * Earlier units keep the terms they were charged with (Enrollment.termsHistory).
+ */
+export async function setEnrollmentTerms(actor: Actor, enrollmentId: string, terms: PriceTerms, from: ISODate): Promise<void> {
   await db.$transaction(async (tx) => {
     const e = await loadEnrollment(tx, actor, enrollmentId);
+    const iso = (d: Date | null) => (d ? toISODate(d) : null);
+    let history = parseTermsHistory(e.termsHistory);
+    if (history.length === 0) {
+      history = [{ from: "2000-01-01", priceOverride: e.priceOverride, discountPercent: e.discountPercent, discountAmount: e.discountAmount, discountUntil: iso(e.discountUntil) }];
+    }
+    history = [...history.filter((h) => h.from < from), { from, priceOverride: terms.priceOverride, discountPercent: terms.discountPercent, discountAmount: terms.discountAmount, discountUntil: terms.discountUntil }];
     const data = {
       priceOverride: terms.priceOverride,
       discountPercent: terms.discountPercent,
       discountAmount: terms.discountAmount,
       discountUntil: terms.discountUntil ? fromISODate(terms.discountUntil) : null,
       discountReason: terms.discountReason,
+      termsHistory: history as unknown as Prisma.InputJsonValue,
     };
     await tx.enrollment.update({ where: { id: e.id }, data });
     await audit(tx, {
@@ -230,7 +244,7 @@ export async function setEnrollmentTerms(actor: Actor, enrollmentId: string, ter
       entityId: e.id,
       action: "terms",
       before: { priceOverride: e.priceOverride, discountPercent: e.discountPercent, discountAmount: e.discountAmount, discountUntil: e.discountUntil, discountReason: e.discountReason },
-      after: terms,
+      after: { ...terms, from },
     });
     await syncEnrollment(e.id, { tx, userId: actor.userId });
   }, TX);

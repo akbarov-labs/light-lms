@@ -545,6 +545,11 @@ export const uz = {
   "import.badBalance": "balans noto'g'ri",
   "import.opening": "Boshlang'ich qoldiq (import)",
   "import.button": "Import",
+  "enr.termsFrom": "Qaysi sanadan (davr boshlanishi)",
+  "groups.priceFrom": "Yangi guruh narxi qaysi sanadan",
+  "pay.paymeNoReverse": "Payme to'lovini faqat Payme bekor qiladi (Payme kabinetidan qaytaring)",
+  "import.balanceNeedsRefund": "balans faqat \"Qaytarish\" ruxsati bilan import qilinadi",
+  "import.balanceExistingFamily": "mavjud oilaga boshlang'ich balans yozib bo'lmaydi",
 } as const;
 
 export type DictKey = keyof typeof uz;

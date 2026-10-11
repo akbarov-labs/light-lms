@@ -3,7 +3,7 @@
 import { runAction, type ActionState } from "@/lib/action";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { canAccessBranch } from "@/lib/ctx";
+import { assertFamilyAccess, canAccessBranch } from "@/lib/ctx";
 import { parseCsv } from "@/lib/csv-parse";
 import { normalizePhone } from "@/lib/phone";
 import { parseMoney } from "@/lib/money";
@@ -41,6 +41,10 @@ export async function importStudentsAction(_: ActionState, fd: FormData): Promis
         errors.push(t("import.row", { n, msg: t("import.badBalance") }));
         continue;
       }
+      if (balance !== 0 && !ctx.can("payments.refund")) {
+        errors.push(t("import.row", { n, msg: t("import.balanceNeedsRefund") }));
+        continue;
+      }
       const phone = normalizePhone(phoneRaw);
       const parent = normalizePhone(parentRaw) ?? phone;
       if (dry) {
@@ -49,7 +53,18 @@ export async function importStudentsAction(_: ActionState, fd: FormData): Promis
       }
       try {
         await db.$transaction(async (tx) => {
-          let familyId = parent ? (await tx.guardian.findFirst({ where: { phone: parent, family: { centerId: ctx.centerId } } }))?.familyId : undefined;
+          // a sibling joins an existing family only if this user may see that family
+          let familyId: string | undefined;
+          const known = parent ? await tx.guardian.findFirst({ where: { phone: parent, family: { centerId: ctx.centerId } } }) : null;
+          if (known) {
+            try {
+              await assertFamilyAccess(ctx, known.familyId);
+              familyId = known.familyId;
+            } catch {
+              familyId = undefined;
+            }
+          }
+          if (familyId && balance !== 0) throw new Error(t("import.balanceExistingFamily"));
           if (!familyId) {
             const fam = await tx.family.create({ data: { centerId: ctx.centerId, name: `${lastName}lar oilasi` } });
             familyId = fam.id;

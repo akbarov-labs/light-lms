@@ -17,8 +17,8 @@ export default async function TeacherSalaryPage({ params, searchParams }: { para
   const ctx = await requireStaff("finance.view");
   const { t } = ctx;
   const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : todayISO().slice(0, 7);
-  const teacher = await db.user.findFirst({ where: { id: teacherId, centerId: ctx.centerId } });
-  if (!teacher) notFound();
+  const teacher = await db.user.findFirst({ where: { id: teacherId, centerId: ctx.centerId }, include: { branches: true } });
+  if (!teacher || (ctx.branchIds && !teacher.branches.some((b) => ctx.branchIds!.includes(b.branchId)))) notFound();
   const [{ result, lessons }, rules, slip] = await Promise.all([
     liveSalary(ctx.centerId, teacherId, month),
     db.salaryRule.findMany({ where: { teacherId }, orderBy: [{ validFrom: "desc" }, { createdAt: "desc" }] }),

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireStaff } from "@/lib/ctx";
+import { familyScope, requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatDate, formatDateTime, toISODate } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
@@ -12,9 +12,10 @@ import { LinkButton } from "@/components/ui";
 export default async function ReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ctx = await requireStaff();
+  if (!ctx.can("payments.take") && !ctx.can("finance.view")) notFound();
   const { t } = ctx;
   const entry = await db.ledgerEntry.findFirst({
-    where: { id, centerId: ctx.centerId, type: { in: ["PAYMENT", "REFUND"] } },
+    where: { id, centerId: ctx.centerId, type: { in: ["PAYMENT", "REFUND"] }, ...(ctx.branchIds ? { family: familyScope({ ...ctx, activeBranchId: null }) } : {}) },
     include: { family: { include: { students: { select: { firstName: true, lastName: true } } } }, student: true, center: true, enrollment: { include: { group: { select: { name: true, code: true } } } }, reversedBy: true },
   });
   if (!entry) notFound();

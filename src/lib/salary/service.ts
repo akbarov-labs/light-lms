@@ -89,7 +89,10 @@ export async function markPayslipPaid(actor: Actor, teacherId: string, month: st
   const teacher = await assertTeacher(actor, teacherId);
   await db.$transaction(async (tx) => {
     const p = await tx.payslip.findUnique({ where: { teacherId_month: { teacherId, month } } });
-    if (!p || p.status !== "LOCKED") throw new UserError("error.locked");
+    if (!p) throw new UserError("error.locked");
+    // claim LOCKED → PAID first, so two clicks can never book the expense twice
+    const claimed = await tx.payslip.updateMany({ where: { id: p.id, status: "LOCKED" }, data: { status: "PAID", paidAt: new Date(), paidById: actor.userId } });
+    if (claimed.count === 0) throw new UserError("error.locked");
     const branch = await tx.userBranch.findFirst({ where: { userId: teacherId }, select: { branchId: true } });
     const expense = await tx.expense.create({
       data: {
@@ -102,7 +105,7 @@ export async function markPayslipPaid(actor: Actor, teacherId: string, month: st
         createdById: actor.userId ?? teacherId,
       },
     });
-    await tx.payslip.update({ where: { id: p.id }, data: { status: "PAID", paidAt: new Date(), paidById: actor.userId, expenseId: expense.id } });
+    await tx.payslip.update({ where: { id: p.id }, data: { expenseId: expense.id } });
     await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "Payslip", entityId: p.id, action: "paid", after: { total: p.total, expenseId: expense.id } });
   });
 }

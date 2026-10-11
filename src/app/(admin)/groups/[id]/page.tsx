@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canAccessBranch, requireStaff } from "@/lib/ctx";
+import { canAccessBranch, requireStaff, studentScope } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { addDays, formatDate, fromISODate, toISODate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
@@ -42,7 +42,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
     }),
     db.group.findMany({ where: { centerId: ctx.centerId, status: { in: ["ACTIVE", "PLANNED"] }, ...(ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) }, select: { id: true, name: true, code: true }, orderBy: { code: "desc" } }),
     ctx.can("students.edit")
-      ? db.student.findMany({ where: { centerId: ctx.centerId, status: "ACTIVE" }, select: { id: true, firstName: true, lastName: true, phone: true }, orderBy: { lastName: "asc" }, take: 2000 })
+      ? db.student.findMany({ where: { centerId: ctx.centerId, status: "ACTIVE", ...(ctx.branchIds ? studentScope({ ...ctx, activeBranchId: null }) : {}) }, select: { id: true, firstName: true, lastName: true, phone: true }, orderBy: { lastName: "asc" }, take: 2000 })
       : Promise.resolve([]),
   ]);
   const allocs = await allocationsFor([...new Set(enrollments.map((e) => e.student.familyId))]);
@@ -61,7 +61,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
           ctx.can("groups.edit") && (
             <>
               <LinkButton variant="secondary" href={`/groups/${id}/edit`}>{t("common.edit")}</LinkButton>
-              {(ctx.can("finance.view") || ctx.can("settings")) && <LinkButton variant="ghost" href={`/audit?entity=Group&entityId=${id}`}>{t("students.history")}</LinkButton>}
+              {(ctx.can("finance.view") || ctx.can("settings")) && !ctx.branchIds && <LinkButton variant="ghost" href={`/audit?entity=Group&entityId=${id}`}>{t("students.history")}</LinkButton>}
               {group.status === "ACTIVE" || group.status === "PLANNED" ? (
                 <ActionForm action={setGroupStatusAction}>
                   <input type="hidden" name="id" value={id} />

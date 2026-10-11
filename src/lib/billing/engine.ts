@@ -7,7 +7,7 @@
 import { addDays, addMonthsAnchored, parts, type ISODate } from "@/lib/dates";
 import { countSlotDates, isChargeable, isFrozenOn, enrollmentCovers } from "./lessons";
 import { nextPeriod, periodContaining, periodLabel, type Period } from "./periods";
-import type { BillingInput, BillingLesson, ExpectedUnit, LedgerDelta, PostedEntry } from "./types";
+import type { BillingInput, BillingLesson, EnrollmentTerms, ExpectedUnit, LedgerDelta, PostedEntry } from "./types";
 
 /** Round to the nearest 100 so'm (parent-friendly numbers). */
 export function round100(n: number): number {
@@ -24,21 +24,42 @@ export function coursePriceAt(course: BillingInput["course"], at: ISODate): numb
   return price;
 }
 
-/** enrollment override → group override → course price (as of `at`). */
-export function basePrice(input: Pick<BillingInput, "course" | "group" | "enrollment">, at: ISODate): number {
-  return input.enrollment.priceOverride ?? input.group.priceOverride ?? coursePriceAt(input.course, at);
+/** Enrollment terms (override + discount) valid for a unit starting on `at`. */
+export function termsAt(e: BillingInput["enrollment"], at: ISODate): EnrollmentTerms {
+  if (e.terms && e.terms.length > 0) {
+    const sorted = [...e.terms].sort((a, b) => a.from.localeCompare(b.from));
+    const valid = sorted.filter((t) => t.from <= at);
+    const t = valid[valid.length - 1] ?? sorted[0];
+    return { priceOverride: t.priceOverride, discountPercent: t.discountPercent, discountAmount: t.discountAmount, discountUntil: t.discountUntil };
+  }
+  return { priceOverride: e.priceOverride, discountPercent: e.discountPercent, discountAmount: e.discountAmount, discountUntil: e.discountUntil };
 }
 
-/** Price of a unit that starts on `unitStart`, with the enrollment discount applied while it is valid. */
+/** Group price override valid on `at` (history), else the current override. */
+function groupOverrideAt(g: BillingInput["group"], at: ISODate): number | null {
+  if (g.prices && g.prices.length > 0) {
+    const valid = g.prices.filter((p) => p.from <= at).sort((a, b) => a.from.localeCompare(b.from));
+    if (valid.length > 0) return valid[valid.length - 1].price;
+  }
+  return g.priceOverride;
+}
+
+/** enrollment override → group override → course price, each as valid on `at`. */
+export function basePrice(input: Pick<BillingInput, "course" | "group" | "enrollment">, at: ISODate): number {
+  return termsAt(input.enrollment, at).priceOverride ?? groupOverrideAt(input.group, at) ?? coursePriceAt(input.course, at);
+}
+
+/**
+ * Price of a unit that starts on `unitStart`, with the discount valid then.
+ * One discount applies: a percent discount takes precedence over a fixed amount.
+ */
 export function unitPrice(input: Pick<BillingInput, "course" | "group" | "enrollment">, unitStart: ISODate): number {
   const base = basePrice(input, unitStart);
-  const e = input.enrollment;
-  const discountValid = !e.discountUntil || unitStart <= e.discountUntil;
-  if (!discountValid) return base;
-  let price = base;
-  if (e.discountPercent) price = Math.round((base * (100 - e.discountPercent)) / 100);
-  if (e.discountAmount) price = price - e.discountAmount;
-  return Math.max(0, price);
+  const t = termsAt(input.enrollment, unitStart);
+  if (t.discountUntil && unitStart > t.discountUntil) return base;
+  if (t.discountPercent) return Math.max(0, Math.round((base * (100 - t.discountPercent)) / 100));
+  if (t.discountAmount) return Math.max(0, base - t.discountAmount);
+  return base;
 }
 
 export function groupLabel(input: Pick<BillingInput, "group">): string {
@@ -126,13 +147,29 @@ interface PackageInfo {
   wholeCourse: boolean;
 }
 
-/** Number of lessons in the whole course (group start → end, or estimated from duration). */
-export function wholeCourseLessons(input: BillingInput): number {
+/**
+ * Lessons of the whole course from `from` to the group's end: lessons already generated (any status)
+ * plus the slot dates after the last generated one — so a schedule change counts the real lessons.
+ * Without an end date the count is estimated from the course duration.
+ */
+export function courseLessonsFrom(input: BillingInput, from: ISODate): number {
   const g = input.group;
-  if (g.endDate) return Math.max(1, countSlotDates(g.slotWeekdays, g.startDate, g.endDate, input.holidays));
-  const perWeek = input.course.lessonsPerWeek ?? g.slotWeekdays.length;
-  const months = input.course.durationMonths ?? 1;
-  return Math.max(1, Math.round(months * perWeek * 4.33));
+  if (!g.endDate) {
+    const perWeek = input.course.lessonsPerWeek ?? g.slotWeekdays.length;
+    const estimate = Math.round((input.course.durationMonths ?? 1) * perWeek * 4.33);
+    const total = Math.max(estimate, input.lessons.length);
+    const before = input.lessons.filter((l) => l.date >= g.startDate && l.date < from).length;
+    return Math.max(1, total - before);
+  }
+  const generated = input.lessons.filter((l) => l.date >= from && l.date <= g.endDate!).length;
+  const last = input.lessons.reduce((m, l) => (l.date > m ? l.date : m), "");
+  const tailFrom = last && last >= from ? nextDay(last) : from;
+  return Math.max(1, generated + countSlotDates(g.slotWeekdays, tailFrom, g.endDate, input.holidays));
+}
+
+/** Number of lessons in the whole course. */
+export function wholeCourseLessons(input: BillingInput): number {
+  return courseLessonsFrom(input, input.group.startDate);
 }
 
 function packageInfo(input: BillingInput): PackageInfo {
@@ -143,15 +180,9 @@ function packageInfo(input: BillingInput): PackageInfo {
   // at the course's per-lesson rate (DECISIONS.md).
   const total = wholeCourseLessons(input);
   const activated = input.enrollment.activatedAt ?? input.group.startDate;
-  const g = input.group;
-  if (activated > g.startDate) {
-    const end = g.endDate;
-    const remaining = end
-      ? countSlotDates(g.slotWeekdays, activated, end, input.holidays)
-      : Math.max(0, total - countSlotDates(g.slotWeekdays, g.startDate, prevDay(activated), input.holidays));
-    if (remaining > 0 && remaining < total) {
-      return { size: remaining, ratio: remaining / total, wholeCourse: true };
-    }
+  if (activated > input.group.startDate) {
+    const remaining = courseLessonsFrom(input, activated);
+    if (remaining > 0 && remaining < total) return { size: remaining, ratio: remaining / total, wholeCourse: true };
   }
   return { size: total, ratio: 1, wholeCourse: true };
 }
@@ -178,11 +209,13 @@ function packageUnits(input: BillingInput): ExpectedUnit[] {
     .sort((a, b) => a.date.localeCompare(b.date));
   const consumedList = chargeable.filter((l) => l.date <= input.asOf);
   const consumed = consumedList.length;
-  const closed = !!e.endDate && e.endDate < input.asOf;
+  // a student leaving today is closed today (their last lesson is already counted)
+  const closed = !!e.endDate && e.endDate <= input.asOf;
   const inst = Math.max(1, input.course.installments || 1);
 
-  let k = Math.max(1, Math.ceil(consumed / N));
-  if (!closed && consumed > 0 && consumed % N === 0 && chargeable.some((l) => l.date > input.asOf)) k += 1;
+  // a whole course is one package, whatever the lesson count turns out to be
+  let k = info.wholeCourse ? 1 : Math.max(1, Math.ceil(consumed / N));
+  if (!info.wholeCourse && !closed && consumed > 0 && consumed % N === 0 && chargeable.some((l) => l.date > input.asOf)) k += 1;
 
   for (let i = 1; i <= k; i++) {
     const start = i === 1 ? e.activatedAt : (consumedList[(i - 1) * N - 1]?.date ?? input.asOf);
@@ -191,7 +224,7 @@ function packageUnits(input: BillingInput): ExpectedUnit[] {
     let owed = price;
     if (closed && i === k) {
       const usedInLast = Math.max(0, consumed - (k - 1) * N);
-      owed = Math.round((price * usedInLast) / N);
+      owed = Math.min(price, Math.round((price * usedInLast) / N));
     }
     const amounts = installmentAmounts(price, inst);
     let remaining = owed;
@@ -306,7 +339,7 @@ export function lessonValue(input: BillingInput, lessonId: string, payTrial: boo
     .filter((l) => isChargeable(l, e, input.settings, input.excusedLessonIds))
     .sort((a, b) => a.date.localeCompare(b.date));
   const idx = chargeable.findIndex((l) => l.id === lessonId);
-  const pkgIndex = Math.floor(idx / info.size) + 1;
+  const pkgIndex = info.wholeCourse ? 1 : Math.floor(idx / info.size) + 1;
   const start = pkgIndex === 1 ? e.activatedAt! : chargeable[(pkgIndex - 1) * info.size - 1].date;
   const price = packagePrice(input, info, start);
   const inst = Math.max(1, input.course.installments || 1);

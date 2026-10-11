@@ -32,6 +32,7 @@ export async function loginAction(_: LoginState, fd: FormData): Promise<LoginSta
   });
   if (user.locale && isLocale(user.locale)) jar.set(LANG_COOKIE, user.locale, { path: "/", sameSite: "lax", maxAge: 31536000 });
   const next = String(fd.get("next") ?? "");
-  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : null;
+  // only same-site paths: "/x", never "//host" or "/\host"
+  const safeNext = /^\/(?![\/\\])/.test(next) && !/[\r\n\\]/.test(next) ? next : null;
   redirect(safeNext ?? (user.role === "TEACHER" ? "/t" : "/"));
 }

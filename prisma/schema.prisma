@@ -262,6 +262,8 @@ model Group {
   endDate       DateTime?   @db.Date
   capacity      Int?
   priceOverride Int?
+  /// [{ from, price }] — group price override changes (price null = course price); current field applies after the last.
+  priceHistory  Json        @default("[]")
   status        GroupStatus @default(ACTIVE)
   createdAt     DateTime    @default(now())
 
@@ -408,6 +410,8 @@ model Enrollment {
   discountUntil   DateTime?        @db.Date
   discountReason  String?
   leftReason      String?
+  /// [{ from, priceOverride, discountPercent, discountAmount, discountUntil }] — earlier terms; current fields apply after the last entry.
+  termsHistory    Json             @default("[]")
   transferredToId String?
   transferredTo   Enrollment?      @relation("Transfer", fields: [transferredToId], references: [id])
   transferredFrom Enrollment[]     @relation("Transfer")
@@ -619,6 +623,8 @@ model PaymeTransaction {
   amountTiyin   BigInt
   state         Int
   createTime    BigInt
+  /// Payme's own creation time (CreateTransaction "time"), reported back in GetStatement.
+  paymeTime     BigInt?
   performTime   BigInt?
   cancelTime    BigInt?
   reason        Int?

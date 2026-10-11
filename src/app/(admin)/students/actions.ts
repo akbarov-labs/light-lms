@@ -43,14 +43,12 @@ export async function createStudentAction(_: ActionState, fd: FormData): Promise
     if (branchId) assertBranch(ctx, branchId);
     id = await db.$transaction(async (tx) => {
       let familyId = f.familyId ?? null;
-      if (familyId) {
-        const fam = await tx.family.findFirst({ where: { id: familyId, centerId: ctx.centerId } });
-        if (!fam) throw new UserError("error.notFound");
-      }
-      // Sibling detection: a known guardian phone joins the same family (one wallet).
+      if (familyId) await assertFamilyAccess(ctx, familyId);
+      // Sibling detection: a known guardian phone joins the same family (one wallet) —
+      // only a family this user may already see, so nobody gains another branch's wallet.
       if (!familyId && f.guardianPhone) {
         const g = await tx.guardian.findFirst({ where: { phone: f.guardianPhone, family: { centerId: ctx.centerId } } });
-        if (g) familyId = g.familyId;
+        if (g && (await assertFamilyAccess(ctx, g.familyId).then(() => true, () => false))) familyId = g.familyId;
       }
       if (!familyId) {
         const fam = await tx.family.create({ data: { centerId: ctx.centerId, name: `${f.lastName}lar oilasi` } });

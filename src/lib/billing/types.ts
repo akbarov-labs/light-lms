@@ -25,6 +25,8 @@ export interface BillingGroup {
   startDate: ISODate;
   endDate: ISODate | null;
   priceOverride: number | null;
+  /** Group price override changes; each applies from its date (price null = course price). Empty = priceOverride always. */
+  prices?: { from: ISODate; price: number | null }[];
   /** Weekdays (1=Mon..7=Sun) of the group's weekly slots, one entry per slot. */
   slotWeekdays: number[];
 }
@@ -32,6 +34,13 @@ export interface BillingGroup {
 export interface BillingFreeze {
   from: ISODate;
   to: ISODate;
+}
+
+export interface EnrollmentTerms {
+  priceOverride: number | null;
+  discountPercent: number | null;
+  discountAmount: number | null;
+  discountUntil: ISODate | null;
 }
 
 export interface BillingEnrollment {
@@ -45,6 +54,8 @@ export interface BillingEnrollment {
   discountAmount: number | null;
   discountUntil: ISODate | null;
   freezes: BillingFreeze[];
+  /** Terms changes: each set applies to units starting on/after `from`. Empty = the fields above always. */
+  terms?: (EnrollmentTerms & { from: ISODate })[];
 }
 
 export interface BillingLesson {

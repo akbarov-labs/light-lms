@@ -34,3 +34,11 @@
 2026-10-12 — Docker on this Mac: the credential helper (keychain) hangs pulls in non-interactive shells; builds were run with a credential-free DOCKER_CONFIG (README → Troubleshooting).
 2026-10-12 — Student import (CSV/Excel-saved CSV): students join their group as ACTIVE with billing from the 1st of next month; the old system's balance becomes one keyless "opening balance" CHARGE (debt) or CREDIT (prepaid) — no double charge for the current month, and opening balances never count as revenue.
 2026-10-12 — Money is shown as "1 250 000 so'm" in both languages (HANDOFF format); the Telegram bot uses "сум" for Russian chats.
+2026-10-12 — Independent review fixes: enrollment price/discount changes are versioned (Enrollment.termsHistory, effective-from date, default 1st of current month) and group price overrides too (Group.priceHistory, default next month) — no change re-prices months already charged.
+2026-10-12 — Only one discount applies: percent wins over a fixed amount.
+2026-10-12 — A lesson before the enrollment's startDate is never chargeable; activation dates are clamped to startDate.
+2026-10-12 — A whole-course package is always exactly one package; its lesson count = generated lessons + remaining slot dates (so schedule changes count real lessons); a closed one is capped at the package price. A package student leaving today is closed today.
+2026-10-12 — Payme: Perform/Cancel lock the transaction row (SELECT … FOR UPDATE); a Perform that loses to a Cancel answers −31008; staff cannot reverse a Payme payment by hand (Payme cancels it); amounts must be whole so'm (tiyin % 100 = 0, else −31001); GetStatement reports Payme's own `time`.
+2026-10-12 — Branch scope tightened: managers edit only staff who work entirely inside their branches and only replace their own branch assignments; salaries (pages, actions, exports) are limited to teachers of the user's branches; the global audit journal is for unscoped users (owner) only; receipts need payments.take/finance.view and family scope; joining an existing family (by phone or id) requires access to that family.
+2026-10-12 — Import: opening balances need `payments.refund` and are only written to newly created families.
+2026-10-12 — Mark-paid claims LOCKED→PAID atomically before booking the expense (no double expense on double click).

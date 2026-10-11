@@ -547,4 +547,9 @@ export const ru: Record<DictKey, string> = {
   "import.badBalance": "неверный баланс",
   "import.opening": "Начальный остаток (импорт)",
   "import.button": "Импорт",
+  "enr.termsFrom": "С какой даты (начало периода)",
+  "groups.priceFrom": "С какой даты новая цена группы",
+  "pay.paymeNoReverse": "Платёж Payme отменяет только Payme (верните через кабинет Payme)",
+  "import.balanceNeedsRefund": "баланс можно импортировать только с правом «Возврат»",
+  "import.balanceExistingFamily": "нельзя записать начальный баланс в существующую семью",
 };

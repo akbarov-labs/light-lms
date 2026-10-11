@@ -12,6 +12,8 @@ export interface PaymeTx {
   amountTiyin: number;
   state: 1 | 2 | -1 | -2;
   createTime: number;
+  /** Payme's own "time" from CreateTransaction. */
+  paymeTime?: number | null;
   performTime: number | null;
   cancelTime: number | null;
   reason: number | null;
@@ -116,7 +118,8 @@ async function checkAccount(repo: PaymeRepo, centerId: string, params: Record<st
   const family = familyId ? await repo.family(familyId) : null;
   if (!family || family.centerId !== centerId) throw new RpcFail(E.ACCOUNT, M.account, "family_id");
   const amount = num(params.amount);
-  if (amount === null || !Number.isInteger(amount) || amount <= 0 || amount > MAX_TIYIN) throw new RpcFail(E.AMOUNT, M.amount, "amount");
+  // whole so'm only: the ledger is integer UZS, so a tiyin remainder would be lost
+  if (amount === null || !Number.isInteger(amount) || amount <= 0 || amount % 100 !== 0 || amount > MAX_TIYIN) throw new RpcFail(E.AMOUNT, M.amount, "amount");
   return { family, amount };
 }
 
@@ -154,7 +157,7 @@ async function dispatch(repo: PaymeRepo, centerId: string, method: string, param
         if (now - active.createTime > TIMEOUT_MS) await repo.cancel(active, 4, now);
         else throw new RpcFail(E.BUSY, M.busy, "family_id");
       }
-      const tx = await repo.createTx({ paymeId: id, centerId, familyId: family.id, amountTiyin: amount, state: 1, createTime: now, performTime: null, cancelTime: null, reason: null });
+      const tx = await repo.createTx({ paymeId: id, centerId, familyId: family.id, amountTiyin: amount, state: 1, createTime: now, paymeTime: time, performTime: null, cancelTime: null, reason: null });
       return { create_time: tx.createTime, transaction: tx.id, state: tx.state };
     }
     case "PerformTransaction": {
@@ -166,6 +169,8 @@ async function dispatch(repo: PaymeRepo, centerId: string, method: string, param
         throw new RpcFail(E.CANT_PERFORM, M.cantPerform, "timeout");
       }
       const done = await repo.perform(tx, now);
+      // a concurrent CancelTransaction won the row: the payment was not posted
+      if (done.state !== 2) throw new RpcFail(E.CANT_PERFORM, M.cantPerform, "state");
       return { transaction: done.id, perform_time: done.performTime, state: done.state };
     }
     case "CancelTransaction": {
@@ -188,7 +193,7 @@ async function dispatch(repo: PaymeRepo, centerId: string, method: string, param
       return {
         transactions: list.map((tx) => ({
           id: tx.paymeId,
-          time: tx.createTime,
+          time: tx.paymeTime ?? tx.createTime,
           amount: tx.amountTiyin,
           account: { family_id: tx.familyId },
           ...view(tx),

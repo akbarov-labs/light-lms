@@ -15,6 +15,7 @@ interface NavItem {
   any?: Perm[];
   staffOnly?: boolean;
   teacherOnly?: boolean;
+  unscopedOnly?: boolean;
 }
 
 const NAV: NavItem[] = [
@@ -29,7 +30,7 @@ const NAV: NavItem[] = [
   { href: "/salary", key: "nav.salary", icon: "$", any: ["finance.view"] },
   { href: "/expenses", key: "nav.expenses", icon: "↧", any: ["finance.view"] },
   { href: "/reports", key: "nav.reports", icon: "▤", any: ["finance.view"] },
-  { href: "/audit", key: "nav.audit", icon: "≡", any: ["finance.view", "settings"] },
+  { href: "/audit", key: "nav.audit", icon: "≡", any: ["finance.view", "settings"], unscopedOnly: true },
   { href: "/settings", key: "nav.settings", icon: "⚙", any: ["settings", "staff.manage"] },
   { href: "/t", key: "nav.teacher", icon: "✎", teacherOnly: true },
 ];
@@ -38,6 +39,7 @@ export function visibleNav(ctx: Ctx): NavItem[] {
   return NAV.filter((n) => {
     if (n.teacherOnly) return ctx.isTeacher;
     if (ctx.role === "TEACHER") return false;
+    if (n.unscopedOnly && ctx.branchIds) return false;
     if (n.any) return n.any.some((p) => ctx.can(p));
     return true;
   });

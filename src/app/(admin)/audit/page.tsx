@@ -30,7 +30,8 @@ function short(v: unknown): string {
 export default async function AuditPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const ctx = await requireStaff();
-  if (!ctx.can("finance.view") && !ctx.can("settings")) redirect("/forbidden");
+  // the global journal spans every branch, so branch-scoped users see history on each record instead
+  if ((!ctx.can("finance.view") && !ctx.can("settings")) || ctx.branchIds) redirect("/forbidden");
   const { t } = ctx;
   const page = Math.max(1, Number(sp.page) || 1);
   const where = auditWhere(ctx, sp);

@@ -30,6 +30,7 @@ export async function reverseAction(_: ActionState, fd: FormData): Promise<Actio
     const f = z.object({ entryId: zId, reason: zOptStr }).parse(formObject(fd));
     const entry = await db.ledgerEntry.findFirst({ where: { id: f.entryId, centerId: ctx.centerId } });
     if (!entry) throw new UserError("error.notFound");
+    if (entry.method === "PAYME") throw new UserError("pay.paymeNoReverse");
     await assertFamilyAccess(ctx, entry.familyId);
     await reversePayment({ userId: ctx.userId, centerId: ctx.centerId }, f.entryId, f.reason ?? null);
     revalidatePath(`/families/${entry.familyId}`);

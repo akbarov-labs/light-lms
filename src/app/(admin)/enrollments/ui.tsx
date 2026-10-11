@@ -1,5 +1,5 @@
 import type { Ctx } from "@/lib/ctx";
-import { todayISO } from "@/lib/dates";
+import { monthRange, todayISO } from "@/lib/dates";
 import { Field, FormGrid, Input, Select } from "@/components/fields";
 import { Modal, ModalForm, SubmitButton } from "@/components/client";
 import { StudentIdBridge } from "./student-id-bridge";
@@ -69,6 +69,7 @@ export function EnrollmentActions({ ctx, e, groups }: { ctx: Ctx; e: EnrollmentL
             <Field label={t("enr.discountAmount")}><Input name="discountAmount" inputMode="numeric" defaultValue={e.discountAmount ?? ""} /></Field>
             <Field label={t("enr.discountUntil")}><Input type="date" name="discountUntil" defaultValue={iso(e.discountUntil)} /></Field>
             <Field label={t("enr.discountReason")}><Input name="discountReason" defaultValue={e.discountReason ?? ""} /></Field>
+            <Field label={t("enr.termsFrom")} hint={t("courses.priceFromHint")}><Input type="date" name="from" defaultValue={monthRange(today.slice(0, 7)).start} required /></Field>
           </FormGrid>
           <SubmitButton>{t("common.save")}</SubmitButton>
         </ModalForm>

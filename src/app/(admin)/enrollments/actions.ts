@@ -4,10 +4,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { runAction, type ActionState } from "@/lib/action";
 import { db } from "@/lib/db";
-import { assertBranch, type Ctx } from "@/lib/ctx";
-import { formObject, zBool, zDate, zId, zOptDate, zOptId, zOptInt, zOptMoney, zOptStr } from "@/lib/forms";
+import { assertBranch, assertStudentAccess, type Ctx } from "@/lib/ctx";
+import { formObject, zBool, zDate, zId, zOptDate, zOptInt, zOptMoney, zOptStr } from "@/lib/forms";
 import { UserError } from "@/lib/user-error";
-import { todayISO } from "@/lib/dates";
+import { monthRange, todayISO } from "@/lib/dates";
 import {
   activateEnrollment,
   endFreeze,
@@ -47,6 +47,7 @@ const enrollSchema = z.object({
 export async function enrollAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction("students.edit", async (ctx) => {
     const f = enrollSchema.parse(formObject(fd));
+    await assertStudentAccess(ctx, f.studentId);
     await enrollStudent(actor(ctx), f, (branchId) => assertBranch(ctx, branchId));
     done(f.studentId, f.groupId);
   });
@@ -103,7 +104,7 @@ export async function leaveAction(_: ActionState, fd: FormData): Promise<ActionS
 export async function termsAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction("students.edit", async (ctx) => {
     const f = z
-      .object({ enrollmentId: zId, priceOverride: zOptMoney, discountPercent: zOptInt(0, 100), discountAmount: zOptMoney, discountUntil: zOptDate, discountReason: zOptStr, groupId: zOptId })
+      .object({ enrollmentId: zId, priceOverride: zOptMoney, discountPercent: zOptInt(0, 100), discountAmount: zOptMoney, discountUntil: zOptDate, discountReason: zOptStr, from: zOptDate })
       .parse(formObject(fd));
     const e = await checkEnrollment(ctx, f.enrollmentId);
     await setEnrollmentTerms(actor(ctx), f.enrollmentId, {
@@ -112,7 +113,7 @@ export async function termsAction(_: ActionState, fd: FormData): Promise<ActionS
       discountAmount: f.discountAmount || null,
       discountUntil: f.discountUntil ?? null,
       discountReason: f.discountReason ?? null,
-    });
+    }, f.from ?? monthRange(todayISO().slice(0, 7)).start);
     done(e.studentId, e.groupId);
   });
 }

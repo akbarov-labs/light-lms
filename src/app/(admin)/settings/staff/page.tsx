@@ -1,4 +1,4 @@
-import { requireStaff, type Ctx } from "@/lib/ctx";
+import { requireStaff, staffInScope, type Ctx } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatPhone } from "@/lib/phone";
 import { DEFAULT_PERMS, effectivePerms, PERMS, type RoleName } from "@/lib/perms";
@@ -58,7 +58,7 @@ export default async function StaffPage() {
     load(ctx.centerId),
     db.branch.findMany({ where: { centerId: ctx.centerId, archivedAt: null, ...(ctx.branchIds ? { id: { in: ctx.branchIds } } : {}) }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
-  const visible = ctx.branchIds ? users.filter((u) => u.role === "OWNER" || u.branches.some((b) => ctx.branchIds!.includes(b.branchId)) || u.branches.length === 0) : users;
+  const visible = ctx.branchIds ? users.filter((u) => u.branches.some((b) => ctx.branchIds!.includes(b.branchId))) : users;
   return (
     <Card
       pad={false}
@@ -88,7 +88,7 @@ export default async function StaffPage() {
               <Td className="text-xs">{u.role === "OWNER" ? t("common.allBranches") : u.branches.map((b) => b.branch.name).join(", ") || "—"}</Td>
               <Td>{u.telegramChatId ? <Badge tone="green">{t("settings.linked")}</Badge> : <span className="text-xs text-slate-400">{t("settings.notLinked")}</span>}</Td>
               <Td className="whitespace-nowrap text-right">
-                {(ctx.role === "OWNER" || (u.role !== "OWNER" && u.role !== "MANAGER")) && (
+                {(ctx.role === "OWNER" || (u.role !== "OWNER" && u.role !== "MANAGER" && staffInScope(ctx, u.branches.map((b) => b.branchId)))) && (
                   <div className="flex justify-end gap-1">
                     <Modal label={t("common.edit")} title={u.name} variant="secondary" size="sm" wide>
                       <StaffForm ctx={ctx} branches={branches} user={u} />

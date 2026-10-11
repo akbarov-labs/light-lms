@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireCtx } from "@/lib/ctx";
+import { canAccessBranch, requireCtx } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatDate, toISODate, todayISO } from "@/lib/dates";
 import { attendanceLabels, lessonRoster } from "@/lib/roster";
@@ -13,7 +13,7 @@ export default async function TeacherLesson({ params }: { params: Promise<{ id: 
   const ctx = await requireCtx();
   const { t } = ctx;
   const lesson = await db.lesson.findUnique({ where: { id }, include: { group: true, room: true } });
-  if (!lesson || lesson.group.centerId !== ctx.centerId || (lesson.teacherId !== ctx.userId && lesson.group.teacherId !== ctx.userId && !ctx.can("groups.edit"))) notFound();
+  if (!lesson || lesson.group.centerId !== ctx.centerId || (lesson.teacherId !== ctx.userId && lesson.group.teacherId !== ctx.userId && !(ctx.can("groups.edit") && canAccessBranch(ctx, lesson.group.branchId)))) notFound();
   const rows = await lessonRoster(id);
   const date = toISODate(lesson.date);
   return (

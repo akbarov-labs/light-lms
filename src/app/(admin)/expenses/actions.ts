@@ -32,6 +32,7 @@ export async function reverseExpenseAction(_: ActionState, fd: FormData): Promis
     const e = await db.expense.findFirst({ where: { id, centerId: ctx.centerId } });
     if (!e || e.reversedAt) throw new UserError("error.notFound");
     if (e.branchId) assertBranch(ctx, e.branchId);
+    else if (ctx.branchIds) throw new UserError("error.forbidden");
     const payslip = await db.payslip.findFirst({ where: { expenseId: id } });
     if (payslip) throw new UserError("error.locked");
     await db.$transaction(async (tx) => {

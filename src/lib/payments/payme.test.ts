@@ -82,7 +82,7 @@ describe("CheckPerformTransaction", () => {
     expect((await call("CheckPerformTransaction", { amount: 100, account: { family_id: "famX" } })).error?.code).toBe(E.ACCOUNT);
   });
   it("bad amount → -31001", async () => {
-    for (const amount of [0, -5, 1.5, 1e15]) {
+    for (const amount of [0, -5, 1.5, 1e15, 60_000_050]) {
       expect((await call("CheckPerformTransaction", { amount, account: { family_id: "fam1" } })).error?.code).toBe(E.AMOUNT);
     }
   });
@@ -124,6 +124,18 @@ describe("CreateTransaction", () => {
 });
 
 describe("PerformTransaction", () => {
+  it("losing the row to a concurrent cancel answers −31008 and posts nothing", async () => {
+    await create("p1");
+    const realPerform = repo.perform.bind(repo);
+    repo.perform = async (tx) => {
+      Object.assign(tx, { state: -1, cancelTime: T0 + 1, reason: 3 });
+      return tx;
+    };
+    expect((await call("PerformTransaction", { id: "p1" })).error?.code).toBe(E.CANT_PERFORM);
+    expect(repo.ledger).toEqual([]);
+    repo.perform = realPerform;
+  });
+
   it("posts the payment once (idempotent)", async () => {
     await create("p1");
     const a = await call("PerformTransaction", { id: "p1" }, { now: T0 + 1000 });
@@ -186,7 +198,7 @@ describe("CheckTransaction & GetStatement", () => {
     await call("CreateTransaction", { id: "x1", time: T0, amount: 100, account: { family_id: "famX" } }, { key: "other" });
     const r = (await call("GetStatement", { from: T0 - 1, to: T0 + 1 })).result as { transactions: { id: string; amount: number; account: object }[] };
     expect(r.transactions).toHaveLength(1);
-    expect(r.transactions[0]).toMatchObject({ id: "p1", amount: 60_000_000, account: { family_id: "fam1" }, state: 1 });
+    expect(r.transactions[0]).toMatchObject({ id: "p1", time: T0, amount: 60_000_000, account: { family_id: "fam1" }, state: 1 });
     expect(((await call("GetStatement", { from: T0 + 5, to: T0 + 9 })).result as { transactions: unknown[] }).transactions).toEqual([]);
   });
 });

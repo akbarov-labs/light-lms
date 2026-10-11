@@ -115,3 +115,16 @@ export function familyScope(ctx: Ctx): object {
   const s = studentScope(ctx);
   return s.OR ? { students: { some: s } } : {};
 }
+
+/** Staff member inside this user's branches (owners and unscoped users see everyone). */
+export function staffInScope(ctx: Ctx, userBranchIds: string[]): boolean {
+  if (!ctx.branchIds) return true;
+  return userBranchIds.length > 0 && userBranchIds.every((b) => ctx.branchIds!.includes(b));
+}
+
+/** A teacher whose salary this user may see/change: unscoped, or teaching in one of the user's branches. */
+export async function assertTeacherAccess(ctx: Ctx, teacherId: string): Promise<void> {
+  const t = await db.user.findFirst({ where: { id: teacherId, centerId: ctx.centerId }, include: { branches: { select: { branchId: true } } } });
+  if (!t) throw new UserError("error.notFound");
+  if (ctx.branchIds && !t.branches.some((b) => ctx.branchIds!.includes(b.branchId))) throw new UserError("error.notFound");
+}

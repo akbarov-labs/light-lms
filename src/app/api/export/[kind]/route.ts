@@ -103,7 +103,10 @@ const exporters: Record<string, Exporter> = {
   async salary(ctx, sp) {
     if (!ctx.can("finance.view")) return null;
     const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : todayISO().slice(0, 7);
-    const teachers = await db.user.findMany({ where: { centerId: ctx.centerId, OR: [{ isTeacher: true }, { role: "TEACHER" }] }, orderBy: { name: "asc" } });
+    const teachers = await db.user.findMany({
+      where: { centerId: ctx.centerId, OR: [{ isTeacher: true }, { role: "TEACHER" }], ...(ctx.branchIds ? { branches: { some: { branchId: { in: ctx.branchIds } } } } : {}) },
+      orderBy: { name: "asc" },
+    });
     const { t } = ctx;
     const rows: Cell[][] = [];
     for (const u of teachers) {
@@ -113,7 +116,7 @@ const exporters: Record<string, Exporter> = {
     return { header: [t("common.month"), t("common.teacher"), t("salary.model"), t("salary.lessonsHeld"), t("salary.base"), t("salary.adjustments"), t("salary.live"), t("common.status"), t("salary.lockedTotal")], rows };
   },
   async audit(ctx, sp) {
-    if (!ctx.can("finance.view") && !ctx.can("settings")) return null;
+    if ((!ctx.can("finance.view") && !ctx.can("settings")) || ctx.branchIds) return null;
     const logs = await db.auditLog.findMany({ where: auditWhere(ctx, sp), orderBy: { createdAt: "desc" }, take: 20_000 });
     const users = new Map((await db.user.findMany({ where: { centerId: ctx.centerId }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
     return {
@@ -123,7 +126,11 @@ const exporters: Record<string, Exporter> = {
   },
   async staff(ctx) {
     if (!ctx.can("staff.manage")) return null;
-    const users = await db.user.findMany({ where: { centerId: ctx.centerId }, include: { branches: { include: { branch: true } } }, orderBy: { name: "asc" } });
+    const users = await db.user.findMany({
+      where: { centerId: ctx.centerId, ...(ctx.branchIds ? { branches: { some: { branchId: { in: ctx.branchIds } } } } : {}) },
+      include: { branches: { include: { branch: true } } },
+      orderBy: { name: "asc" },
+    });
     const { t } = ctx;
     return {
       header: [t("common.fullName"), t("common.phone"), t("settings.role"), t("settings.isTeacher"), t("settings.staffBranches"), t("settings.perms"), t("common.status")],
