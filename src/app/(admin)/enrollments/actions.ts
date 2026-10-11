@@ -107,13 +107,16 @@ export async function termsAction(_: ActionState, fd: FormData): Promise<ActionS
       .object({ enrollmentId: zId, priceOverride: zOptMoney, discountPercent: zOptInt(0, 100), discountAmount: zOptMoney, discountUntil: zOptDate, discountReason: zOptStr, from: zOptDate })
       .parse(formObject(fd));
     const e = await checkEnrollment(ctx, f.enrollmentId);
+    // re-pricing months that already started is a refund decision
+    const from = f.from ?? monthRange(todayISO().slice(0, 7)).start;
+    if (from < monthRange(todayISO().slice(0, 7)).start && !ctx.can("payments.refund")) throw new UserError("enr.backdateNeedsRefund");
     await setEnrollmentTerms(actor(ctx), f.enrollmentId, {
       priceOverride: f.priceOverride ?? null,
       discountPercent: f.discountPercent || null,
       discountAmount: f.discountAmount || null,
       discountUntil: f.discountUntil ?? null,
       discountReason: f.discountReason ?? null,
-    }, f.from ?? monthRange(todayISO().slice(0, 7)).start);
+    }, from);
     done(e.studentId, e.groupId);
   });
 }

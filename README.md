@@ -6,7 +6,21 @@ CRM/LMS for private education centers in Uzbekistan.
 ## Holat / Status
 
 <!-- STATUS:START -->
-_Yakuniy holat tekshiruvdan keyin yoziladi._
+**O'zbekcha (12.10.2026):** MVP tayyor va `docker compose up --build` bilan noldan ishga tushadi (Postgres, migratsiya + demo, web, worker).
+
+Ishlaydi:
+- Lidlar (kanban, ochiq forma `/f/demo`, izohlar, o'quvchiga aylantirish), o'quvchilar va oilalar (aka-ukalar bitta hamyon), guruhlar (jadval, xona/o'qituvchi to'qnashuvi tekshiruvi), darslar (bekor qilish, ko'chirish, o'rinbosar).
+- Sinov → faollashtirish, ko'chirish, muzlatish, chiqish, chegirma — hammasi avtomatik qayta hisoblanadi (hisob-kitob dvigateli, 60+ test).
+- To'lovlar, chek, bekor qilish (faqat ruxsat bilan), qaytarish, qarzdorlar + eslatma, oila hamyoni.
+- O'qituvchi oyligi (4 model, bonus/jarima, qulflash, to'landi → xarajat), xarajatlar, hisobotlar, egasi paneli, "Bugun" sahifasi, audit jurnali, CSV eksport (Excel uchun), Excel/CSV import.
+- O'qituvchi telefondan `/t`: bugungi darslar, davomat, oylik. O'zbek/rus tili.
+- Telegram bot (token qo'yilsa): raqam bo'yicha ulanish, balans, jadval, davomat, to'lov havolasi, o'qituvchi davomati, kunlik hisobot. Payme Merchant API (kalit qo'yilsa).
+
+Tekshirildi: typecheck, lint, 114 unit test, 13 ta baza testi, `next build`, noldan Docker, brauzerda asosiy oqimlar; mustaqil ko'rib chiqish topgan xatolar tuzatildi.
+
+Qolgan / v2: Click, Uzum, SMS, baholar va oylik hisobot kartasi, imtihon va sertifikat, ommaviy oferta, Telegram Mini App. Bot haqiqiy token bilan sinalmagan (token yo'q edi); Payme test kassada sinalmagan (faqat testlar bilan).
+
+**English:** The full MVP runs from a clean clone with `docker compose up --build`. Everything in HANDOFF §5 marked MVP is built: CRM, groups/lessons/attendance, the billing engine (self-healing, idempotent), payments and debts, teacher salaries, expenses, reports, owner dashboard, teacher mobile pages, Telegram bot, Payme endpoint, CSV export/import, audit log, uz/ru. Verified with typecheck, lint, 114 unit + 13 DB integration tests, production build, a clean Docker run and browser walkthroughs; an independent review's findings were fixed. Not verified live: the bot with a real token and Payme against its test cashbox. Next (v2): Click, Uzum, SMS, report cards, exams/certificates, public offer, Mini App.
 <!-- STATUS:END -->
 
 ## Ishga tushirish / Run

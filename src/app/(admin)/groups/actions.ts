@@ -113,6 +113,7 @@ export async function updateGroupAction(_: ActionState, fd: FormData): Promise<A
         if (newOverride !== g.priceOverride) {
           // a new group price applies from the chosen date (default next month); charged months keep theirs
           const from = f.priceFrom ?? monthRange(shiftMonth(today.slice(0, 7), 1)).start;
+          if (from < monthRange(today.slice(0, 7)).start && !ctx.can("payments.refund")) throw new UserError("enr.backdateNeedsRefund");
           if (priceHistory.length === 0) priceHistory = [{ from: "2000-01-01", price: g.priceOverride }];
           priceHistory = [...priceHistory.filter((h) => h.from < from), { from, price: newOverride }];
         }

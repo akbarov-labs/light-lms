@@ -59,6 +59,7 @@ export async function saveCourseAction(_: ActionState, fd: FormData): Promise<Ac
       if (f.price !== c.price) {
         // new price applies from the chosen date (default: next month); earlier units keep the old price
         const from = f.priceFrom ?? monthRange(shiftMonth(todayISO().slice(0, 7), 1)).start;
+        if (from < monthRange(todayISO().slice(0, 7)).start && !ctx.can("payments.refund")) throw new UserError("enr.backdateNeedsRefund");
         if (history.length === 0) history = [{ from: "2000-01-01", price: c.price }];
         history = [...history.filter((h) => h.from < from), { from, price: f.price }];
       }

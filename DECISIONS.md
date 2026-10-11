@@ -42,3 +42,4 @@
 2026-10-12 — Branch scope tightened: managers edit only staff who work entirely inside their branches and only replace their own branch assignments; salaries (pages, actions, exports) are limited to teachers of the user's branches; the global audit journal is for unscoped users (owner) only; receipts need payments.take/finance.view and family scope; joining an existing family (by phone or id) requires access to that family.
 2026-10-12 — Import: opening balances need `payments.refund` and are only written to newly created families.
 2026-10-12 — Mark-paid claims LOCKED→PAID atomically before booking the expense (no double expense on double click).
+2026-10-12 — Backdating a price/discount/group/course price change to before the current month needs payments.refund (it re-prices charged months). An open-ended whole course uses a fixed lesson estimate so its price can't drift.

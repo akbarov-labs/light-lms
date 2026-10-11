@@ -550,6 +550,7 @@ export const uz = {
   "pay.paymeNoReverse": "Payme to'lovini faqat Payme bekor qiladi (Payme kabinetidan qaytaring)",
   "import.balanceNeedsRefund": "balans faqat \"Qaytarish\" ruxsati bilan import qilinadi",
   "import.balanceExistingFamily": "mavjud oilaga boshlang'ich balans yozib bo'lmaydi",
+  "enr.backdateNeedsRefund": "O'tgan oylarni qayta narxlash uchun \"Qaytarish\" ruxsati kerak",
 } as const;
 
 export type DictKey = keyof typeof uz;

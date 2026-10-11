@@ -156,10 +156,10 @@ export function courseLessonsFrom(input: BillingInput, from: ISODate): number {
   const g = input.group;
   if (!g.endDate) {
     const perWeek = input.course.lessonsPerWeek ?? g.slotWeekdays.length;
-    const estimate = Math.round((input.course.durationMonths ?? 1) * perWeek * 4.33);
-    const total = Math.max(estimate, input.lessons.length);
+    // fixed estimate: the count must not drift as lessons get generated ahead
+    const estimate = Math.max(1, Math.round((input.course.durationMonths ?? 1) * perWeek * 4.33));
     const before = input.lessons.filter((l) => l.date >= g.startDate && l.date < from).length;
-    return Math.max(1, total - before);
+    return Math.max(1, estimate - before);
   }
   const generated = input.lessons.filter((l) => l.date >= from && l.date <= g.endDate!).length;
   const last = input.lessons.reduce((m, l) => (l.date > m ? l.date : m), "");

@@ -552,4 +552,5 @@ export const ru: Record<DictKey, string> = {
   "pay.paymeNoReverse": "Платёж Payme отменяет только Payme (верните через кабинет Payme)",
   "import.balanceNeedsRefund": "баланс можно импортировать только с правом «Возврат»",
   "import.balanceExistingFamily": "нельзя записать начальный баланс в существующую семью",
+  "enr.backdateNeedsRefund": "Для перерасчёта прошлых месяцев нужно право «Возврат»",
 };
