@@ -1,7 +1,7 @@
 // Report queries (HANDOFF §8 "Reports"). Revenue counts only real money (PAYMENT, REFUND and
 // their reversals) — never charges or credits.
 import { db } from "@/lib/db";
-import { familyScope, scopeBranchIds, studentScope, type Ctx } from "@/lib/ctx";
+import { familyScope, scopeBranchIds, studentScope, type Ctx } from "@/lib/ctx-core";
 import { diffDays, fromISODate, monthRange, shiftMonth, toISODate, todayISO } from "@/lib/dates";
 import { allocationsFor } from "@/lib/services/wallet";
 import { paymentWhere } from "./payments";

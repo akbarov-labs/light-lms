@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { familyScope, type Ctx } from "@/lib/ctx";
+import { familyScope, type Ctx } from "@/lib/ctx-core";
 import { diffDays, toISODate, todayISO } from "@/lib/dates";
 import { allocationsFor } from "@/lib/services/wallet";
 

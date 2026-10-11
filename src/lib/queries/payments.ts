@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { familyScope, type Ctx } from "@/lib/ctx";
+import { familyScope, type Ctx } from "@/lib/ctx-core";
 import { fromISODate, monthRange, todayISO, isISODate } from "@/lib/dates";
 
 export interface PaymentFilters {

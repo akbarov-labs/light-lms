@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import type { Ctx } from "@/lib/ctx";
+import type { Ctx } from "@/lib/ctx-core";
 import { fromISODate, isISODate } from "@/lib/dates";
 
 export function auditWhere(ctx: Ctx, f: { entity?: string; userId?: string; action?: string; from?: string; to?: string; entityId?: string; sync?: string }): Prisma.AuditLogWhereInput {

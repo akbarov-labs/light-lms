@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { scopeBranchIds, type Ctx } from "@/lib/ctx";
+import { scopeBranchIds, type Ctx } from "@/lib/ctx-core";
 import { fromISODate, isISODate, monthRange, todayISO } from "@/lib/dates";
 
 export function expenseWhere(ctx: Ctx, f: { from?: string; to?: string; category?: string; withReversed?: boolean }): Prisma.ExpenseWhereInput {
