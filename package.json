@@ -52,9 +52,6 @@
     "typescript": "5.9.3",
     "vitest": "3.2.7"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "allowScripts": {
     "@prisma/client@6.19.3": true,
     "@prisma/engines@6.19.3": true,

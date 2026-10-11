@@ -9,6 +9,7 @@ import { allowedBranches, effectivePerms, type Perm, type RoleName } from "./per
 import { SESSION_COOKIE, verifySession } from "./session";
 import { isLocale, LANG_COOKIE, makeT, type Locale, type TFn } from "./i18n";
 import { readSettings, type CenterSettings } from "./settings";
+import { UserError } from "./user-error";
 
 export const BRANCH_COOKIE = "branch";
 
@@ -30,15 +31,7 @@ export interface Ctx {
   can: (p: Perm) => boolean;
 }
 
-/** Thrown for expected, user-facing failures; `action()` turns it into a form error. */
-export class UserError extends Error {
-  constructor(
-    public key: Parameters<TFn>[0],
-    public vars?: Record<string, string | number>,
-  ) {
-    super(key);
-  }
-}
+export { UserError };
 
 export const getCtx = cache(async (): Promise<Ctx | null> => {
   const jar = await cookies();

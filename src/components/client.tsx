@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useActionState, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { buttonClass, cx, type ButtonVariant } from "./ui";
@@ -60,8 +60,10 @@ export function SubmitButton({ children, variant = "primary", size = "md", confi
   );
 }
 
-/** Button that opens a native <dialog> with arbitrary content (usually an ActionForm). */
-export function Modal({ label, title, children, variant = "primary", size = "md", wide }: { label: ReactNode; title: ReactNode; children: ReactNode | ((close: () => void) => ReactNode); variant?: ButtonVariant; size?: "sm" | "md"; wide?: boolean }) {
+const ModalCtx = createContext<() => void>(() => {});
+
+/** Button that opens a native <dialog>. Content is mounted only while open. */
+export function Modal({ label, title, children, variant = "primary", size = "md", wide }: { label: ReactNode; title: ReactNode; children: ReactNode; variant?: ButtonVariant; size?: "sm" | "md"; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
   const close = () => {
@@ -73,20 +75,21 @@ export function Modal({ label, title, children, variant = "primary", size = "md"
       <button type="button" className={buttonClass(variant, size)} onClick={() => { setOpen(true); ref.current?.showModal(); }}>
         {label}
       </button>
-      <dialog ref={ref} onClose={() => setOpen(false)} className={cx("w-[calc(100%-2rem)] rounded-xl p-0 shadow-xl backdrop:bg-slate-900/40", wide ? "max-w-3xl" : "max-w-lg")}>
+      <dialog ref={ref} onClose={() => setOpen(false)} className={cx("w-[calc(100%-2rem)] rounded-xl p-0 text-left shadow-xl backdrop:bg-slate-900/40", wide ? "max-w-3xl" : "max-w-lg")}>
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <h3 className="text-base font-semibold text-slate-900">{title}</h3>
           <button type="button" onClick={close} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="close">✕</button>
         </div>
-        <div className="max-h-[75vh] overflow-y-auto p-4">{open ? (typeof children === "function" ? children(close) : children) : null}</div>
+        <div className="max-h-[75vh] overflow-y-auto p-4">{open ? <ModalCtx.Provider value={close}>{children}</ModalCtx.Provider> : null}</div>
       </dialog>
     </>
   );
 }
 
-/** Same as ActionForm but closes the surrounding Modal and refreshes on success. */
-export function ModalForm({ action, close, children, className }: { action: Action; close: () => void; children: ReactNode; className?: string }) {
+/** ActionForm that closes the surrounding Modal and refreshes the page on success. */
+export function ModalForm({ action, children, className }: { action: Action; children: ReactNode; className?: string }) {
   const router = useRouter();
+  const close = useContext(ModalCtx);
   return (
     <ActionForm action={action} className={className} onDone={() => { close(); router.refresh(); }}>
       {children}

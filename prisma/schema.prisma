@@ -302,6 +302,9 @@ model Lesson {
   heldAt       DateTime?
   markedById   String?
   markedBy     User?        @relation("LessonMarkedBy", fields: [markedById], references: [id])
+  /// Set when a lesson is rescheduled: the slot it came from, so generation never recreates it.
+  origDate      DateTime?   @db.Date
+  origStartTime String?
   createdAt    DateTime     @default(now())
 
   attendance Attendance[]
