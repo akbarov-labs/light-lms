@@ -61,7 +61,9 @@ export function allocate(entries: AllocEntry[]): Allocation {
       units.set(key, u);
     }
     if (e.date < u.firstDate) u.firstDate = e.date;
-    if (!u.description && e.description) u.description = e.description;
+    // the latest recalculation describes the unit as it stands now ("… · 1/13 dars")
+    const d = e.description?.replace(/^Qayta hisob · /, "");
+    if (d && d !== "bekor qilindi") u.description = d;
     return u;
   };
 

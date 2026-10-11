@@ -33,3 +33,4 @@
 2026-10-12 — DB integration tests use a separate `<db>_test` database (script drops/recreates only that schema); `npm test` stays DB-free.
 2026-10-12 — Docker on this Mac: the credential helper (keychain) hangs pulls in non-interactive shells; builds were run with a credential-free DOCKER_CONFIG (README → Troubleshooting).
 2026-10-12 — Student import (CSV/Excel-saved CSV): students join their group as ACTIVE with billing from the 1st of next month; the old system's balance becomes one keyless "opening balance" CHARGE (debt) or CREDIT (prepaid) — no double charge for the current month, and opening balances never count as revenue.
+2026-10-12 — Money is shown as "1 250 000 so'm" in both languages (HANDOFF format); the Telegram bot uses "сум" for Russian chats.

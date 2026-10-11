@@ -83,7 +83,7 @@ export function Stat({ label, value, hint, tone, href }: { label: ReactNode; val
   const body = (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={cx("mt-1 text-xl font-semibold sm:text-2xl", tone === "red" && "text-rose-600", tone === "green" && "text-emerald-600", tone === "amber" && "text-amber-600")}>{value}</div>
+      <div className={cx("mt-1 break-words text-lg font-semibold tabular-nums xl:text-2xl", tone === "red" && "text-rose-600", tone === "green" && "text-emerald-600", tone === "amber" && "text-amber-600")}>{value}</div>
       {hint && <div className="mt-1 text-xs text-slate-500">{hint}</div>}
     </div>
   );
