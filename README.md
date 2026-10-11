@@ -16,7 +16,9 @@ Ishlaydi:
 - O'qituvchi telefondan `/t`: bugungi darslar, davomat, oylik. O'zbek/rus tili.
 - Telegram bot (token qo'yilsa): raqam bo'yicha ulanish, balans, jadval, davomat, to'lov havolasi, o'qituvchi davomati, kunlik hisobot. Payme Merchant API (kalit qo'yilsa).
 
-Tekshirildi: typecheck, lint, 114 unit test, 13 ta baza testi, `next build`, noldan Docker, brauzerda asosiy oqimlar; mustaqil ko'rib chiqish topgan xatolar tuzatildi.
+Tekshirildi: typecheck, lint, 114 unit test, 13 ta baza testi, `next build`, noldan Docker (`down -v && up --build`), brauzerda asosiy oqimlar (lid → sinov → faollashtirish → to'lov → chek → bekor qilish, ko'chirish, o'qituvchi telefondan davomat, oylikni qulflash → xarajat → foyda, rus tili); mustaqil ko'rib chiqish topgan barcha xatolar tuzatildi va qayta tekshirildi.
+
+Eslatma: bu Macda 3000-portni boshqa loyiha band qilgan, shuning uchun `.env` da `WEB_PORT=3010` (http://localhost:3010).
 
 Qolgan / v2: Click, Uzum, SMS, baholar va oylik hisobot kartasi, imtihon va sertifikat, ommaviy oferta, Telegram Mini App. Bot haqiqiy token bilan sinalmagan (token yo'q edi); Payme test kassada sinalmagan (faqat testlar bilan).
 
