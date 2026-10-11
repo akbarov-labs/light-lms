@@ -10,6 +10,10 @@ export const centerSettingsSchema = z.object({
   reminderDaysBefore: z.number().int().min(0).max(15).default(3),
   lessonsAheadDays: z.number().int().min(31).max(180).default(60),
   transferAsTrial: z.boolean().default(false),
+  expenseCategories: z
+    .array(z.string().min(1).max(60))
+    .max(50)
+    .default(["Ijara / Rent", "Kommunal / Utilities", "Reklama / Ads", "Oylik / Salary", "Jihozlar / Equipment", "Ofis / Office", "Boshqa / Other"]),
   notify: z
     .object({
       payment: z.boolean().default(true),

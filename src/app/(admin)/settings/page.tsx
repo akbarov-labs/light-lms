@@ -2,7 +2,7 @@ import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { readSettings } from "@/lib/settings";
 import { Card } from "@/components/ui";
-import { Checkbox, Field, FormGrid, Input, Select } from "@/components/fields";
+import { Checkbox, Field, FormGrid, Input, Select, Textarea } from "@/components/fields";
 import { ActionForm, SubmitButton } from "@/components/client";
 import { saveCenterAction } from "./actions";
 
@@ -47,6 +47,9 @@ export default async function CenterSettings() {
           <Checkbox name="payFromCollected" label={t("settings.payFromCollected")} defaultChecked={s.payFromCollected} />
           <Checkbox name="transferAsTrial" label={t("settings.transferAsTrial")} defaultChecked={s.transferAsTrial} />
         </div>
+      </Card>
+      <Card title={t("settings.expenseCategories")}>
+        <Field hint={t("expenses.categoriesHint")}><Textarea name="expenseCategories" rows={6} defaultValue={s.expenseCategories.join("\n")} /></Field>
       </Card>
       <Card title={t("settings.notifications")}>
         <div className="grid gap-2 sm:grid-cols-2">

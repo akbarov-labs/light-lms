@@ -31,19 +31,21 @@ export function parsePriceHistory(raw: unknown): { from: ISODate; price: number 
     .map((r) => ({ from: r.from, price: r.price }));
 }
 
-/** Build the pure engine input for one enrollment. */
-export async function loadBillingInput(tx: Tx, enrollmentId: string, asOf: ISODate): Promise<{ input: BillingInput; enrollment: EnrollmentForBilling }> {
-  const enrollment = await tx.enrollment.findUniqueOrThrow({ where: { id: enrollmentId }, include: enrollmentInclude });
-  const g = enrollment.group;
-  const settings = readSettings(g.center.settings);
-  const [lessons, holidays, excused] = await Promise.all([
-    tx.lesson.findMany({ where: { groupId: g.id }, select: { id: true, date: true, status: true }, orderBy: { date: "asc" } }),
-    tx.holiday.findMany({ where: { centerId: g.centerId }, select: { date: true } }),
-    settings.excusedAbsenceCredit
-      ? tx.attendance.findMany({ where: { enrollmentId, status: "EXCUSED" }, select: { lessonId: true } })
-      : Promise.resolve([] as { lessonId: string }[]),
-  ]);
-  const input: BillingInput = {
+type GroupWithCourse = Prisma.GroupGetPayload<{ include: { course: true; slots: true } }>;
+type EnrollmentWithFreezes = Prisma.EnrollmentGetPayload<{ include: { freezes: true } }>;
+
+/** Assemble the pure engine input from rows already loaded. */
+export function buildInput(p: {
+  group: GroupWithCourse;
+  enrollment: EnrollmentWithFreezes;
+  lessons: { id: string; date: Date; status: "SCHEDULED" | "HELD" | "CANCELLED" }[];
+  holidays: Set<ISODate>;
+  excusedLessonIds: Set<string>;
+  excusedAbsenceCredit: boolean;
+  asOf: ISODate;
+}): BillingInput {
+  const { group: g, enrollment } = p;
+  return {
     course: {
       name: g.course.name,
       pricingType: g.course.pricingType,
@@ -75,13 +77,74 @@ export async function loadBillingInput(tx: Tx, enrollmentId: string, asOf: ISODa
       discountUntil: d(enrollment.discountUntil),
       freezes: enrollment.freezes.map((f) => ({ from: toISODate(f.fromDate), to: toISODate(f.toDate) })),
     },
-    lessons: lessons.map((l) => ({ id: l.id, date: toISODate(l.date), status: l.status })),
-    excusedLessonIds: new Set(excused.map((a) => a.lessonId)),
-    holidays: new Set(holidays.map((h) => toISODate(h.date))),
-    settings: { excusedAbsenceCredit: settings.excusedAbsenceCredit },
-    asOf,
+    lessons: p.lessons.map((l) => ({ id: l.id, date: toISODate(l.date), status: l.status })),
+    excusedLessonIds: p.excusedLessonIds,
+    holidays: p.holidays,
+    settings: { excusedAbsenceCredit: p.excusedAbsenceCredit },
+    asOf: p.asOf,
   };
+}
+
+/** Build the pure engine input for one enrollment. */
+export async function loadBillingInput(tx: Tx, enrollmentId: string, asOf: ISODate): Promise<{ input: BillingInput; enrollment: EnrollmentForBilling }> {
+  const enrollment = await tx.enrollment.findUniqueOrThrow({ where: { id: enrollmentId }, include: enrollmentInclude });
+  const g = enrollment.group;
+  const settings = readSettings(g.center.settings);
+  const [lessons, holidays, excused] = await Promise.all([
+    tx.lesson.findMany({ where: { groupId: g.id }, select: { id: true, date: true, status: true }, orderBy: { date: "asc" } }),
+    tx.holiday.findMany({ where: { centerId: g.centerId }, select: { date: true } }),
+    settings.excusedAbsenceCredit
+      ? tx.attendance.findMany({ where: { enrollmentId, status: "EXCUSED" }, select: { lessonId: true } })
+      : Promise.resolve([] as { lessonId: string }[]),
+  ]);
+  const input = buildInput({
+    group: g,
+    enrollment,
+    lessons,
+    holidays: new Set(holidays.map((h) => toISODate(h.date))),
+    excusedLessonIds: new Set(excused.map((a) => a.lessonId)),
+    excusedAbsenceCredit: settings.excusedAbsenceCredit,
+    asOf,
+  });
   return { input, enrollment };
+}
+
+/** Billing inputs for every enrollment of the given groups (one query per table). */
+export async function loadGroupInputs(groupIds: string[], asOf: ISODate, tx: Tx = db) {
+  const out = new Map<string, { input: BillingInput; studentName: string; familyId: string }[]>();
+  if (groupIds.length === 0) return out;
+  const groups = await tx.group.findMany({
+    where: { id: { in: groupIds } },
+    include: { course: true, slots: true, center: { select: { settings: true } }, enrollments: { include: { freezes: true, student: { select: { firstName: true, lastName: true, familyId: true } } } } },
+  });
+  const centerIds = [...new Set(groups.map((g) => g.centerId))];
+  const [lessons, holidays, excused] = await Promise.all([
+    tx.lesson.findMany({ where: { groupId: { in: groupIds } }, select: { id: true, date: true, status: true, groupId: true }, orderBy: { date: "asc" } }),
+    tx.holiday.findMany({ where: { centerId: { in: centerIds } }, select: { date: true, centerId: true } }),
+    tx.attendance.findMany({ where: { status: "EXCUSED", lesson: { groupId: { in: groupIds } } }, select: { lessonId: true, enrollmentId: true } }),
+  ]);
+  for (const g of groups) {
+    const settings = readSettings(g.center.settings);
+    const gl = lessons.filter((l) => l.groupId === g.id);
+    const hs = new Set(holidays.filter((h) => h.centerId === g.centerId).map((h) => toISODate(h.date)));
+    out.set(
+      g.id,
+      g.enrollments.map((e) => ({
+        input: buildInput({
+          group: g,
+          enrollment: e,
+          lessons: gl,
+          holidays: hs,
+          excusedLessonIds: new Set(excused.filter((x) => x.enrollmentId === e.id).map((x) => x.lessonId)),
+          excusedAbsenceCredit: settings.excusedAbsenceCredit,
+          asOf,
+        }),
+        studentName: `${e.student.lastName} ${e.student.firstName}`,
+        familyId: e.student.familyId,
+      })),
+    );
+  }
+  return out;
 }
 
 async function syncInTx(tx: Tx, enrollmentId: string, asOf: ISODate, userId: string | null): Promise<LedgerDelta[]> {

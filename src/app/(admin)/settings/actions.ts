@@ -57,6 +57,10 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
       payTeacherForTrial: f.payTeacherForTrial,
       payFromCollected: f.payFromCollected,
       transferAsTrial: f.transferAsTrial,
+      expenseCategories: (() => {
+        const list = String(fd.get("expenseCategories") ?? "").split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 50);
+        return list.length ? [...new Set(list)] : old.expenseCategories;
+      })(),
       notify: Object.fromEntries(NOTIFY.map((k) => [k, fd.get(`notify.${k}`) === "on"])) as typeof old.notify,
     };
     await db.$transaction(async (tx) => {

@@ -1,0 +1,96 @@
+import { describe, expect, it } from "vitest";
+import { scenario, withStatus } from "@/lib/billing/testkit";
+import type { BillingInput } from "@/lib/billing/types";
+import { collectLessons, computeSalary, type LessonRow, type SalaryRule } from "./engine";
+
+// One group, Mon/Wed/Fri, October 2026 = 13 lessons; two students at 600 000/month (46 153.8 per lesson each).
+function setup(opts: { trialSecond?: boolean; asOf?: string } = {}) {
+  const a = scenario({ asOf: opts.asOf ?? "2026-10-31", enrollment: { id: "eA" } });
+  const b = scenario({ asOf: opts.asOf ?? "2026-10-31", enrollment: opts.trialSecond ? { id: "eB", status: "TRIAL", activatedAt: null } : { id: "eB" } });
+  let inputA: BillingInput = a;
+  let inputB: BillingInput = { ...b, lessons: a.lessons };
+  // first 4 October lessons held (2, 5, 7, 9); the 9th taught by a substitute
+  for (const d of ["2026-10-02", "2026-10-05", "2026-10-07", "2026-10-09"]) {
+    inputA = withStatus(inputA, d, "HELD");
+    inputB = withStatus(inputB, d, "HELD");
+  }
+  const lessons: LessonRow[] = inputA.lessons.map((l) => ({
+    id: l.id,
+    date: l.date,
+    status: l.status,
+    teacherId: l.date === "2026-10-09" ? "sub" : "T",
+    groupId: "g1",
+    groupName: "GE-A1",
+  }));
+  const enrollmentsByGroup = new Map([["g1", [{ input: inputA, studentName: "A" }, { input: inputB, studentName: "B" }]]]);
+  return { lessons, enrollmentsByGroup };
+}
+
+const per = 600_000 / 13;
+const rule = (r: Partial<SalaryRule>): SalaryRule => ({ model: "PERCENT_EARNED", percent: null, fixedAmount: null, perLesson: null, ...r });
+
+describe("salary", () => {
+  it("% of earned tuition for lessons actually held", () => {
+    const { lessons, enrollmentsByGroup } = setup();
+    const held = collectLessons({ teacherId: "T", month: "2026-10", lessons, enrollmentsByGroup, payTrial: false, paidKeys: new Set() });
+    expect(held).toHaveLength(3);
+    const r = computeSalary({ rule: rule({ percent: 40 }), lessons: held, adjustments: [], payFromCollected: false });
+    expect(r.lines[0]).toMatchObject({ lessonsHeld: 3, studentLessons: 6 });
+    expect(r.total).toBe(Math.round(per * 6 * 0.4));
+  });
+
+  it("substitute teacher gets the lesson", () => {
+    const { lessons, enrollmentsByGroup } = setup();
+    const held = collectLessons({ teacherId: "sub", month: "2026-10", lessons, enrollmentsByGroup, payTrial: false, paidKeys: new Set() });
+    expect(held.map((l) => l.date)).toEqual(["2026-10-09"]);
+    expect(computeSalary({ rule: rule({ model: "PER_LESSON", perLesson: 80_000 }), lessons: held, adjustments: [], payFromCollected: false }).total).toBe(80_000);
+  });
+
+  it("fixed, per lesson and base + %", () => {
+    const { lessons, enrollmentsByGroup } = setup();
+    const held = collectLessons({ teacherId: "T", month: "2026-10", lessons, enrollmentsByGroup, payTrial: false, paidKeys: new Set() });
+    expect(computeSalary({ rule: rule({ model: "FIXED", fixedAmount: 3_000_000 }), lessons: held, adjustments: [], payFromCollected: false }).total).toBe(3_000_000);
+    expect(computeSalary({ rule: rule({ model: "PER_LESSON", perLesson: 100_000 }), lessons: held, adjustments: [], payFromCollected: false }).total).toBe(300_000);
+    expect(computeSalary({ rule: rule({ model: "BASE_PLUS_PERCENT", fixedAmount: 1_000_000, percent: 20 }), lessons: held, adjustments: [], payFromCollected: false }).total).toBe(
+      1_000_000 + Math.round(per * 6 * 0.2),
+    );
+  });
+
+  it("trial students are excluded unless the setting is on", () => {
+    const { lessons, enrollmentsByGroup } = setup({ trialSecond: true });
+    const off = collectLessons({ teacherId: "T", month: "2026-10", lessons, enrollmentsByGroup, payTrial: false, paidKeys: new Set() });
+    expect(off.every((l) => l.students.length === 1)).toBe(true);
+    const on = collectLessons({ teacherId: "T", month: "2026-10", lessons, enrollmentsByGroup, payTrial: true, paidKeys: new Set() });
+    expect(on.every((l) => l.students.length === 2)).toBe(true);
+    expect(on[0].students.find((s) => s.trial)?.value).toBeCloseTo(per);
+  });
+
+  it("pay only from collected money counts only paid billing units", () => {
+    const { lessons, enrollmentsByGroup } = setup();
+    const held = collectLessons({ teacherId: "T", month: "2026-10", lessons, enrollmentsByGroup, payTrial: false, paidKeys: new Set(["sub:eA:2026-10-01"]) });
+    const off = computeSalary({ rule: rule({ percent: 50 }), lessons: held, adjustments: [], payFromCollected: false });
+    const on = computeSalary({ rule: rule({ percent: 50 }), lessons: held, adjustments: [], payFromCollected: true });
+    expect(off.lines[0].studentLessons).toBe(6);
+    expect(on.lines[0].studentLessons).toBe(3);
+    expect(on.total).toBe(Math.round(per * 3 * 0.5));
+  });
+
+  it("bonuses and fines are added", () => {
+    const r = computeSalary({ rule: rule({ model: "FIXED", fixedAmount: 2_000_000 }), lessons: [], adjustments: [{ amount: 300_000, reason: "bonus" }, { amount: -50_000, reason: "kechikish" }], payFromCollected: false });
+    expect(r.total).toBe(2_250_000);
+    expect(r.adjustmentsTotal).toBe(250_000);
+  });
+
+  it("no rule → zero with a warning", () => {
+    const r = computeSalary({ rule: null, lessons: [], adjustments: [], payFromCollected: false });
+    expect(r.total).toBe(0);
+    expect(r.warnings).toContain("noRule");
+  });
+
+  it("cancelled or unmarked lessons are not paid", () => {
+    const { lessons, enrollmentsByGroup } = setup();
+    const changed = lessons.map((l) => (l.date === "2026-10-05" ? { ...l, status: "CANCELLED" as const } : l));
+    const held = collectLessons({ teacherId: "T", month: "2026-10", lessons: changed, enrollmentsByGroup, payTrial: false, paidKeys: new Set() });
+    expect(held).toHaveLength(2);
+  });
+});
