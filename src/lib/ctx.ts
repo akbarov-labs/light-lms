@@ -125,3 +125,35 @@ export function canAccessBranch(ctx: Ctx, branchId: string | null | undefined): 
 export function assertBranch(ctx: Ctx, branchId: string | null | undefined): void {
   if (!canAccessBranch(ctx, branchId)) throw new UserError("error.forbidden");
 }
+
+/** Students visible in the current branch scope: home branch or any enrollment there. */
+export function studentScope(ctx: Ctx): { OR?: object[] } {
+  const ids = scopeBranchIds(ctx);
+  if (!ids) return {};
+  return { OR: [{ branchId: { in: ids } }, { enrollments: { some: { group: { branchId: { in: ids } } } } }] };
+}
+
+/** Same rule but against the user's allowed branches (not the switcher) — for access checks. */
+function allowedStudentScope(ctx: Ctx): { OR?: object[] } {
+  if (!ctx.branchIds) return {};
+  return { OR: [{ branchId: { in: ctx.branchIds } }, { branchId: null }, { enrollments: { some: { group: { branchId: { in: ctx.branchIds } } } } }] };
+}
+
+export async function assertStudentAccess(ctx: Ctx, studentId: string): Promise<void> {
+  const s = await db.student.findFirst({ where: { id: studentId, centerId: ctx.centerId, ...allowedStudentScope(ctx) }, select: { id: true } });
+  if (!s) throw new UserError("error.notFound");
+}
+
+export async function assertFamilyAccess(ctx: Ctx, familyId: string): Promise<void> {
+  const f = await db.family.findFirst({
+    where: { id: familyId, centerId: ctx.centerId, ...(ctx.branchIds ? { students: { some: allowedStudentScope(ctx) } } : {}) },
+    select: { id: true },
+  });
+  if (!f) throw new UserError("error.notFound");
+}
+
+/** Families visible in the current branch scope. */
+export function familyScope(ctx: Ctx): object {
+  const s = studentScope(ctx);
+  return s.OR ? { students: { some: s } } : {};
+}

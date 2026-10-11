@@ -95,10 +95,10 @@ export function maxDate(a: ISODate, b: ISODate): ISODate {
   return a > b ? a : b;
 }
 
-/** "dd.MM.yyyy" */
+/** "dd.MM.yyyy". A Date is read in the center timezone (DB DATE values are UTC midnight → same day). */
 export function formatDate(s: ISODate | Date | null | undefined): string {
   if (!s) return "—";
-  const iso = typeof s === "string" ? s : toISODate(s);
+  const iso = typeof s === "string" ? s : todayISO(s);
   return `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 }
 

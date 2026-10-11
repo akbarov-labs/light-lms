@@ -15,6 +15,8 @@ export interface BillingCourse {
   installments: number;
   durationMonths: number | null;
   lessonsPerWeek: number | null;
+  /** Price changes: each price applies from its date. Empty = `price` always. */
+  prices?: { from: ISODate; price: number }[];
 }
 
 export interface BillingGroup {

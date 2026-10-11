@@ -30,3 +30,18 @@ export async function balancesFor(familyIds: string[], tx: Tx = db): Promise<Map
   const rows = await tx.ledgerEntry.groupBy({ by: ["familyId"], where: { familyId: { in: familyIds } }, _sum: { amount: true } });
   return new Map(rows.map((r) => [r.familyId, r._sum.amount ?? 0]));
 }
+
+/** Allocation per family for many families (one query). */
+export async function allocationsFor(familyIds: string[], tx: Tx = db): Promise<Map<string, Allocation>> {
+  const out = new Map<string, Allocation>();
+  if (familyIds.length === 0) return out;
+  const entries = await tx.ledgerEntry.findMany({
+    where: { familyId: { in: familyIds } },
+    select: { id: true, familyId: true, type: true, amount: true, date: true, enrollmentId: true, billingKey: true, reversesId: true, description: true },
+    orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+  });
+  const by = new Map<string, typeof entries>();
+  for (const e of entries) by.set(e.familyId, [...(by.get(e.familyId) ?? []), e]);
+  for (const id of familyIds) out.set(id, allocate((by.get(id) ?? []).map((e) => ({ ...e, date: toISODate(e.date) }))));
+  return out;
+}

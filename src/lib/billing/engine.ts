@@ -14,14 +14,24 @@ export function round100(n: number): number {
   return Math.round(n / 100) * 100;
 }
 
-/** enrollment override → group override → course price. */
-export function basePrice(input: Pick<BillingInput, "course" | "group" | "enrollment">): number {
-  return input.enrollment.priceOverride ?? input.group.priceOverride ?? input.course.price;
+/** Course price valid on `at` (price history), else the current course price. */
+export function coursePriceAt(course: BillingInput["course"], at: ISODate): number {
+  let price = course.price;
+  if (course.prices && course.prices.length > 0) {
+    const valid = course.prices.filter((p) => p.from <= at).sort((a, b) => a.from.localeCompare(b.from));
+    if (valid.length > 0) price = valid[valid.length - 1].price;
+  }
+  return price;
+}
+
+/** enrollment override → group override → course price (as of `at`). */
+export function basePrice(input: Pick<BillingInput, "course" | "group" | "enrollment">, at: ISODate): number {
+  return input.enrollment.priceOverride ?? input.group.priceOverride ?? coursePriceAt(input.course, at);
 }
 
 /** Price of a unit that starts on `unitStart`, with the enrollment discount applied while it is valid. */
 export function unitPrice(input: Pick<BillingInput, "course" | "group" | "enrollment">, unitStart: ISODate): number {
-  const base = basePrice(input);
+  const base = basePrice(input, unitStart);
   const e = input.enrollment;
   const discountValid = !e.discountUntil || unitStart <= e.discountUntil;
   if (!discountValid) return base;
@@ -78,11 +88,13 @@ const nextDay = (d: ISODate) => addDays(d, 1);
 function subscriptionUnits(input: BillingInput): ExpectedUnit[] {
   const e = input.enrollment;
   const out: ExpectedUnit[] = [];
-  if (!e.activatedAt || e.activatedAt > input.asOf) return out;
+  if (!e.activatedAt) return out;
   const anchor = anchorDay(input);
+  // The period holding the activation day is charged at activation, even if that day is ahead.
+  const horizon = e.activatedAt > input.asOf ? e.activatedAt : input.asOf;
   for (
     let p = periodContaining(e.activatedAt, anchor);
-    p.start <= input.asOf && (!e.endDate || p.start <= e.endDate);
+    p.start <= horizon && (!e.endDate || p.start <= e.endDate);
     p = nextPeriod(p, anchor)
   ) {
     const scheduled = scheduledInPeriod(input, p);
@@ -109,9 +121,8 @@ function subscriptionUnits(input: BillingInput): ExpectedUnit[] {
 interface PackageInfo {
   /** Lessons in one package. */
   size: number;
-  /** Price of one full package before discount. */
-  fullPrice: number;
-  /** Per-lesson rate before discount = fullPrice / size. */
+  /** Share of the package price this student pays (< 1 for a late joiner to a whole-course package). */
+  ratio: number;
   wholeCourse: boolean;
 }
 
@@ -126,7 +137,7 @@ export function wholeCourseLessons(input: BillingInput): number {
 
 function packageInfo(input: BillingInput): PackageInfo {
   if (input.course.packageLessons && input.course.packageLessons > 0) {
-    return { size: input.course.packageLessons, fullPrice: basePrice(input), wholeCourse: false };
+    return { size: input.course.packageLessons, ratio: 1, wholeCourse: false };
   }
   // Whole course. A student who joins late buys only the lessons left from their activation day,
   // at the course's per-lesson rate (DECISIONS.md).
@@ -139,17 +150,15 @@ function packageInfo(input: BillingInput): PackageInfo {
       ? countSlotDates(g.slotWeekdays, activated, end, input.holidays)
       : Math.max(0, total - countSlotDates(g.slotWeekdays, g.startDate, prevDay(activated), input.holidays));
     if (remaining > 0 && remaining < total) {
-      return { size: remaining, fullPrice: Math.round((basePrice(input) * remaining) / total), wholeCourse: true };
+      return { size: remaining, ratio: remaining / total, wholeCourse: true };
     }
   }
-  return { size: total, fullPrice: basePrice(input), wholeCourse: true };
+  return { size: total, ratio: 1, wholeCourse: true };
 }
 
 /** Package price after discount, scaled when the whole-course package was shortened for a late joiner. */
 function packagePrice(input: BillingInput, info: PackageInfo, start: ISODate): number {
-  const base = basePrice(input);
-  if (base === 0) return 0;
-  return Math.round((unitPrice(input, start) * info.fullPrice) / base);
+  return Math.round(unitPrice(input, start) * info.ratio);
 }
 
 function installmentAmounts(price: number, n: number): number[] {
@@ -161,7 +170,7 @@ function installmentAmounts(price: number, n: number): number[] {
 function packageUnits(input: BillingInput): ExpectedUnit[] {
   const e = input.enrollment;
   const out: ExpectedUnit[] = [];
-  if (!e.activatedAt || e.activatedAt > input.asOf) return out;
+  if (!e.activatedAt) return out;
   const info = packageInfo(input);
   const N = info.size;
   const chargeable = input.lessons
@@ -189,7 +198,7 @@ function packageUnits(input: BillingInput): ExpectedUnit[] {
     const what = info.wholeCourse ? "Kurs" : N === 1 ? `Dars ${i}` : `Paket ${i}`;
     for (let j = 1; j <= inst; j++) {
       const key = inst > 1 ? `pkg:${e.id}:${i}:${j}` : `pkg:${e.id}:${i}`;
-      const due = closed || addMonthsAnchored(start, j - 1) <= input.asOf;
+      const due = closed || j === 1 || addMonthsAnchored(start, j - 1) <= input.asOf;
       let amount = 0;
       if (closed) {
         amount = j === inst ? remaining : Math.min(amounts[j - 1], remaining);
@@ -277,10 +286,10 @@ export function lessonValue(input: BillingInput, lessonId: string, payTrial: boo
     if (input.course.pricingType === "SUBSCRIPTION") {
       const p = periodContaining(lesson.date, 1);
       const scheduled = scheduledInPeriod(input, p);
-      return scheduled > 0 ? { value: input.course.price / scheduled, key: null, trial: true } : null;
+      return scheduled > 0 ? { value: coursePriceAt(input.course, lesson.date) / scheduled, key: null, trial: true } : null;
     }
     const size = input.course.packageLessons || wholeCourseLessons(input);
-    return { value: input.course.price / size, key: null, trial: true };
+    return { value: coursePriceAt(input.course, lesson.date) / size, key: null, trial: true };
   }
 
   if (!isChargeable(lesson, e, input.settings, input.excusedLessonIds)) return null;

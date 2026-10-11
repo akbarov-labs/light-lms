@@ -9,7 +9,7 @@
 2026-10-12 — Notification has a unique dedupeKey — reminder jobs can re-run without sending twice.
 2026-10-12 — Subscription denominator also counts slot dates outside the group's own start/end — a group that starts or ends mid-month is pro-rated instead of charging a full month for a few lessons.
 2026-10-12 — Whole-course package for a student activated after the group started = only the lessons left, at the course's per-lesson rate — late joiners don't pay for lessons that already happened.
-2026-10-12 — Billing posts nothing until activatedAt ≤ today (activation in the future charges on that day, not earlier).
+2026-10-12 — Activation charges the period holding the activation day immediately (pro-rated from that day), even when activation is set to the next lesson — the parent sees the amount due before the lesson, and the admin sees the charge right after activating.
 2026-10-12 — Closed package with installments: the used amount fills installments in order; the rest is credited — keeps each installment key meaningful.
 2026-10-12 — Billing sync takes a Postgres advisory lock per enrollment — two concurrent syncs can't post the same delta twice.
 2026-10-12 — Allocation treats a REVERSAL like the entry it reverses (same unit/enrollment, opposite sign); keyless CREDITs count as wallet money.

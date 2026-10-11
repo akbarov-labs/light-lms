@@ -23,6 +23,14 @@ export type EnrollmentForBilling = Prisma.EnrollmentGetPayload<{ include: typeof
 
 const d = (v: Date | null | undefined): ISODate | null => (v ? toISODate(v) : null);
 
+/** Course.priceHistory JSON → [{from, price}], ignoring malformed rows. */
+export function parsePriceHistory(raw: unknown): { from: ISODate; price: number }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((r): r is { from: string; price: number } => !!r && typeof r.from === "string" && Number.isInteger(r.price))
+    .map((r) => ({ from: r.from, price: r.price }));
+}
+
 /** Build the pure engine input for one enrollment. */
 export async function loadBillingInput(tx: Tx, enrollmentId: string, asOf: ISODate): Promise<{ input: BillingInput; enrollment: EnrollmentForBilling }> {
   const enrollment = await tx.enrollment.findUniqueOrThrow({ where: { id: enrollmentId }, include: enrollmentInclude });
@@ -45,6 +53,7 @@ export async function loadBillingInput(tx: Tx, enrollmentId: string, asOf: ISODa
       installments: g.course.installments,
       durationMonths: g.course.durationMonths,
       lessonsPerWeek: g.course.lessonsPerWeek,
+      prices: parsePriceHistory(g.course.priceHistory),
     },
     group: {
       code: g.code,

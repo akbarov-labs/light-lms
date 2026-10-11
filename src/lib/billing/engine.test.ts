@@ -47,8 +47,10 @@ describe("subscription — calendar", () => {
     ]);
   });
 
-  it("nothing is charged before activation day", () => {
-    expect(computeExpected(scenario({ asOf: "2026-10-10", enrollment: { activatedAt: "2026-10-12" } }))).toEqual([]);
+  it("activation on a future lesson charges its period right away, pro-rated from that day", () => {
+    const units = computeExpected(scenario({ asOf: "2026-10-12", enrollment: { startDate: "2026-10-12", activatedAt: "2026-10-14" } }));
+    // 14 16 19 21 23 26 28 30 = 8 of 13
+    expect(units.map((u) => [u.key, u.amount])).toEqual([["sub:e1:2026-10-01", round100((600_000 * 8) / 13)]]);
   });
 
   it("trial (not activated) is free", () => {
@@ -207,6 +209,16 @@ describe("subscription — calendar", () => {
     ledger.sync(scenario({ asOf: "2026-11-02" }));
     ledger.sync(scenario({ asOf: "2026-11-02", enrollment: { status: "TRIAL", activatedAt: null } }));
     expect(ledger.owed).toBe(0);
+  });
+});
+
+describe("price history", () => {
+  it("a price change applies only to periods starting on/after its date", () => {
+    const input = scenario({
+      asOf: "2026-12-05",
+      course: { price: 700_000, prices: [{ from: "2000-01-01", price: 600_000 }, { from: "2026-12-01", price: 700_000 }] },
+    });
+    expect(computeExpected(input).map((u) => u.amount)).toEqual([600_000, 600_000, 700_000]);
   });
 });
 

@@ -162,6 +162,7 @@ model Branch {
   users    UserBranch[]
   expenses Expense[]
   leads    Lead[]
+  students Student[]
 
   @@index([centerId])
 }
@@ -232,6 +233,8 @@ model Course {
   renewal        Renewal     @default(CALENDAR)
   packageLessons Int?
   installments   Int         @default(1)
+  /// [{ from: "YYYY-MM-DD", price: Int }] — earlier prices; `price` applies after the last entry.
+  priceHistory   Json        @default("[]")
   archivedAt     DateTime?
   createdAt      DateTime    @default(now())
 
@@ -362,6 +365,9 @@ model Student {
   center         Center        @relation(fields: [centerId], references: [id])
   familyId       String
   family         Family        @relation(fields: [familyId], references: [id])
+  /// Home branch (where the student was registered); branch scoping also follows enrollments.
+  branchId       String?
+  branch         Branch?       @relation(fields: [branchId], references: [id])
   firstName      String
   lastName       String
   phone          String?
@@ -383,6 +389,7 @@ model Student {
   @@index([familyId])
   @@index([phone])
   @@index([centerId, lastName, firstName])
+  @@index([branchId])
 }
 
 model Enrollment {
