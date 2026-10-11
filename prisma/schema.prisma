@@ -1,0 +1,650 @@
+// lms-light data model. See HANDOFF.md §6.
+// Money = integer UZS. Balance is always SUM(LedgerEntry.amount), never a stored total.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  ADMIN
+  TEACHER
+}
+
+enum PricingType {
+  SUBSCRIPTION
+  PACKAGE
+}
+
+enum Renewal {
+  CALENDAR
+  GROUP_START
+  STUDENT_START
+}
+
+enum GroupStatus {
+  PLANNED
+  ACTIVE
+  FINISHED
+  ARCHIVED
+}
+
+enum LessonStatus {
+  SCHEDULED
+  HELD
+  CANCELLED
+}
+
+enum StudentStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum EnrollmentStatus {
+  TRIAL
+  ACTIVE
+  FROZEN
+  LEFT
+  TRANSFERRED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum LedgerType {
+  CHARGE
+  CREDIT
+  PAYMENT
+  REFUND
+  REVERSAL
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  PAYME
+  CLICK
+  UZUM
+  SYSTEM
+}
+
+enum SalaryModel {
+  PERCENT_EARNED
+  FIXED
+  PER_LESSON
+  BASE_PLUS_PERCENT
+}
+
+enum PayslipStatus {
+  DRAFT
+  LOCKED
+  PAID
+}
+
+enum LeadStage {
+  NEW
+  CONTACTED
+  TRIAL_BOOKED
+  TRIAL_DONE
+  ENROLLED
+  LOST
+}
+
+enum LinkKind {
+  GUARDIAN
+  STUDENT
+  STAFF
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model Center {
+  id                 String   @id @default(cuid())
+  name               String
+  slug               String   @unique
+  currency           String   @default("UZS")
+  timezone           String   @default("Asia/Tashkent")
+  locale             String   @default("uz")
+  accentColor        String   @default("#2563eb")
+  logoUrl            String?
+  phone              String?
+  settings           Json     @default("{}")
+  paymeMerchantId    String?
+  paymeKey           String?
+  paymeTestMode      Boolean  @default(true)
+  receiptSeq         Int      @default(0)
+  groupSeq           Int      @default(0)
+  createdAt          DateTime @default(now())
+
+  branches      Branch[]
+  users         User[]
+  courses       Course[]
+  groups        Group[]
+  holidays      Holiday[]
+  families      Family[]
+  students      Student[]
+  ledger        LedgerEntry[]
+  expenses      Expense[]
+  leads         Lead[]
+  auditLogs     AuditLog[]
+  paymeTxs      PaymeTransaction[]
+  notifications Notification[]
+}
+
+model Branch {
+  id         String    @id @default(cuid())
+  centerId   String
+  center     Center    @relation(fields: [centerId], references: [id])
+  name       String
+  address    String?
+  phone      String?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  rooms    Room[]
+  groups   Group[]
+  users    UserBranch[]
+  expenses Expense[]
+  leads    Lead[]
+
+  @@index([centerId])
+}
+
+model Room {
+  id         String    @id @default(cuid())
+  branchId   String
+  branch     Branch    @relation(fields: [branchId], references: [id])
+  name       String
+  capacity   Int?
+  archivedAt DateTime?
+
+  groups  Group[]
+  lessons Lesson[]
+
+  @@index([branchId])
+}
+
+model User {
+  id             String    @id @default(cuid())
+  centerId       String
+  center         Center    @relation(fields: [centerId], references: [id])
+  phone          String    @unique
+  name           String
+  passwordHash   String
+  role           Role
+  isTeacher      Boolean   @default(false)
+  perms          String[]
+  telegramChatId String?
+  locale         String?
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  branches       UserBranch[]
+  groups         Group[]            @relation("GroupTeacher")
+  lessons        Lesson[]           @relation("LessonTeacher")
+  markedLessons  Lesson[]           @relation("LessonMarkedBy")
+  salaryRules    SalaryRule[]
+  adjustments    SalaryAdjustment[] @relation("AdjTeacher")
+  payslips       Payslip[]          @relation("PayslipTeacher")
+  assignedLeads  Lead[]             @relation("LeadAssignee")
+
+  @@index([centerId])
+}
+
+model UserBranch {
+  userId   String
+  branchId String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  @@id([userId, branchId])
+  @@index([branchId])
+}
+
+model Course {
+  id             String      @id @default(cuid())
+  centerId       String
+  center         Center      @relation(fields: [centerId], references: [id])
+  name           String
+  level          String?
+  description    String?
+  lessonMinutes  Int         @default(90)
+  lessonsPerWeek Int?
+  durationMonths Int?
+  pricingType    PricingType
+  price          Int
+  renewal        Renewal     @default(CALENDAR)
+  packageLessons Int?
+  installments   Int         @default(1)
+  archivedAt     DateTime?
+  createdAt      DateTime    @default(now())
+
+  groups Group[]
+  leads  Lead[]
+
+  @@index([centerId])
+}
+
+model Group {
+  id            String      @id @default(cuid())
+  centerId      String
+  center        Center      @relation(fields: [centerId], references: [id])
+  branchId      String
+  branch        Branch      @relation(fields: [branchId], references: [id])
+  courseId      String
+  course        Course      @relation(fields: [courseId], references: [id])
+  teacherId     String
+  teacher       User        @relation("GroupTeacher", fields: [teacherId], references: [id])
+  roomId        String?
+  room          Room?       @relation(fields: [roomId], references: [id])
+  code          Int
+  name          String
+  startDate     DateTime    @db.Date
+  endDate       DateTime?   @db.Date
+  capacity      Int?
+  priceOverride Int?
+  status        GroupStatus @default(ACTIVE)
+  createdAt     DateTime    @default(now())
+
+  slots       GroupSlot[]
+  lessons     Lesson[]
+  enrollments Enrollment[]
+
+  @@unique([centerId, code])
+  @@index([centerId, createdAt])
+  @@index([branchId])
+  @@index([teacherId])
+  @@index([courseId])
+  @@index([roomId])
+}
+
+model GroupSlot {
+  id        String @id @default(cuid())
+  groupId   String
+  group     Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  weekday   Int
+  startTime String
+  endTime   String
+
+  @@index([groupId])
+}
+
+model Lesson {
+  id           String       @id @default(cuid())
+  groupId      String
+  group        Group        @relation(fields: [groupId], references: [id])
+  date         DateTime     @db.Date
+  startTime    String
+  endTime      String
+  teacherId    String
+  teacher      User         @relation("LessonTeacher", fields: [teacherId], references: [id])
+  roomId       String?
+  room         Room?        @relation(fields: [roomId], references: [id])
+  status       LessonStatus @default(SCHEDULED)
+  cancelReason String?
+  topic        String?
+  heldAt       DateTime?
+  markedById   String?
+  markedBy     User?        @relation("LessonMarkedBy", fields: [markedById], references: [id])
+  createdAt    DateTime     @default(now())
+
+  attendance Attendance[]
+  ledger     LedgerEntry[]
+
+  @@unique([groupId, date, startTime])
+  @@index([groupId, date])
+  @@index([teacherId, date])
+  @@index([roomId, date])
+  @@index([date])
+}
+
+model Holiday {
+  id       String   @id @default(cuid())
+  centerId String
+  center   Center   @relation(fields: [centerId], references: [id])
+  date     DateTime @db.Date
+  name     String
+
+  @@unique([centerId, date])
+}
+
+model Family {
+  id        String   @id @default(cuid())
+  centerId  String
+  center    Center   @relation(fields: [centerId], references: [id])
+  name      String
+  createdAt DateTime @default(now())
+
+  guardians  Guardian[]
+  students   Student[]
+  ledger     LedgerEntry[]
+  paymeTxs   PaymeTransaction[]
+
+  @@index([centerId, createdAt])
+}
+
+model Guardian {
+  id             String  @id @default(cuid())
+  familyId       String
+  family         Family  @relation(fields: [familyId], references: [id])
+  name           String
+  phone          String
+  relation       String?
+  telegramChatId String?
+  isPrimary      Boolean @default(false)
+
+  @@index([familyId])
+  @@index([phone])
+}
+
+model Student {
+  id             String        @id @default(cuid())
+  centerId       String
+  center         Center        @relation(fields: [centerId], references: [id])
+  familyId       String
+  family         Family        @relation(fields: [familyId], references: [id])
+  firstName      String
+  lastName       String
+  phone          String?
+  birthDate      DateTime?     @db.Date
+  gender         String?
+  source         String?
+  tags           String[]
+  notes          String?
+  telegramChatId String?
+  status         StudentStatus @default(ACTIVE)
+  createdAt      DateTime      @default(now())
+
+  enrollments Enrollment[]
+  attendance  Attendance[]
+  ledger      LedgerEntry[]
+  leads       Lead[]
+
+  @@index([centerId, createdAt])
+  @@index([familyId])
+  @@index([phone])
+  @@index([centerId, lastName, firstName])
+}
+
+model Enrollment {
+  id              String           @id @default(cuid())
+  studentId       String
+  student         Student          @relation(fields: [studentId], references: [id])
+  groupId         String
+  group           Group            @relation(fields: [groupId], references: [id])
+  startDate       DateTime         @db.Date
+  endDate         DateTime?        @db.Date
+  activatedAt     DateTime?        @db.Date
+  status          EnrollmentStatus @default(TRIAL)
+  priceOverride   Int?
+  discountPercent Int?
+  discountAmount  Int?
+  discountUntil   DateTime?        @db.Date
+  discountReason  String?
+  leftReason      String?
+  transferredToId String?
+  transferredTo   Enrollment?      @relation("Transfer", fields: [transferredToId], references: [id])
+  transferredFrom Enrollment[]     @relation("Transfer")
+  createdAt       DateTime         @default(now())
+
+  freezes    EnrollmentFreeze[]
+  attendance Attendance[]
+  ledger     LedgerEntry[]
+
+  @@index([studentId])
+  @@index([groupId])
+}
+
+model EnrollmentFreeze {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id])
+  fromDate     DateTime   @db.Date
+  toDate       DateTime   @db.Date
+  reason       String?
+  createdAt    DateTime   @default(now())
+
+  @@index([enrollmentId])
+}
+
+model Attendance {
+  id           String           @id @default(cuid())
+  lessonId     String
+  lesson       Lesson           @relation(fields: [lessonId], references: [id])
+  studentId    String
+  student      Student          @relation(fields: [studentId], references: [id])
+  enrollmentId String
+  enrollment   Enrollment       @relation(fields: [enrollmentId], references: [id])
+  status       AttendanceStatus
+  grade        Int?
+  comment      String?
+  markedById   String?
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([lessonId, studentId])
+  @@index([studentId])
+  @@index([enrollmentId])
+}
+
+model LedgerEntry {
+  id           String         @id @default(cuid())
+  centerId     String
+  center       Center         @relation(fields: [centerId], references: [id])
+  familyId     String
+  family       Family         @relation(fields: [familyId], references: [id])
+  studentId    String?
+  student      Student?       @relation(fields: [studentId], references: [id])
+  enrollmentId String?
+  enrollment   Enrollment?    @relation(fields: [enrollmentId], references: [id])
+  lessonId     String?
+  lesson       Lesson?        @relation(fields: [lessonId], references: [id])
+  type         LedgerType
+  amount       Int
+  method       PaymentMethod?
+  billingKey   String?
+  period       String?
+  description  String
+  reversesId   String?        @unique
+  reverses     LedgerEntry?   @relation("Reversal", fields: [reversesId], references: [id])
+  reversedBy   LedgerEntry?   @relation("Reversal")
+  receiptNo    Int?
+  date         DateTime       @db.Date
+  createdById  String?
+  externalId   String?
+  createdAt    DateTime       @default(now())
+
+  paymeTx PaymeTransaction?
+
+  @@index([familyId])
+  @@index([billingKey])
+  @@index([enrollmentId])
+  @@index([centerId, date])
+  @@index([centerId, createdAt])
+  @@index([studentId])
+}
+
+model SalaryRule {
+  id          String      @id @default(cuid())
+  teacherId   String
+  teacher     User        @relation(fields: [teacherId], references: [id])
+  model       SalaryModel
+  percent     Int?
+  fixedAmount Int?
+  perLesson   Int?
+  validFrom   DateTime    @db.Date
+  createdAt   DateTime    @default(now())
+
+  @@index([teacherId, validFrom])
+}
+
+model SalaryAdjustment {
+  id          String   @id @default(cuid())
+  teacherId   String
+  teacher     User     @relation("AdjTeacher", fields: [teacherId], references: [id])
+  month       String
+  amount      Int
+  reason      String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([teacherId, month])
+}
+
+model Payslip {
+  id        String        @id @default(cuid())
+  teacherId String
+  teacher   User          @relation("PayslipTeacher", fields: [teacherId], references: [id])
+  month     String
+  status    PayslipStatus @default(DRAFT)
+  total     Int
+  lines     Json
+  lockedAt  DateTime?
+  lockedById String?
+  paidAt    DateTime?
+  paidById  String?
+  expenseId String?
+
+  @@unique([teacherId, month])
+}
+
+model Expense {
+  id          String    @id @default(cuid())
+  centerId    String
+  center      Center    @relation(fields: [centerId], references: [id])
+  branchId    String?
+  branch      Branch?   @relation(fields: [branchId], references: [id])
+  category    String
+  amount      Int
+  date        DateTime  @db.Date
+  note        String?
+  createdById String
+  createdAt   DateTime  @default(now())
+  reversedAt  DateTime?
+
+  @@index([centerId, date])
+  @@index([centerId, createdAt])
+}
+
+model Lead {
+  id            String    @id @default(cuid())
+  centerId      String
+  center        Center    @relation(fields: [centerId], references: [id])
+  branchId      String?
+  branch        Branch?   @relation(fields: [branchId], references: [id])
+  name          String
+  phone         String
+  source        String?
+  courseId      String?
+  course        Course?   @relation(fields: [courseId], references: [id])
+  stage         LeadStage @default(NEW)
+  assignedToId  String?
+  assignedTo    User?     @relation("LeadAssignee", fields: [assignedToId], references: [id])
+  nextContactAt DateTime? @db.Date
+  lostReason    String?
+  tags          String[]
+  studentId     String?
+  student       Student?  @relation(fields: [studentId], references: [id])
+  utm           Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  archivedAt    DateTime?
+
+  notes LeadNote[]
+
+  @@index([centerId, createdAt])
+  @@index([centerId, stage])
+  @@index([phone])
+}
+
+model LeadNote {
+  id          String   @id @default(cuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id])
+  text        String
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([leadId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  centerId  String
+  center    Center   @relation(fields: [centerId], references: [id])
+  userId    String?
+  entity    String
+  entityId  String
+  action    String
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now())
+
+  @@index([centerId, createdAt])
+  @@index([entity, entityId])
+}
+
+model PaymeTransaction {
+  id            String       @id @default(cuid())
+  centerId      String
+  center        Center       @relation(fields: [centerId], references: [id])
+  paymeId       String       @unique
+  familyId      String
+  family        Family       @relation(fields: [familyId], references: [id])
+  amountTiyin   BigInt
+  state         Int
+  createTime    BigInt
+  performTime   BigInt?
+  cancelTime    BigInt?
+  reason        Int?
+  ledgerEntryId String?      @unique
+  ledgerEntry   LedgerEntry? @relation(fields: [ledgerEntryId], references: [id])
+  createdAt     DateTime     @default(now())
+
+  @@index([familyId, state])
+  @@index([centerId, createTime])
+}
+
+model TelegramLink {
+  id        String   @id @default(cuid())
+  chatId    String
+  kind      LinkKind
+  refId     String
+  phone     String
+  locale    String?
+  createdAt DateTime @default(now())
+
+  @@unique([chatId, kind, refId])
+  @@index([chatId])
+}
+
+model Notification {
+  id        String             @id @default(cuid())
+  centerId  String
+  center    Center             @relation(fields: [centerId], references: [id])
+  chatId    String
+  text      String
+  dedupeKey String?            @unique
+  status    NotificationStatus @default(PENDING)
+  error     String?
+  attempts  Int                @default(0)
+  createdAt DateTime           @default(now())
+  sentAt    DateTime?
+
+  @@index([status, createdAt])
+}
