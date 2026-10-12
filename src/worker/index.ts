@@ -8,6 +8,8 @@ import { dailyReport, nightly, reminders, teacherReminders, type JobResult } fro
 import { assertStrongAuthSecret } from "@/lib/auth/startup";
 import { demoMode } from "@/config/brand";
 import { resetDemo } from "./demo-reset";
+import { alertOps, opsAlertsEnabled } from "@/lib/ops-alert";
+import { backupCheck } from "./backup-check";
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[worker]", ...a);
 
@@ -19,6 +21,7 @@ async function run(name: string, job: () => Promise<JobResult>) {
     log(`job ${name} done in ${Date.now() - t0}ms`, JSON.stringify(res));
   } catch (e) {
     log(`job ${name} FAILED`, e);
+    await alertOps(`job:${name}`, `Worker job "${name}" failed: ${(e instanceof Error ? e.message : String(e)).slice(0, 300)}`);
   }
 }
 
@@ -42,6 +45,10 @@ async function main() {
   cron.schedule("0 10 * * *", () => run("reminders", () => reminders()), opts);
   cron.schedule("0 20 * * *", () => run("teacher-reminders", () => teacherReminders()), opts);
   cron.schedule("0 21 * * *", () => run("daily-report", () => dailyReport()), opts);
+  // prod: the backups folder is mounted read-only at BACKUP_CHECK_DIR; alert if last night's dump is missing
+  const backupDir = process.env.BACKUP_CHECK_DIR?.trim();
+  if (backupDir) cron.schedule("0 9 * * *", () => run("backup-check", () => backupCheck(backupDir, alertOps)), opts);
+  log(opsAlertsEnabled() ? "ops alerts → Telegram on" : "ops alerts off (set OPS_TELEGRAM_CHAT_ID + TELEGRAM_BOT_TOKEN)");
   if (demoMode()) {
     // public demo server: fresh demo data every night, then today's lessons and charges
     cron.schedule("0 4 * * *", () => run("demo-reset", async () => ({ ...(await resetDemo()), ...(await nightly()) })), opts);
@@ -67,12 +74,18 @@ async function main() {
   log(`started (TZ ${TZ})`);
 }
 
+process.on("unhandledRejection", (e) => {
+  log("unhandled rejection", e);
+  void alertOps("worker:unhandled", `Worker unhandled error: ${(e instanceof Error ? e.message : String(e)).slice(0, 300)}`);
+});
+
 process.on("SIGTERM", async () => {
   await db.$disconnect();
   process.exit(0);
 });
 
-main().catch((e) => {
+main().catch(async (e) => {
   console.error("[worker] fatal", e);
+  await alertOps("worker:fatal", `Worker crashed on start: ${(e instanceof Error ? e.message : String(e)).slice(0, 300)}`);
   process.exit(1);
 });

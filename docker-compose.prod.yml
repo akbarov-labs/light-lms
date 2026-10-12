@@ -18,6 +18,7 @@ x-app-env: &app-env
   DEMO_MODE: ${DEMO_MODE:-false}
   DEMO_URL: ${DEMO_URL:-}
   MAIN_SITE_URL: ${MAIN_SITE_URL:-}
+  OPS_TELEGRAM_CHAT_ID: ${OPS_TELEGRAM_CHAT_ID:-}
   TZ: Asia/Tashkent
 
 services:
@@ -75,7 +76,12 @@ services:
     build:
       context: .
       target: tools
-    environment: *app-env
+    environment:
+      <<: *app-env
+      BACKUP_CHECK_DIR: /backups
+    # read-only view of the backups, so the worker can alert when last night's dump is missing
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups:ro
     command: ["npx", "tsx", "src/worker/index.ts"]
     depends_on:
       migrate:

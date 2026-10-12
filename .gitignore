@@ -11,3 +11,5 @@ coverage
 .impeccable/review
 .impeccable/live
 backups/
+test-results/
+playwright-report/

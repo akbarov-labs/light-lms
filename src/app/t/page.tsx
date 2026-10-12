@@ -34,7 +34,7 @@ export default async function TeacherToday() {
             <Link href={`/t/lessons/${l.id}`} className={cx("block rounded-xl border bg-white p-4 transition-colors active:bg-zinc-50", l.status === "SCHEDULED" && l.endTime <= nowTimeHHmm() ? "border-amber-300" : "border-line")}>
               <div className="flex items-center justify-between">
                 <div className="tnum text-lg font-semibold tracking-[-0.01em]">{l.startTime}–{l.endTime}</div>
-                {l.status === "CANCELLED" ? <Badge tone="red">{t("lesson.CANCELLED")}</Badge> : l._count.attendance > 0 ? <Badge tone="green">{t("t.marked")}</Badge> : l.startTime <= nowTimeHHmm() ? <Badge tone="amber">{t("t.notMarked")}</Badge> : <Badge>{t("lesson.SCHEDULED")}</Badge>}
+                {l.status === "CANCELLED" ? <Badge>{t("lesson.CANCELLED")}</Badge> : l._count.attendance > 0 ? <Badge tone="green">{t("t.marked")}</Badge> : l.startTime <= nowTimeHHmm() ? <Badge tone="amber">{t("t.notMarked")}</Badge> : <Badge>{t("lesson.SCHEDULED")}</Badge>}
               </div>
               <div className="mt-1 text-sm">{l.group.name} <span className="text-zinc-500">#{l.group.code}</span></div>
               <div className="text-xs text-zinc-500">{l.room?.name ?? ""} · {l.group._count.enrollments} {t("common.student").toLowerCase()}</div>

@@ -36,7 +36,7 @@ export function PayDemo({ c, center }: { c: Copy["pay"]; center: string }) {
       <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-[0_24px_60px_-28px_rgb(9_9_11/0.35)]">
         <div className="flex h-12 items-center justify-between border-b border-zinc-100 px-5">
           <span className="text-[13px] font-semibold text-zinc-900">{c.title}</span>
-          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-500">{c.label}</span>
+          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-600">{c.label}</span>
         </div>
 
         {paidAt === null ? (

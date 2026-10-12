@@ -156,6 +156,12 @@ Har bir konteyner logi 10 MB × 5 fayl bilan cheklangan (disk to'lib qolmaydi).
 - **Asosiy serverda** `DEMO_URL=https://demo.example.uz/demo` qo'ying — saytda "Demoni ko'rish" tugmasi paydo bo'ladi.
 - ⚠️ `DEMO_MODE=true` ni **hech qachon** haqiqiy markazlar bor serverga qo'ymang. Himoya bor: 2 kundan eski boshqa markaz topilsa, tozalash to'xtaydi — lekin bunga tayanmang.
 
+## 11b. Ogohlantirishlar (monitoring, bepul)
+
+- `.env` da `TELEGRAM_BOT_TOKEN` va `OPS_TELEGRAM_CHAT_ID` (o'z chat ID'ingiz: botga yozing, so'ng `https://api.telegram.org/bot<TOKEN>/getUpdates` dan `message.chat.id`) qo'ying.
+- Shunda Telegram'ga xabar keladi: saytda server xatosi, tungi ish (hisob-kitob, eslatma) xatosi, worker to'xtashi, **har kuni 09:00 da oxirgi backup 26 soatdan eski bo'lsa**. Bir xil xabar 10 daqiqada bir martadan ko'p kelmaydi.
+- Qo'shimcha (ixtiyoriy): bepul tashqi tekshiruv (masalan, UptimeRobot) `https://<domen>/api/health` manzilini har 5 daqiqada tekshirsin — server butunlay o'chsa ham bilasiz.
+
 ## 12. Muammolar
 
 - **Sertifikat olinmadi**: DNS A yozuvini, 80/443 portlar ochiqligini tekshiring; `logs caddy`.
@@ -283,3 +289,9 @@ docker image prune -f
 - **Demo server** (separate, e.g. `demo.example.uz`): `DEMO_MODE=true`, `SEED_DEMO=true`, `MAIN_SITE_URL=https://crm.example.uz`. `/demo` signs visitors in as the demo owner with no password; passwords, staff and center settings are locked; at 04:00 every night the database is wiped and re-seeded dated to today (`npm run job:demo-reset` by hand).
 - **Main server**: set `DEMO_URL=https://demo.example.uz/demo` to show "See the demo" on the landing page.
 - ⚠️ **Never** set `DEMO_MODE=true` on the server with real centers. The reset refuses to run if it finds another center older than two days, but do not rely on that.
+
+## 14. Alerts (free monitoring)
+
+- Set `TELEGRAM_BOT_TOKEN` and `OPS_TELEGRAM_CHAT_ID` (your chat id: message the bot, then read `message.chat.id` at `https://api.telegram.org/bot<TOKEN>/getUpdates`).
+- You then get a Telegram message for server errors, failed nightly jobs, a worker crash, and **at 09:00 daily if the newest backup is older than 26 hours**. The same alert repeats at most every 10 minutes.
+- Optional: a free external check (e.g. UptimeRobot) on `https://<domain>/api/health` every 5 minutes tells you when the whole server is down.

@@ -62,7 +62,11 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       </div>
       <Card pad={false}>
         {rows.length === 0 ? (
-          <EmptyState>{t("common.empty")}</EmptyState>
+          (await db.ledgerEntry.count({ where: { centerId: ctx.centerId, type: "PAYMENT" }, take: 1 })) === 0 ? (
+            <EmptyState title={t("empty.paymentsTitle")}>{t("empty.payments")}</EmptyState>
+          ) : (
+            <EmptyState action={<LinkButton variant="secondary" size="sm" href="/payments">{t("empty.clear")}</LinkButton>}>{t("empty.filtered")}</EmptyState>
+          )
         ) : (
           <Table>
             <thead>

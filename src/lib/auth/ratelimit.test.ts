@@ -90,3 +90,17 @@ describe("retryMinutes", () => {
     expect(retryMinutes(61_000)).toBe(2);
   });
 });
+
+describe("public lead form budget", () => {
+  it("lets a visitor send 10 leads an hour from one address, then stops", async () => {
+    const store = new MemoryAttemptStore();
+    const key = attemptKey.leadIp("203.0.113.9");
+    const t0 = new Date("2026-10-12T10:00:00Z");
+    for (let i = 0; i < 10; i++) {
+      expect((await checkAttempts(store, [{ key, rule: RULES.leadIp }], t0)).allowed).toBe(true);
+      await recordAttempt(store, [key], false, t0);
+    }
+    expect((await checkAttempts(store, [{ key, rule: RULES.leadIp }], t0)).allowed).toBe(false);
+    expect((await checkAttempts(store, [{ key, rule: RULES.leadIp }], new Date(t0.getTime() + 61 * 60_000))).allowed).toBe(true);
+  });
+});

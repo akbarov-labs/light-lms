@@ -73,7 +73,13 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
       </form>
       <Card pad={false}>
         {groups.length === 0 ? (
-          <EmptyState>{t("common.empty")}</EmptyState>
+          sp.q || sp.teacherId || sp.courseId || (sp.status && sp.status !== "current") ? (
+            <EmptyState action={<LinkButton variant="secondary" size="sm" href="/groups">{t("empty.clear")}</LinkButton>}>{t("empty.filtered")}</EmptyState>
+          ) : (
+            <EmptyState title={t("empty.groupsTitle")} action={ctx.can("groups.edit") && <LinkButton variant="secondary" size="sm" href="/groups/new"><Plus className="h-3.5 w-3.5" aria-hidden />{t("groups.new")}</LinkButton>}>
+              {t("empty.groups")}
+            </EmptyState>
+          )
         ) : (
           <Table>
             <thead>

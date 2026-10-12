@@ -68,7 +68,11 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
       </div>
       <Card pad={false}>
         {rows.length === 0 ? (
-          <EmptyState>{t("common.empty")}</EmptyState>
+          (await db.expense.count({ where: { centerId: ctx.centerId }, take: 1 })) === 0 ? (
+            <EmptyState title={t("empty.expensesTitle")}>{t("empty.expenses")}</EmptyState>
+          ) : (
+            <EmptyState action={<LinkButton variant="secondary" size="sm" href="/expenses">{t("empty.clear")}</LinkButton>}>{t("empty.filtered")}</EmptyState>
+          )
         ) : (
           <Table>
             <thead><tr><Th>{t("common.date")}</Th><Th>{t("expenses.category")}</Th><Th>{t("common.branch")}</Th><Th>{t("common.note")}</Th><Th className="text-right">{t("common.amount")}</Th><Th>{t("common.createdBy")}</Th><Th /></tr></thead>

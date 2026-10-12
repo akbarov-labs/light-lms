@@ -71,7 +71,7 @@ export default async function CoursesPage() {
       />
       <Card pad={false}>
         {courses.length === 0 ? (
-          <EmptyState>{t("common.empty")}</EmptyState>
+          <EmptyState title={t("empty.coursesTitle")}>{t("empty.courses")}</EmptyState>
         ) : (
           <Table>
             <thead>

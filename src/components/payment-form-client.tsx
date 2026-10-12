@@ -86,7 +86,7 @@ export function PaymentFormClient({ familyId, studentId, options, defaultOption,
           <legend className="mb-1.5 block text-[13px] font-medium text-zinc-700">{labels.method}</legend>
           <div className="grid grid-cols-3 gap-1 rounded-lg bg-zinc-100 p-1">
             {(["CASH", "CARD", "TRANSFER"] as const).map((m) => (
-              <button key={m} type="button" aria-pressed={method === m} onClick={() => setMethod(m)} className={cx("h-8 rounded-md text-[13px] font-medium transition-colors", method === m ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-900")}>
+              <button key={m} type="button" aria-pressed={method === m} onClick={() => setMethod(m)} className={cx("h-8 rounded-md text-[13px] font-medium transition-colors", method === m ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-600 hover:text-zinc-900")}>
                 {labels.methods[m]}
               </button>
             ))}

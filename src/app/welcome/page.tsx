@@ -43,7 +43,7 @@ function LangSwitch({ current }: { current: Locale }) {
           name="lang"
           value={l}
           aria-pressed={l === current}
-          className={cx("h-7 rounded-md px-2.5 transition-colors", l === current ? "bg-white font-medium text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-900")}
+          className={cx("h-7 rounded-md px-2.5 transition-colors", l === current ? "bg-white font-medium text-zinc-900 shadow-sm" : "text-zinc-600 hover:text-zinc-900")}
         >
           {l === "uz" ? "O'z" : "Ру"}
         </button>
@@ -101,6 +101,7 @@ function AttendancePhone({ c }: { c: Copy["day"]["attendance"] }) {
     ["Feruza R.", "l"],
     ["Ulug'bek S.", "p"],
   ];
+  // impeccable-disable-next-line gray-on-color: near-black on amber-400 is 11:1, not gray text
   const tone = { p: "bg-emerald-700 text-white", a: "bg-red-600 text-white", l: "bg-amber-400 text-zinc-950" };
   return (
     <div className="w-[320px] max-w-full rounded-[30px] border border-zinc-300 bg-zinc-900 p-2 shadow-[0_24px_60px_-30px_rgb(9_9_11/0.45)]">
@@ -114,7 +115,7 @@ function AttendancePhone({ c }: { c: Copy["day"]["attendance"] }) {
               <span className="truncate text-[13px] text-zinc-800">{name}</span>
               <span className="flex shrink-0 gap-1">
                 {(["p", "a", "l"] as const).map((k) => (
-                  <span key={k} className={cx("flex h-7 items-center rounded-md px-2 text-[11px] font-medium", k === s ? tone[k] : "bg-zinc-100 text-zinc-500")}>
+                  <span key={k} className={cx("flex h-7 items-center rounded-md px-2 text-[11px] font-medium", k === s ? tone[k] : "bg-zinc-100 text-zinc-600")}>
                     {k === "p" ? c.present : k === "a" ? c.absent : c.late}
                   </span>
                 ))}
@@ -139,7 +140,7 @@ function BotChat({ c }: { c: Copy["day"]["debts"] }) {
       </div>
       <div className="max-w-[320px] rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-[14px] leading-snug text-zinc-800 shadow-sm">
         {c.message}
-        <div className="mt-1 text-right text-[11px] text-zinc-400">10:00</div>
+        <div className="mt-1 text-right text-[11px] text-zinc-500">10:00</div>
       </div>
       <div className="mt-1.5 grid max-w-[320px] grid-cols-2 gap-1.5">
         <span className="flex h-9 items-center justify-center rounded-lg bg-white/70 text-[13px] font-medium text-zinc-800">{c.payBtn}</span>

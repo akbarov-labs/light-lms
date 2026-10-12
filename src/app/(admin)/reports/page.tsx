@@ -38,7 +38,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         <Stat label={t("reports.revenue")} value={formatMoney(rev.total)} />
         <Stat label={t("reports.expenses")} value={formatMoney(exp.total)} />
         <Stat label={t("reports.profit")} value={formatMoney(rev.total - exp.total)} tone={rev.total - exp.total < 0 ? "red" : "green"} />
-        <Stat label={t("reports.totalDebt")} value={formatMoney(aging.total)} tone="red" href="/debtors" />
+        <Stat label={t("reports.totalDebt")} value={formatMoney(aging.total)} tone={aging.total > 0 ? "red" : undefined} href="/debtors" />
       </div>
       <div className="mb-4 grid gap-4 lg:grid-cols-3">
         <Card title={t("reports.byMethod")}><ShareBars rows={[...rev.byMethod.entries()].map(([k, v]) => ({ label: t(`method.${k as "CASH"}`), value: v }))} /></Card>

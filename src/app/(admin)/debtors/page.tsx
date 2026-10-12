@@ -1,3 +1,4 @@
+import { CircleCheck } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireStaff } from "@/lib/ctx";
@@ -29,7 +30,7 @@ export default async function DebtorsPage({ searchParams }: { searchParams: Prom
     <>
       <PageHeader title={t("nav.debtors")} actions={ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/debtors?${qs}`}>{t("common.export")}</LinkButton>} />
       <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Stat label={t("debtors.total")} value={formatMoney(total)} tone="red" />
+        <Stat label={t("debtors.total")} value={formatMoney(total)} tone={total > 0 ? "red" : undefined} />
         <Stat label={t("debtors.count")} value={rows.length} />
       </div>
       <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
@@ -46,7 +47,11 @@ export default async function DebtorsPage({ searchParams }: { searchParams: Prom
       </form>
       <Card pad={false}>
         {rows.length === 0 ? (
-          <EmptyState>{t("common.empty")}</EmptyState>
+          sp.groupId || sp.teacherId || sp.min ? (
+            <EmptyState action={<LinkButton variant="secondary" size="sm" href="/debtors">{t("empty.clear")}</LinkButton>}>{t("empty.filtered")}</EmptyState>
+          ) : (
+            <EmptyState icon={<CircleCheck className="h-6 w-6 text-emerald-600" strokeWidth={1.5} />} title={t("empty.debtorsTitle")}>{t("empty.debtors")}</EmptyState>
+          )
         ) : (
           <ActionForm action={remindAction}>
             {canRemind && (

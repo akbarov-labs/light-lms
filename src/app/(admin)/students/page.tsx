@@ -80,7 +80,23 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
       </form>
       <Card pad={false}>
         {students.length === 0 ? (
-          <EmptyState>{t("common.empty")}</EmptyState>
+          sp.q || sp.groupId || sp.debt || (sp.status && sp.status !== "ACTIVE") ? (
+            <EmptyState action={<LinkButton variant="secondary" size="sm" href="/students">{t("empty.clear")}</LinkButton>}>{t("empty.filtered")}</EmptyState>
+          ) : (
+            <EmptyState
+              title={t("empty.studentsTitle")}
+              action={
+                ctx.can("students.edit") && (
+                  <>
+                    <LinkButton variant="secondary" size="sm" href="/students/new"><Plus className="h-3.5 w-3.5" aria-hidden />{t("students.new")}</LinkButton>
+                    <LinkButton variant="secondary" size="sm" href="/students/import">{t("import.button")}</LinkButton>
+                  </>
+                )
+              }
+            >
+              {t("empty.students")}
+            </EmptyState>
+          )
         ) : (
           <Table>
             <thead>

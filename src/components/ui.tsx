@@ -76,7 +76,8 @@ export function Badge({ tone = "gray", children, dot = true }: { tone?: Tone; ch
 
 export function Table({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cx("overflow-x-auto", className)}>
+    // focusable so keyboard users can scroll a table that is wider than a phone
+    <div tabIndex={0} className={cx("overflow-x-auto focus-visible:outline-offset-[-2px]", className)}>
       <table className="w-full min-w-full border-collapse text-sm">{children}</table>
     </div>
   );
@@ -106,11 +107,14 @@ export function Money({ amount, tone, className }: { amount: number; tone?: "deb
   return <span className={cx("tnum whitespace-nowrap", color, className)}>{formatMoney(amount)}</span>;
 }
 
-export function EmptyState({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
+/** Empty list: what is missing and, when there is one, the next action (never just "no data"). */
+export function EmptyState({ children, icon, title, action, compact }: { children?: ReactNode; icon?: ReactNode; title?: ReactNode; action?: ReactNode; compact?: boolean }) {
   return (
-    <div className="flex flex-col items-center gap-2 px-4 py-12 text-center text-sm text-zinc-500">
+    <div className={cx("flex flex-col items-center gap-2 px-4 text-center text-sm text-zinc-500", compact ? "py-8" : "py-12")}>
       <span className="text-zinc-300" aria-hidden>{icon ?? <Inbox className="h-6 w-6" strokeWidth={1.5} />}</span>
-      {children}
+      {title && <div className="text-[15px] font-medium text-zinc-900">{title}</div>}
+      {children && <div className="max-w-sm leading-relaxed">{children}</div>}
+      {action && <div className="mt-2 flex flex-wrap justify-center gap-2">{action}</div>}
     </div>
   );
 }

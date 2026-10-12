@@ -12,7 +12,7 @@ export function slotSummary(slots: { weekday: number; startTime: string; endTime
 }
 
 export const enrollmentTone: Record<string, Tone> = { TRIAL: "amber", ACTIVE: "green", FROZEN: "blue", LEFT: "gray", TRANSFERRED: "violet" };
-export const lessonTone: Record<string, Tone> = { SCHEDULED: "gray", HELD: "green", CANCELLED: "red" };
+export const lessonTone: Record<string, Tone> = { SCHEDULED: "blue", HELD: "green", CANCELLED: "gray" };
 export const groupTone: Record<string, Tone> = { PLANNED: "amber", ACTIVE: "green", FINISHED: "gray", ARCHIVED: "gray" };
 export const attendanceTone: Record<string, Tone> = { PRESENT: "green", ABSENT: "red", LATE: "amber", EXCUSED: "blue" };
 export const attendanceMark: Record<string, string> = { PRESENT: "✓", ABSENT: "✗", LATE: "⏱", EXCUSED: "E" };

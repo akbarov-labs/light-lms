@@ -29,7 +29,7 @@ export default async function TeacherWeek() {
                   <Link href={`/t/lessons/${l.id}`} className="flex items-center justify-between rounded-lg bg-white p-3 text-sm shadow-sm">
                     <span className="font-medium">{l.startTime}–{l.endTime}</span>
                     <span className="truncate px-2">{l.group.name}{l.room ? ` · ${l.room.name}` : ""}</span>
-                    {l.status === "CANCELLED" && <Badge tone="red">{t("lesson.CANCELLED")}</Badge>}
+                    {l.status === "CANCELLED" && <Badge>{t("lesson.CANCELLED")}</Badge>}
                   </Link>
                 </li>
               ))}

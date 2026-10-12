@@ -36,7 +36,7 @@ function Stepper({ ctx, o, active }: { ctx: Ctx; o: Onboarding; active: SetupSte
               <span
                 className={cx(
                   "tnum flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium",
-                  state === "done" ? "bg-zinc-900 text-white" : state === "skipped" ? "bg-zinc-100 text-zinc-500" : isActive ? "border border-zinc-900 text-zinc-900" : "border border-zinc-200 text-zinc-500",
+                  state === "done" ? "bg-zinc-900 text-white" : state === "skipped" ? "bg-zinc-100 text-zinc-600" : isActive ? "border border-zinc-900 text-zinc-900" : "border border-zinc-200 text-zinc-500",
                 )}
                 aria-hidden
               >

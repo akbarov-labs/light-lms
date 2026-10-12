@@ -92,7 +92,7 @@ export function UserMenu({ name, role, locale, logoutLabel, languageLabel, accou
             <div className="mb-1.5 text-xs text-zinc-500">{languageLabel}</div>
             <div className="grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-0.5">
               {(["uz", "ru"] as const).map((l) => (
-                <button key={l} name="lang" value={l} aria-pressed={l === locale} className={cx("h-8 rounded-md text-[13px] font-medium transition-colors", l === locale ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-900")}>
+                <button key={l} name="lang" value={l} aria-pressed={l === locale} className={cx("h-8 rounded-md text-[13px] font-medium transition-colors", l === locale ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-600 hover:text-zinc-900")}>
                   {l === "uz" ? "O'zbekcha" : "Русский"}
                 </button>
               ))}

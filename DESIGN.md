@@ -61,6 +61,46 @@ typography:
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.43
+  hero-sm:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "40px"
+    fontWeight: 600
+    lineHeight: 1.05
+  hero-md:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "52px"
+    fontWeight: 600
+    lineHeight: 1.05
+  hero:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "60px"
+    fontWeight: 600
+    lineHeight: 1.05
+  section-sm:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "32px"
+    fontWeight: 600
+    lineHeight: 1.1
+  section:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "40px"
+    fontWeight: 600
+    lineHeight: 1.1
+  lead:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "17px"
+    fontWeight: 400
+    lineHeight: 1.6
+  body-large:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: 1.6
+  micro:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "11px"
+    fontWeight: 500
+    lineHeight: 1.45
 rounded:
   sm: "6px"
   md: "8px"
@@ -171,7 +211,7 @@ A neutral zinc ramp carries the whole interface; color is reserved for meaning.
 ### Named Rules
 **The Three Places Rule.** The center accent appears on the primary button, the focus ring and the active nav icon. Not on links, headings, chart bars, stats or badges.
 
-**The Red Means Owed Rule.** Red is used only for money owed and destructive confirmations. A neutral balance, a total or a chart is never red.
+**The Red Means Owed Rule.** Red is used only for money owed (and money going backwards: reversals, a loss), destructive confirmations, and the "absent" attendance mark. A zero balance, a total, a cancelled lesson or a chart is never red.
 
 **The Neutral Link Rule.** Links are ink with a zinc-300 underline that darkens on hover (`decoration-zinc-300 hover:decoration-zinc-900`); they never borrow the accent.
 
@@ -189,6 +229,13 @@ A neutral zinc ramp carries the whole interface; color is reserved for meaning.
 - **Body** (400, 14px): table cells, form values, dialog text. Inputs render at 16px on phones to prevent iOS zoom, 14px from `sm`.
 - **Label** (500, 13px): field labels, stat labels, back links.
 - **Caption** (500, 12px): badges, table column headers, sub-lines under names, nav group labels.
+
+### Product site ramp (landing, legal pages only)
+- **Hero** (600, 40 → 52 → 60px by breakpoint, -0.035em, line-height 1.05): the one landing headline.
+- **Section** (600, 32 → 40px, -0.03em): landing section headings.
+- **Lead** (400, 17px, line-height 1.6): the paragraph under a section heading.
+- **Body large** (400–600, 15px): feature text, FAQ, legal text.
+- **Micro** (500, 11px): chips on demo UI fragments only, never body copy.
 
 ### Named Rules
 **The Tabular Money Rule.** Every table and every `.tnum` element uses tabular figures; amounts are right-aligned and formatted as "1 300 000 so'm" with thin grouping.
@@ -272,7 +319,7 @@ A 576px dialog with 16px radius and the pop shadow: search input, grouped result
 - **Do** put secondary row actions in the "⋯" menu instead of adding buttons.
 
 ### Don't:
-- **Don't** use red for anything other than money owed or destructive confirmation.
+- **Don't** use red for anything other than money owed, reversals/loss, destructive confirmation, or the absent mark; a zero debt is ink, not red.
 - **Don't** color links, headings or charts with the accent; the latest chart period is ink (#18181B), the rest zinc-200.
 - **Don't** add uppercase letter-spaced eyebrow labels or unicode glyph icons (→, ✓, ✕, ＋).
 - **Don't** put shadows on cards or stats.

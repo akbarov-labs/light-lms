@@ -5,6 +5,10 @@ import { db } from "@/lib/db";
 import { normalizePhone } from "@/lib/phone";
 import { makeT, isLocale } from "@/lib/i18n";
 import { audit } from "@/lib/audit";
+import { headers } from "next/headers";
+import { dbAttemptStore } from "@/lib/auth/attempts-db";
+import { attemptKey, checkAttempts, recordAttempt, retryMinutes, RULES } from "@/lib/auth/ratelimit";
+import { clientIp } from "@/lib/auth/security";
 
 export type PublicLeadState = { ok?: boolean; error?: string } | null;
 
@@ -15,6 +19,10 @@ export async function submitLeadAction(_: PublicLeadState, fd: FormData): Promis
   const lang = String(fd.get("lang") ?? "uz");
   const t = makeT(isLocale(lang) ? lang : "uz");
   if (String(fd.get("website") ?? "") !== "") return { ok: true }; // honeypot
+  const key = attemptKey.leadIp(clientIp(await headers()));
+  const verdict = await checkAttempts(dbAttemptStore, [{ key, rule: RULES.leadIp }]);
+  if (!verdict.allowed) return { error: t("leads.tooMany", { minutes: retryMinutes(verdict.retryAfterMs) }) };
+  await recordAttempt(dbAttemptStore, [key], false); // every submission spends the address's hourly budget
   const slug = String(fd.get("slug") ?? "");
   const center = await db.center.findUnique({ where: { slug }, select: { id: true, disabledAt: true } });
   if (!center || center.disabledAt) return { error: t("leads.notFound") };

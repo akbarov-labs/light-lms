@@ -56,7 +56,7 @@ export default async function Dashboard() {
       <OwnerNotices ctx={ctx} />
       <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Stat label={`${t("reports.revenue")} · ${t("reports.thisMonth")}`} value={formatMoney(revNow.total)} hint={`${t("reports.lastMonth")}: ${formatMoney(revPrev.total)}${delta !== null ? ` (${delta > 0 ? "+" : ""}${delta}%)` : ""}`} href="/payments" />
-        <Stat label={t("reports.totalDebt")} value={formatMoney(aging.total)} tone="red" hint={t("dash.debtFamilies", { n: aging.families })} href="/debtors" />
+        <Stat label={t("reports.totalDebt")} value={formatMoney(aging.total)} tone={aging.total > 0 ? "red" : undefined} hint={t("dash.debtFamilies", { n: aging.families })} href="/debtors" />
         <Stat label={t("reports.active")} value={students.active} hint={t("dash.newLeft", { a: students.newStudents, b: students.left })} href="/students" />
         <Stat label={t("reports.conversion")} value={conv !== null ? `${conv}%` : "—"} hint={`${students.trialsActivated}/${students.trials}`} />
       </div>

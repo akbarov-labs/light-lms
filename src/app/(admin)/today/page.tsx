@@ -60,7 +60,7 @@ export default async function TodayPage() {
           </Card>
         )}
         <Card pad={false} title={`${t("today.lessons")} (${lessons.length})`}>
-          {lessons.length === 0 ? <EmptyState>{t("common.empty")}</EmptyState> : (
+          {lessons.length === 0 ? <EmptyState compact>{t("empty.todayLessons")}</EmptyState> : (
             <Table>
               <tbody>
                 {lessons.map((l) => (
@@ -76,7 +76,7 @@ export default async function TodayPage() {
           )}
         </Card>
         <Card pad={false} title={`${t("today.trials")} (${trials.length})`}>
-          {trials.length === 0 ? <EmptyState>{t("common.empty")}</EmptyState> : (
+          {trials.length === 0 ? <EmptyState compact>{t("empty.todayTrials")}</EmptyState> : (
             <Table>
               <tbody>
                 {trials.map((e) => (
@@ -92,7 +92,7 @@ export default async function TodayPage() {
         </Card>
         {ctx.can("leads") && (
           <Card pad={false} title={`${t("today.calls")} (${leads.length})`}>
-            {leads.length === 0 ? <EmptyState>{t("common.empty")}</EmptyState> : (
+            {leads.length === 0 ? <EmptyState compact>{t("empty.todayLeads")}</EmptyState> : (
               <Table>
                 <tbody>
                   {leads.map((l) => (
@@ -109,7 +109,7 @@ export default async function TodayPage() {
         )}
         {ctx.can("payments.take") && (
           <Card pad={false} title={`${t("today.debtors")} (${debtors.length})`} actions={<Link href="/debtors" className="inline-flex items-center gap-1 text-[13px] text-zinc-600 hover:text-zinc-900">{t("today.allDebtors")}<ChevronRight className="h-3.5 w-3.5" aria-hidden /></Link>}>
-            {debtors.length === 0 ? <EmptyState>{t("common.empty")}</EmptyState> : (
+            {debtors.length === 0 ? <EmptyState compact>{t("empty.todayDebtors")}</EmptyState> : (
               <Table>
                 <tbody>
                   {debtors.slice(0, 10).map((d) => (

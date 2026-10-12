@@ -23,7 +23,7 @@ export default async function TeacherLesson({ params }: { params: Promise<{ id: 
         <h1 className="text-lg font-semibold">{lesson.group.name} <span className="text-zinc-500">#{lesson.group.code}</span></h1>
         <div className="flex items-center gap-2 text-sm text-zinc-500">
           {formatDate(date)} · {lesson.startTime}–{lesson.endTime}{lesson.room ? ` · ${lesson.room.name}` : ""}
-          <Badge tone={lesson.status === "HELD" ? "green" : lesson.status === "CANCELLED" ? "red" : "gray"}>{t(`lesson.${lesson.status}`)}</Badge>
+          <Badge tone={lesson.status === "HELD" ? "green" : lesson.status === "CANCELLED" ? "gray" : "blue"}>{t(`lesson.${lesson.status}`)}</Badge>
         </div>
       </div>
       <AttendanceForm
