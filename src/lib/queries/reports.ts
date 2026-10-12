@@ -1,5 +1,6 @@
 // Report queries (HANDOFF §8 "Reports"). Revenue counts only real money (PAYMENT, REFUND and
 // their reversals) — never charges or credits.
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { familyScope, scopeBranchIds, studentScope, type Ctx } from "@/lib/ctx-core";
 import { diffDays, fromISODate, monthRange, shiftMonth, toISODate, todayISO } from "@/lib/dates";
@@ -163,25 +164,36 @@ export async function leadFunnel(ctx: Ctx, p: Period) {
 export async function attendanceStats(ctx: Ctx, p: Period) {
   const ids = scopeBranchIds(ctx);
   const today = todayISO();
-  const where = { date: { gte: fromISODate(p.from), lte: fromISODate(p.to < today ? p.to : today) }, group: { centerId: ctx.centerId, ...(ids ? { branchId: { in: ids } } : {}) } };
+  const to = p.to < today ? p.to : today;
+  const where = { date: { gte: fromISODate(p.from), lte: fromISODate(to) }, group: { centerId: ctx.centerId, ...(ids ? { branchId: { in: ids } } : {}) } };
+  // counted in the database: a big center has tens of thousands of attendance marks a month
+  const branchFilter = ids ? Prisma.sql`AND g."branchId" IN (${Prisma.join(ids)})` : Prisma.empty;
   const [rows, missing] = await Promise.all([
-    db.attendance.findMany({ where: { lesson: where }, select: { status: true, lesson: { select: { groupId: true, teacherId: true, group: { select: { name: true, code: true } }, teacher: { select: { name: true } } } } } }),
+    db.$queryRaw<{ group: string; teacher: string; total: number; present: number }[]>`
+      SELECT g.name || ' #' || g.code AS "group", u.name AS teacher,
+             COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE a.status IN ('PRESENT', 'LATE'))::int AS present
+      FROM "Attendance" a
+      JOIN "Lesson" l ON l.id = a."lessonId"
+      JOIN "Group" g ON g.id = l."groupId"
+      JOIN "User" u ON u.id = l."teacherId"
+      WHERE g."centerId" = ${ctx.centerId} AND l.date >= ${p.from}::date AND l.date <= ${to}::date ${branchFilter}
+      GROUP BY g.id, g.name, g.code, u.id, u.name`,
     db.lesson.findMany({ where: { ...where, status: "SCHEDULED", date: { gte: fromISODate(p.from), lt: fromISODate(today) } }, include: { group: { select: { name: true, code: true } }, teacher: { select: { name: true } } }, orderBy: { date: "desc" }, take: 200 }),
   ]);
   const agg = (key: (r: (typeof rows)[number]) => string) => {
     const m = new Map<string, { present: number; total: number }>();
     for (const r of rows) {
-      const k = key(r);
-      const cur = m.get(k) ?? { present: 0, total: 0 };
-      cur.total += 1;
-      if (r.status === "PRESENT" || r.status === "LATE") cur.present += 1;
-      m.set(k, cur);
+      const cur = m.get(key(r)) ?? { present: 0, total: 0 };
+      cur.total += r.total;
+      cur.present += r.present;
+      m.set(key(r), cur);
     }
     return [...m.entries()].map(([k, v]) => ({ name: k, rate: v.total ? Math.round((v.present / v.total) * 100) : 0, total: v.total })).sort((a, b) => a.rate - b.rate);
   };
   return {
-    byGroup: agg((r) => `${r.lesson.group.name} #${r.lesson.group.code}`),
-    byTeacher: agg((r) => r.lesson.teacher.name),
+    byGroup: agg((r) => r.group),
+    byTeacher: agg((r) => r.teacher),
     missing: missing.map((l) => ({ id: l.id, date: toISODate(l.date), time: l.startTime, group: `${l.group.name} #${l.group.code}`, teacher: l.teacher.name })),
   };
 }
