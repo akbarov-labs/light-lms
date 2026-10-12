@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { generateAllLessons } from "@/lib/services/lessons";
 import { billingSync, dailyReport, nightly, reminders, teacherReminders } from "./jobs";
 import { processNotifications } from "./notifications";
+import { resetDemo } from "./demo-reset";
 import { todayISO } from "@/lib/dates";
 
 const [name, date] = process.argv.slice(2);
@@ -15,6 +16,7 @@ const jobs: Record<string, () => Promise<unknown>> = {
   reminders: () => reminders(today),
   "teacher-reminders": () => teacherReminders(today),
   "daily-report": () => dailyReport(today),
+  "demo-reset": async () => ({ ...(await resetDemo()), ...(await nightly(today)) }),
   notifications: async () => {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     if (!token) return "TELEGRAM_BOT_TOKEN empty — nothing sent";

@@ -17,6 +17,7 @@ import { issueSession } from "@/lib/auth/session-cookie";
 import { fromISODate, todayISO } from "@/lib/dates";
 import { uzPublicHolidays } from "@/lib/holidays";
 import { looksLikeBot, slugify, uniqueSlug } from "@/lib/signup-rules";
+import { BRAND } from "@/config/brand";
 
 /** `values` refill the form after an error (React resets forms once an action finishes); never the password. */
 export type SignupState = { error?: string; at?: number; values?: { centerName: string; ownerName: string; phone: string; locale: string } } | null;
@@ -53,6 +54,7 @@ export async function signupAction(_: SignupState, fd: FormData): Promise<Signup
   const phone = normalizePhone(str(fd, "phone"));
   const password = String(fd.get("password") ?? "");
   if (!centerName || !ownerName) return fail(t("signup.required"));
+  if (fd.get("consent") !== "on") return fail(t("legal.consentRequired"));
   if (!phone) return fail(t("signup.phoneInvalid"));
   const problem = password.length > 200 ? "weak" : passwordProblem(password, phone);
   if (problem) return fail(t(problem === "short" ? "auth.passwordShort" : "auth.passwordWeak"));
@@ -66,8 +68,8 @@ export async function signupAction(_: SignupState, fd: FormData): Promise<Signup
       const center = await tx.center.create({ data: { name: centerName, slug, locale, phone, plan: "FREE" } });
       await tx.branch.create({ data: { centerId: center.id, name: t("signup.defaultBranch"), phone } });
       await tx.holiday.createMany({ data: uzPublicHolidays([year, year + 1]).map((h) => ({ centerId: center.id, date: fromISODate(h.date), name: h.name })), skipDuplicates: true });
-      const user = await tx.user.create({ data: { centerId: center.id, phone, name: ownerName, passwordHash, role: "OWNER", perms: [...PERMS], locale } });
-      await audit(tx, { centerId: center.id, userId: user.id, entity: "Center", entityId: center.id, action: "signup", after: { name: centerName, slug, locale, plan: "FREE", owner: ownerName, ip } });
+      const user = await tx.user.create({ data: { centerId: center.id, phone, name: ownerName, passwordHash, role: "OWNER", perms: [...PERMS], locale, termsAcceptedAt: now, termsVersion: BRAND.legal.version } });
+      await audit(tx, { centerId: center.id, userId: user.id, entity: "Center", entityId: center.id, action: "signup", after: { name: centerName, slug, locale, plan: "FREE", owner: ownerName, ip, terms: BRAND.legal.version } });
       return { centerId: center.id, userId: user.id };
     });
 

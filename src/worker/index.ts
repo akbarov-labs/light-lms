@@ -6,6 +6,8 @@ import { createBot } from "./bot";
 import { processNotifications, type Sender } from "./notifications";
 import { dailyReport, nightly, reminders, teacherReminders, type JobResult } from "./jobs";
 import { assertStrongAuthSecret } from "@/lib/auth/startup";
+import { demoMode } from "@/config/brand";
+import { resetDemo } from "./demo-reset";
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[worker]", ...a);
 
@@ -40,6 +42,11 @@ async function main() {
   cron.schedule("0 10 * * *", () => run("reminders", () => reminders()), opts);
   cron.schedule("0 20 * * *", () => run("teacher-reminders", () => teacherReminders()), opts);
   cron.schedule("0 21 * * *", () => run("daily-report", () => dailyReport()), opts);
+  if (demoMode()) {
+    // public demo server: fresh demo data every night, then today's lessons and charges
+    cron.schedule("0 4 * * *", () => run("demo-reset", async () => ({ ...(await resetDemo()), ...(await nightly()) })), opts);
+    log("DEMO_MODE on — the database is wiped and re-seeded every night at 04:00");
+  }
 
   // catch up once on start so a fresh install has lessons and charges right away
   await run("nightly (startup)", () => nightly());

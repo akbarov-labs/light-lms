@@ -1,9 +1,10 @@
 // Uzbek (Latin) — default UI language. Every key here must exist in ru.ts (enforced by types).
+import { BRAND } from "@/config/brand";
 import { saasUz } from "./saas";
 
 export const uz = {
   ...saasUz,
-  "app.name": "lms-light",
+  "app.name": BRAND.name as string,
   "common.save": "Saqlash",
   "common.cancel": "Bekor qilish",
   "common.create": "Yaratish",
@@ -657,6 +658,14 @@ export const uz = {
   "students.chargedShort": "hisoblangan {amount}",
   "pay.debtLeft": "Qolgan qarz",
   "pay.noDebt": "Qarz yo'q",
+  "demo.blocked": "Demo rejimida bu amal o'chirilgan.",
+  "demo.banner": "Demo rejimi: bu sinov markazi, ma'lumotlar har kecha qayta tiklanadi.",
+  "demo.create": "O'z markazingizni yarating",
+  "demo.enter": "Demo markazga parolsiz kirish",
+  "legal.consent": "{offer} va {privacy} bilan tanishdim va roziman",
+  "legal.offer": "Ommaviy oferta",
+  "legal.privacy": "Maxfiylik siyosati",
+  "legal.consentRequired": "Davom etish uchun oferta va maxfiylik siyosatiga rozilik bering.",
 } as const;
 
 export type DictKey = keyof typeof uz;

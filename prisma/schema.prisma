@@ -213,6 +213,9 @@ model User {
   passwordChangedAt  DateTime?
   /// set by an admin reset: the user must pick a new password after signing in
   mustChangePassword Boolean   @default(false)
+  /// signup consent to the public offer and privacy policy: when, and which text version (BRAND.legal.version)
+  termsAcceptedAt    DateTime?
+  termsVersion       String?
 
   branches       UserBranch[]
   passwordResets PasswordReset[]

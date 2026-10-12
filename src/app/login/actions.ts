@@ -1,5 +1,6 @@
 "use server";
 
+import { demoMode } from "@/config/brand";
 import bcrypt from "bcryptjs";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -64,6 +65,7 @@ export async function loginAction(_: LoginState, fd: FormData): Promise<LoginSta
 /** Step 1 of "forgot password": send a code to the linked Telegram chat. Same answer whether or not the phone exists. */
 export async function requestCodeAction(_: LoginState, fd: FormData): Promise<LoginState> {
   const t = await tr();
+  if (demoMode()) return { error: t("demo.blocked"), at: Date.now() };
   const phone = normalizePhone(String(fd.get("phone") ?? ""));
   const r = await requestResetCode(phone, clientIp(await headers()));
   if (r.result === "limited") return { error: t("auth.locked", { minutes: retryMinutes(r.retryAfterMs ?? 0) }), at: Date.now() };
@@ -74,6 +76,7 @@ export async function requestCodeAction(_: LoginState, fd: FormData): Promise<Lo
 /** Step 2: code + new password. */
 export async function resetPasswordAction(_: LoginState, fd: FormData): Promise<LoginState> {
   const t = await tr();
+  if (demoMode()) return { error: t("demo.blocked"), at: Date.now() };
   const phone = normalizePhone(String(fd.get("phone") ?? ""));
   const code = String(fd.get("code") ?? "");
   const password = String(fd.get("password") ?? "");

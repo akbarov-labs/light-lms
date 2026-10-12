@@ -4,6 +4,7 @@ import { isLocale, LANG_COOKIE, makeT } from "@/lib/i18n";
 import { setLangAction } from "@/app/actions";
 import { LoginForm } from "./form";
 import { AuthCard } from "./auth-card";
+import { demoMode } from "@/config/brand";
 
 export const metadata = { title: "Kirish" };
 
@@ -39,6 +40,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     >
       {disabled && <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800" role="alert">{t("auth.centerDisabled")}</p>}
       {reset && <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">{t("auth.passwordUpdated")}</p>}
+      {demoMode() && (
+        <a href="/demo" className="mb-5 flex h-11 items-center justify-center rounded-lg border border-zinc-200 text-sm font-medium text-zinc-900 transition-colors hover:border-zinc-300 hover:bg-zinc-50">
+          {t("demo.enter")}
+        </a>
+      )}
       <LoginForm next={next} labels={{ phone: t("auth.phone"), password: t("auth.password"), submit: t("auth.submit") }} />
     </AuthCard>
   );

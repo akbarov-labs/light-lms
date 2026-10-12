@@ -23,6 +23,7 @@ import type { DictKey } from "@/lib/i18n";
 import type { Perm } from "@/lib/perms";
 import { db } from "@/lib/db";
 import { accentVars } from "@/lib/color";
+import { demoMode, signupHref } from "@/config/brand";
 import { setBranchAction } from "@/app/actions";
 import { AutoSubmitSelect, CloseLabelProvider, SavedLabelProvider, Toaster } from "./client";
 import { CommandPalette, QuickPayButton, SearchTrigger } from "./command-palette";
@@ -162,6 +163,12 @@ export async function AdminShell({ ctx, children }: { ctx: Ctx; children: ReactN
               <Nav ctx={ctx} />
             </aside>
             <div className="lg:pl-60">
+              {demoMode() && (
+                <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-zinc-900 px-4 py-2 text-center text-[13px] text-zinc-300 print:hidden">
+                  <span>{t("demo.banner")}</span>
+                  <a href={signupHref()} className="font-medium text-white underline decoration-zinc-500 underline-offset-4 hover:decoration-white">{t("demo.create")}</a>
+                </div>
+              )}
               <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line bg-white/90 px-3 backdrop-blur-md sm:gap-3 sm:px-6 print:hidden">
                 <MobileNav label={t("shell.menu")} closeLabel={t("shell.close")}>
                   <CenterMark ctx={ctx} />

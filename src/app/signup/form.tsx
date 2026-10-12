@@ -14,7 +14,25 @@ const input =
 const label = "mb-1.5 block text-[13px] font-medium text-zinc-700";
 const hint = "mt-1.5 block text-xs text-zinc-500";
 
-export function SignupForm({ labels, locale, startedAt }: { labels: Labels; locale: "uz" | "ru"; startedAt: number }) {
+/** "I agree with {offer} and {privacy}" with both names linked to the legal pages (opened in a new tab). */
+function ConsentText({ c }: { c: Consent }) {
+  const link = (href: string, label: string) => (
+    <a href={href} target="_blank" rel="noopener" className="font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-900">
+      {label}
+    </a>
+  );
+  return (
+    <>
+      {c.text.split(/(\{offer\}|\{privacy\})/).map((part, i) =>
+        part === "{offer}" ? <span key={i}>{link("/legal/offer", c.offer)}</span> : part === "{privacy}" ? <span key={i}>{link("/legal/privacy", c.privacy)}</span> : part,
+      )}
+    </>
+  );
+}
+
+type Consent = { text: string; offer: string; privacy: string };
+
+export function SignupForm({ labels, locale, startedAt, consent }: { labels: Labels; locale: "uz" | "ru"; startedAt: number; consent: Consent }) {
   const [state, action, pending] = useActionState(signupAction, null);
   const v = state?.values;
   return (
@@ -59,6 +77,10 @@ export function SignupForm({ labels, locale, startedAt }: { labels: Labels; loca
           ))}
         </div>
       </fieldset>
+      <label className="flex cursor-pointer items-start gap-2.5 text-sm leading-snug text-zinc-600">
+        <input type="checkbox" name="consent" required className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 accent-zinc-900" />
+        <span><ConsentText c={consent} /></span>
+      </label>
       {state?.error && (
         <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />

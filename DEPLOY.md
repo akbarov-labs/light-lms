@@ -148,6 +148,14 @@ docker compose -f docker-compose.prod.yml logs -f --tail=100 web worker caddy
 ```
 Har bir konteyner logi 10 MB × 5 fayl bilan cheklangan (disk to'lib qolmaydi).
 
+## 11a. Sayt, demo server va brend
+
+- **Sayt (landing)**: tizimga kirmagan mehmon `/` manzilida mahsulot sahifasini ko'radi (narxlar, savollar, oferta). Xodim kirgan bo'lsa — o'z paneli.
+- **Nom, aloqa, rekvizitlar**: hammasi bitta faylda — `src/config/brand.ts` (`name`, `contact`, `legal`). To'ldirgach qayta build qiling. `legal.entity` bo'sh bo'lsa, oferta va maxfiylik sahifalarida "loyiha" belgisi chiqadi.
+- **Demo server** (alohida, ikkinchi kichik VPS yoki shu serverda boshqa papka/domen, masalan `demo.example.uz`): `.env` da `DEMO_MODE=true`, `SEED_DEMO=true`, `MAIN_SITE_URL=https://crm.example.uz`. Mehmon `/demo` orqali parolsiz demo markazga kiradi; parollar, xodimlar va markaz sozlamalari qulflangan; har kecha 04:00 da baza tozalanib, bugungi sana bilan qayta to'ldiriladi (`npm run job:demo-reset` — qo'lda).
+- **Asosiy serverda** `DEMO_URL=https://demo.example.uz/demo` qo'ying — saytda "Demoni ko'rish" tugmasi paydo bo'ladi.
+- ⚠️ `DEMO_MODE=true` ni **hech qachon** haqiqiy markazlar bor serverga qo'ymang. Himoya bor: 2 kundan eski boshqa markaz topilsa, tozalash to'xtaydi — lekin bunga tayanmang.
+
 ## 12. Muammolar
 
 - **Sertifikat olinmadi**: DNS A yozuvini, 80/443 portlar ochiqligini tekshiring; `logs caddy`.
@@ -267,3 +275,11 @@ docker image prune -f
 
 `DOMAIN=localhost`, `HTTP_PORT=8080`, `HTTPS_PORT=8443`, `APP_URL=https://localhost:8443` in a test env file, then
 `docker compose -f docker-compose.prod.yml --env-file <that file> up -d --build`. Caddy serves `localhost` with its own local certificate (the browser warns; that is expected).
+
+## 13. Site, demo server and brand
+
+- **Landing**: visitors without a session see the product site at `/` (pricing, FAQ, legal links); signed-in staff get their dashboard.
+- **Name, contacts, company details**: one file, `src/config/brand.ts` (`name`, `contact`, `legal`); rebuild after editing. While `legal.entity` is empty the offer and privacy pages carry a "draft" note.
+- **Demo server** (separate, e.g. `demo.example.uz`): `DEMO_MODE=true`, `SEED_DEMO=true`, `MAIN_SITE_URL=https://crm.example.uz`. `/demo` signs visitors in as the demo owner with no password; passwords, staff and center settings are locked; at 04:00 every night the database is wiped and re-seeded dated to today (`npm run job:demo-reset` by hand).
+- **Main server**: set `DEMO_URL=https://demo.example.uz/demo` to show "See the demo" on the landing page.
+- ⚠️ **Never** set `DEMO_MODE=true` on the server with real centers. The reset refuses to run if it finds another center older than two days, but do not rely on that.

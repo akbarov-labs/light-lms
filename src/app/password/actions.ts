@@ -1,5 +1,6 @@
 "use server";
 
+import { demoMode } from "@/config/brand";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { getCtx } from "@/lib/ctx";
@@ -21,6 +22,7 @@ export async function changePasswordAction(_: PasswordState, fd: FormData): Prom
   const password = String(fd.get("password") ?? "");
   const fail = (key: Parameters<typeof t>[0], vars?: Record<string, string | number>) => ({ error: t(key, vars), at: Date.now() });
 
+  if (demoMode()) return fail("demo.blocked");
   // After an admin reset the fresh session is proof enough; otherwise the current password is required.
   if (!user.mustChangePassword) {
     const key = attemptKey.loginPhone(user.phone);

@@ -1,10 +1,11 @@
 import type { DictKey } from "./uz";
+import { BRAND } from "@/config/brand";
 import { saasRu } from "./saas";
 
 // Russian. Types guarantee the same keys as uz.ts.
 export const ru: Record<DictKey, string> = {
   ...saasRu,
-  "app.name": "lms-light",
+  "app.name": BRAND.name,
   "common.save": "Сохранить",
   "common.cancel": "Отмена",
   "common.create": "Создать",
@@ -658,4 +659,12 @@ export const ru: Record<DictKey, string> = {
   "students.chargedShort": "начислено {amount}",
   "pay.debtLeft": "Остаток долга",
   "pay.noDebt": "Долга нет",
+  "demo.blocked": "В демо-режиме это действие отключено.",
+  "demo.banner": "Демо-режим: это тестовый центр, данные восстанавливаются каждую ночь.",
+  "demo.create": "Создайте свой центр",
+  "demo.enter": "Войти в демо-центр без пароля",
+  "legal.consent": "Я ознакомился и согласен с {offer} и {privacy}",
+  "legal.offer": "Публичной офертой",
+  "legal.privacy": "Политикой конфиденциальности",
+  "legal.consentRequired": "Чтобы продолжить, примите оферту и политику конфиденциальности.",
 };

@@ -4,8 +4,9 @@ import { cookies } from "next/headers";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { isLocale, LANG_COOKIE } from "@/lib/i18n";
+import { BRAND } from "@/config/brand";
 
-export const metadata = { title: { default: "lms-light", template: "%s · lms-light" }, other: { google: "notranslate" } };
+export const metadata = { title: { default: BRAND.name, template: `%s · ${BRAND.name}` }, other: { google: "notranslate" } };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const lang = (await cookies()).get(LANG_COOKIE)?.value;

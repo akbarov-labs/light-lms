@@ -59,3 +59,18 @@
     }
   }
 }
+
+/* landing: the demo receipt "prints" top-down once, after the visitor confirms */
+.receipt-print {
+  animation: receipt-print 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes receipt-print {
+  from {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-8px);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    transform: none;
+  }
+}

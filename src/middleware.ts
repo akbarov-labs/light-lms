@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
 import { buildCsp, securityHeaders } from "@/lib/auth/headers";
 
-const PUBLIC = [/^\/login/, /^\/signup/, /^\/f\//, /^\/pay\//, /^\/api\/payme/, /^\/api\/health/, /^\/_next\//, /^\/favicon/];
+const PUBLIC = [/^\/login/, /^\/signup/, /^\/welcome/, /^\/legal\//, /^\/demo$/, /^\/f\//, /^\/pay\//, /^\/api\/payme/, /^\/api\/health/, /^\/_next\//, /^\/favicon/];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -26,6 +26,15 @@ export async function middleware(req: NextRequest) {
   if (PUBLIC.some((r) => r.test(pathname))) return pass();
   const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) {
+    // visitors without a session see the product site at the root; staff see their dashboard
+    if (pathname === "/") {
+      const url = req.nextUrl.clone();
+      url.pathname = "/welcome";
+      const h = new Headers(req.headers);
+      h.set("x-nonce", nonce);
+      h.set("content-security-policy", csp);
+      return withHeaders(NextResponse.rewrite(url, { request: { headers: h } }));
+    }
     if (pathname.startsWith("/api/")) return withHeaders(NextResponse.json({ error: "unauthorized" }, { status: 401 }));
     const url = req.nextUrl.clone();
     url.pathname = "/login";

@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { formList, formObject, zBool, zDate, zId, zOptId, zOptInt, zOptStr, zPhone, zStr } from "@/lib/forms";
 import { UserError } from "@/lib/user-error";
+import { assertNotDemo } from "@/lib/demo-guard";
 import { DEFAULT_PERMS, PERMS, type Perm, type RoleName } from "@/lib/perms";
 import { readSettings } from "@/lib/settings";
 import { fromISODate } from "@/lib/dates";
@@ -45,6 +46,7 @@ const NOTIFY = ["payment", "reminder", "debt", "absence", "trial", "teacherRemin
 
 export async function saveCenterAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction("settings", async (ctx) => {
+    assertNotDemo();
     const f = centerSchema.parse(formObject(fd));
     const clash = await db.center.findFirst({ where: { slug: f.slug, id: { not: ctx.centerId } } });
     if (clash) throw new UserError("settings.slugTaken");
@@ -222,6 +224,7 @@ function canManageRole(ctx: Ctx, role: RoleName): boolean {
 
 export async function saveStaffAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction("staff.manage", async (ctx) => {
+    assertNotDemo();
     const f = staffSchema.parse(formObject(fd));
     if (!canManageRole(ctx, f.role)) throw new UserError("settings.cannotEditOwner");
     const perms = formList(fd, "perms").filter((p): p is Perm => (PERMS as readonly string[]).includes(p));
@@ -274,6 +277,7 @@ export async function saveStaffAction(_: ActionState, fd: FormData): Promise<Act
 
 export async function toggleStaffArchiveAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction("staff.manage", async (ctx) => {
+    assertNotDemo();
     const id = zId.parse(fd.get("id"));
     if (id === ctx.userId) throw new UserError("settings.cannotArchiveSelf");
     const u = await db.user.findFirst({ where: { id, centerId: ctx.centerId }, include: { branches: true } });
@@ -291,6 +295,7 @@ export async function toggleStaffArchiveAction(_: ActionState, fd: FormData): Pr
 /** Owner/manager: replace a staff member's password with a one-time temporary one (shown once). */
 export async function resetStaffPasswordAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction("staff.manage", async (ctx) => {
+    assertNotDemo();
     const id = zId.parse(fd.get("id"));
     if (id === ctx.userId) throw new UserError("settings.cannotResetSelf");
     const u = await db.user.findFirst({ where: { id, centerId: ctx.centerId, archivedAt: null }, include: { branches: true } });
