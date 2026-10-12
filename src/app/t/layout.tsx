@@ -27,7 +27,7 @@ export default async function TeacherLayout({ children }: { children: ReactNode 
                 <LayoutDashboard className="h-5 w-5" aria-hidden />
               </Link>
             )}
-            <UserMenu name={ctx.userName} role={t(`role.${ctx.role}`)} locale={ctx.locale} logoutLabel={t("common.logout")} languageLabel={t("common.language")} accountLabel={t("shell.account")} />
+            <UserMenu name={ctx.userName} role={t(`role.${ctx.role}`)} locale={ctx.locale} logoutLabel={t("common.logout")} languageLabel={t("common.language")} accountLabel={t("shell.account")} passwordLabel={t("auth.changeOwn")} />
           </header>
           <main className="px-4 py-5">{ctx.isTeacher ? children : <p className="py-10 text-center text-zinc-500">{t("t.notTeacher")}</p>}</main>
           <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md" aria-label={t("shell.menu")}>

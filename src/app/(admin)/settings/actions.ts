@@ -15,6 +15,8 @@ import { fromISODate } from "@/lib/dates";
 import { generateLessons } from "@/lib/services/lessons";
 import { syncGroup } from "@/lib/billing/sync";
 import { assertBranch, staffInScope, type Ctx } from "@/lib/ctx";
+import { adminResetPassword, BCRYPT_ROUNDS, setPassword } from "@/lib/auth/password";
+import { MIN_PASSWORD } from "@/lib/auth/security";
 
 // ---------------------------------------------------------------- center
 
@@ -227,7 +229,7 @@ export async function saveStaffAction(_: ActionState, fd: FormData): Promise<Act
     const branchIds = formList(fd, "branchIds");
     const branches = await db.branch.findMany({ where: { id: { in: branchIds }, centerId: ctx.centerId }, select: { id: true } });
     for (const b of branches) assertBranch(ctx, b.id);
-    if (f.password && f.password.length < 6) throw new UserError("settings.passwordShort");
+    if (f.password && f.password.length < MIN_PASSWORD) throw new UserError("settings.passwordShort");
 
     const taken = await db.user.findUnique({ where: { phone: f.phone } });
     if (taken && taken.id !== f.id) throw new UserError("error.phoneTaken");
@@ -248,12 +250,14 @@ export async function saveStaffAction(_: ActionState, fd: FormData): Promise<Act
         // a branch manager edits only staff who work entirely inside their branches
         if (!staffInScope(ctx, u.branches.map((b) => b.branchId))) throw new UserError("error.forbidden");
         if (u.id === ctx.userId && f.role !== u.role) throw new UserError("settings.cannotEditOwner");
-        await tx.user.update({ where: { id: u.id }, data: { ...data, ...(f.password ? { passwordHash: await bcrypt.hash(f.password, 10) } : {}) } });
+        await tx.user.update({ where: { id: u.id }, data });
+        // a password typed by an admin is a reset: old sessions end, the user picks their own next time
+        if (f.password) await setPassword(tx, { id: u.id, phone: f.phone }, f.password, { mustChange: u.id !== ctx.userId });
         await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: u.id, action: "update", before: { ...u, passwordHash: undefined }, after: { ...data, branchIds, passwordChanged: !!f.password } });
         userId = u.id;
       } else {
         if (!f.password) throw new UserError("settings.passwordShort");
-        const u = await tx.user.create({ data: { ...data, centerId: ctx.centerId, passwordHash: await bcrypt.hash(f.password, 10) } });
+        const u = await tx.user.create({ data: { ...data, centerId: ctx.centerId, passwordHash: await bcrypt.hash(f.password, BCRYPT_ROUNDS), mustChangePassword: true } });
         await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: u.id, action: "create", after: { ...data, branchIds } });
         userId = u.id;
       }
@@ -278,5 +282,19 @@ export async function toggleStaffArchiveAction(_: ActionState, fd: FormData): Pr
       await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: id, action: u.archivedAt ? "restore" : "archive" });
     });
     revalidatePath("/settings/staff");
+  });
+}
+
+/** Owner/manager: replace a staff member's password with a one-time temporary one (shown once). */
+export async function resetStaffPasswordAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction("staff.manage", async (ctx) => {
+    const id = zId.parse(fd.get("id"));
+    if (id === ctx.userId) throw new UserError("settings.cannotResetSelf");
+    const u = await db.user.findFirst({ where: { id, centerId: ctx.centerId, archivedAt: null }, include: { branches: true } });
+    if (!u) throw new UserError("error.notFound");
+    if (!canManageRole(ctx, u.role as RoleName)) throw new UserError("settings.cannotEditOwner");
+    if (!staffInScope(ctx, u.branches.map((b) => b.branchId))) throw new UserError("error.forbidden");
+    const temp = await adminResetPassword(ctx, u);
+    return { message: ctx.t("settings.tempPassword", { password: temp }) };
   });
 }

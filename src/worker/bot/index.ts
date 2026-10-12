@@ -10,6 +10,7 @@ import { lessonRoster } from "@/lib/roster";
 import { liveSalary } from "@/lib/salary/service";
 import type { Locale } from "@/lib/i18n";
 import { ownerReport } from "../jobs";
+import { createResetCodeForChat } from "@/lib/auth/password";
 import { B, buttonKey } from "./texts";
 import {
   attendanceText,
@@ -72,6 +73,15 @@ export function createBot(token: string): Bot {
     const next: Locale = (await localeOf(ctx)) === "uz" ? "ru" : "uz";
     await setChatLocale(chatId, next);
     await ctx.reply(B.lang[next], { reply_markup: await menu(chatId, next) });
+  });
+
+  // staff password reset: the code goes only to the chat already linked to that staff phone
+  bot.command(["parol", "reset"], async (ctx) => {
+    const l = await localeOf(ctx);
+    if (ctx.chat.type !== "private") return;
+    const r = await createResetCodeForChat(String(ctx.chat.id));
+    if (!r) return void (await ctx.reply(B.resetNotStaff[l]));
+    await ctx.reply(B.resetCode[l].replace("{code}", r.code), { parse_mode: "HTML" });
   });
 
   bot.on("message:contact", async (ctx) => {

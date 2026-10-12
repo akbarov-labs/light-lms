@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "./db";
 import type { Perm } from "./perms";
-import { SESSION_COOKIE, verifySession } from "./session";
+import { SESSION_COOKIE, sessionStale, verifySession } from "./session";
 import { isLocale, LANG_COOKIE, type Locale } from "./i18n";
 import { buildCtx, loadUser, UserError, type Ctx } from "./ctx-core";
 
@@ -20,6 +20,7 @@ export const getCtx = cache(async (): Promise<Ctx | null> => {
   if (!session) return null;
   const user = await loadUser(session.sub);
   if (!user || user.archivedAt || user.centerId !== session.cid) return null;
+  if (sessionStale(session.iat, user.passwordChangedAt)) return null;
   const base = buildCtx(user);
   const picked = jar.get(BRANCH_COOKIE)?.value || null;
   let activeBranchId: string | null = null;

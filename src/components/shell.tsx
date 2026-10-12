@@ -185,7 +185,7 @@ export async function AdminShell({ ctx, children }: { ctx: Ctx; children: ReactN
                       </AutoSubmitSelect>
                     </form>
                   )}
-                  <UserMenu name={ctx.userName} role={t(`role.${ctx.role}`)} locale={ctx.locale} logoutLabel={t("common.logout")} languageLabel={t("common.language")} accountLabel={t("shell.account")} />
+                  <UserMenu name={ctx.userName} role={t(`role.${ctx.role}`)} locale={ctx.locale} logoutLabel={t("common.logout")} languageLabel={t("common.language")} accountLabel={t("shell.account")} passwordLabel={t("auth.changeOwn")} />
                 </div>
               </header>
               <div className="border-b border-line bg-white px-3 py-2 sm:hidden print:hidden">

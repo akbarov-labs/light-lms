@@ -11,6 +11,14 @@ export const B = {
     ru: "Ваш номер не найден, обратитесь к администратору учебного центра.",
   },
   linked: { uz: "✅ Ulandingiz! Menyudan kerakli bo'limni tanlang.", ru: "✅ Готово! Выберите раздел в меню." },
+  resetCode: {
+    uz: "🔐 Parolni tiklash kodi: <b>{code}</b>\nKod 10 daqiqa amal qiladi. Uni saytdagi «Parolni unutdingizmi?» → «Kodim bor» sahifasida kiriting.\nKodni hech kimga bermang.",
+    ru: "🔐 Код для сброса пароля: <b>{code}</b>\nКод действует 10 минут. Введите его на сайте: «Забыли пароль?» → «У меня есть код».\nНикому не сообщайте код.",
+  },
+  resetNotStaff: {
+    uz: "Bu buyruq faqat markaz xodimlari uchun (yoki so'rovlar soni oshib ketdi — 1 soatdan keyin urinib ko'ring).",
+    ru: "Команда только для сотрудников центра (или превышен лимит запросов — попробуйте через час).",
+  },
   notLinked: { uz: "Avval /start bosing va raqamingizni yuboring.", ru: "Сначала нажмите /start и отправьте номер." },
   balanceBtn: { uz: "💰 Balans", ru: "💰 Баланс" },
   scheduleBtn: { uz: "📅 Jadval", ru: "📅 Расписание" },

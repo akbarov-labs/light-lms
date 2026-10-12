@@ -5,6 +5,7 @@ import { TZ } from "@/lib/dates";
 import { createBot } from "./bot";
 import { processNotifications, type Sender } from "./notifications";
 import { dailyReport, nightly, reminders, teacherReminders, type JobResult } from "./jobs";
+import { assertStrongAuthSecret } from "@/lib/auth/startup";
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[worker]", ...a);
 
@@ -20,6 +21,7 @@ async function run(name: string, job: () => Promise<JobResult>) {
 }
 
 async function main() {
+  assertStrongAuthSecret("worker");
   await db.$queryRaw`SELECT 1`;
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
   let send: Sender | null = null;

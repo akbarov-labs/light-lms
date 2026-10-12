@@ -1,20 +1,46 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
+import { buildCsp, securityHeaders } from "@/lib/auth/headers";
 
 const PUBLIC = [/^\/login/, /^\/f\//, /^\/pay\//, /^\/api\/payme/, /^\/api\/health/, /^\/_next\//, /^\/favicon/];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (PUBLIC.some((r) => r.test(pathname))) return NextResponse.next();
+  // Per-request nonce: Next adds it to its own scripts when it sees it in the request's CSP header.
+  const nonce = btoa(crypto.randomUUID());
+  const https = (process.env.APP_URL ?? "").startsWith("https://") || req.headers.get("x-forwarded-proto") === "https";
+  const csp = buildCsp(nonce, { dev: process.env.NODE_ENV !== "production", https });
+
+  const pass = () => {
+    const h = new Headers(req.headers);
+    h.set("x-nonce", nonce);
+    h.set("content-security-policy", csp);
+    return withHeaders(NextResponse.next({ request: { headers: h } }));
+  };
+  const withHeaders = (res: NextResponse) => {
+    res.headers.set("content-security-policy", csp);
+    for (const [k, v] of securityHeaders(https)) res.headers.set(k, v);
+    return res;
+  };
+
+  if (PUBLIC.some((r) => r.test(pathname))) return pass();
   const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) {
-    if (pathname.startsWith("/api/")) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (pathname.startsWith("/api/")) return withHeaders(NextResponse.json({ error: "unauthorized" }, { status: 401 }));
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname + req.nextUrl.search)}`;
-    return NextResponse.redirect(url);
+    return withHeaders(NextResponse.redirect(url));
   }
-  return NextResponse.next();
+  // after an admin reset the user must choose their own password first
+  if (session.pwc && pathname !== "/password") {
+    if (pathname.startsWith("/api/")) return withHeaders(NextResponse.json({ error: "password change required" }, { status: 403 }));
+    const url = req.nextUrl.clone();
+    url.pathname = "/password";
+    url.search = "";
+    return withHeaders(NextResponse.redirect(url));
+  }
+  return pass();
 }
 
 export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"] };

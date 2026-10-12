@@ -5,8 +5,8 @@ import { formatPhone } from "@/lib/phone";
 import { DEFAULT_PERMS, effectivePerms, PERMS, type RoleName } from "@/lib/perms";
 import { Badge, Card, LinkButton, Table, Td, Th, Tr } from "@/components/ui";
 import { Checkbox, Field, FormGrid, Input, Select } from "@/components/fields";
-import { ActionForm, Modal, ModalForm, SubmitButton } from "@/components/client";
-import { saveStaffAction, toggleStaffArchiveAction } from "../actions";
+import { ActionForm, ActionMenu, Modal, ModalForm, SubmitButton } from "@/components/client";
+import { resetStaffPasswordAction, saveStaffAction, toggleStaffArchiveAction } from "../actions";
 
 type Staff = Awaited<ReturnType<typeof load>>[number];
 const load = (centerId: string) =>
@@ -29,7 +29,7 @@ function StaffForm({ ctx, branches, user }: { ctx: Ctx; branches: { id: string; 
             {roles.map((r) => <option key={r} value={r}>{t(`role.${r}`)}</option>)}
           </Select>
         </Field>
-        <Field label={user ? t("settings.newPassword") : t("settings.password")}><Input name="password" type="password" autoComplete="new-password" minLength={6} required={!user} /></Field>
+        <Field label={user ? t("settings.newPassword") : t("settings.password")}><Input name="password" type="password" autoComplete="new-password" minLength={8} required={!user} /></Field>
       </FormGrid>
       <Checkbox name="isTeacher" label={t("settings.isTeacher")} defaultChecked={user?.isTeacher} />
       <div>
@@ -90,15 +90,45 @@ export default async function StaffPage() {
               <Td>{u.telegramChatId ? <Badge tone="green">{t("settings.linked")}</Badge> : <span className="text-xs text-zinc-500">{t("settings.notLinked")}</span>}</Td>
               <Td className="whitespace-nowrap text-right">
                 {(ctx.role === "OWNER" || (u.role !== "OWNER" && u.role !== "MANAGER" && staffInScope(ctx, u.branches.map((b) => b.branchId)))) && (
-                  <div className="flex justify-end gap-1">
+                  <div className="flex items-center justify-end gap-1">
                     <Modal label={t("common.edit")} title={u.name} variant="secondary" size="sm" wide>
                       <StaffForm ctx={ctx} branches={branches} user={u} />
                     </Modal>
                     {u.id !== ctx.userId && (
-                      <ActionForm action={toggleStaffArchiveAction}>
-                        <input type="hidden" name="id" value={u.id} />
-                        <SubmitButton variant="ghost" size="sm" confirm={t("common.confirm")}>{u.archivedAt ? t("common.restore") : t("common.archive")}</SubmitButton>
-                      </ActionForm>
+                      <ActionMenu
+                        label={t("shell.more")}
+                        items={[
+                          ...(!u.archivedAt
+                            ? [{
+                                key: "password",
+                                label: t("settings.resetPassword"),
+                                title: `${t("settings.resetPassword")} · ${u.name}`,
+                                content: (
+                                  <>
+                                    <p className="mb-4 text-sm text-zinc-600">{t("settings.resetPasswordHint")}</p>
+                                    <ActionForm action={resetStaffPasswordAction} quiet>
+                                      <input type="hidden" name="id" value={u.id} />
+                                      <SubmitButton confirm={t("settings.resetPasswordConfirm")}>{t("settings.resetPassword")}</SubmitButton>
+                                    </ActionForm>
+                                  </>
+                                ),
+                              }]
+                            : []),
+                          {
+                            key: "archive",
+                            label: u.archivedAt ? t("common.restore") : t("common.archive"),
+                            danger: !u.archivedAt,
+                            title: u.name,
+                            content: (
+                              <ModalForm action={toggleStaffArchiveAction}>
+                                <input type="hidden" name="id" value={u.id} />
+                                <p className="mb-4 text-sm text-zinc-600">{t("common.confirm")}</p>
+                                <SubmitButton variant={u.archivedAt ? "primary" : "danger"}>{u.archivedAt ? t("common.restore") : t("common.archive")}</SubmitButton>
+                              </ModalForm>
+                            ),
+                          },
+                        ]}
+                      />
                     )}
                   </div>
                 )}

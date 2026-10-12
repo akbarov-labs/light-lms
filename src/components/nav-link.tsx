@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, LogOut, Menu, X } from "lucide-react";
+import { ChevronDown, KeyRound, LogOut, Menu, X } from "lucide-react";
 import { logoutAction, setLangAction } from "@/app/actions";
 import { cx } from "./ui";
 
@@ -60,7 +60,7 @@ export function MobileNav({ children, label, closeLabel }: { children: ReactNode
 }
 
 /** Account menu: language and sign-out live here, away from other controls. */
-export function UserMenu({ name, role, locale, logoutLabel, languageLabel, accountLabel }: { name: string; role: string; locale: "uz" | "ru"; logoutLabel: string; languageLabel: string; accountLabel: string }) {
+export function UserMenu({ name, role, locale, logoutLabel, languageLabel, accountLabel, passwordLabel }: { name: string; role: string; locale: "uz" | "ru"; logoutLabel: string; languageLabel: string; accountLabel: string; passwordLabel: string }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -99,6 +99,10 @@ export function UserMenu({ name, role, locale, logoutLabel, languageLabel, accou
             </div>
           </form>
           <div className="my-1 h-px bg-zinc-100" />
+          <Link href="/password" role="menuitem" onClick={() => setOpen(false)} className="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-sm text-zinc-700 hover:bg-zinc-100">
+            <KeyRound className="h-4 w-4 text-zinc-500" aria-hidden />
+            {passwordLabel}
+          </Link>
           <form action={logoutAction}>
             <button role="menuitem" className="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-sm text-zinc-700 hover:bg-zinc-100">
               <LogOut className="h-4 w-4 text-zinc-500" aria-hidden />

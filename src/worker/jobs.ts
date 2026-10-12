@@ -14,6 +14,7 @@ import { payLinkForFamily } from "@/lib/payments/links";
 import { buildCtx, loadUser } from "@/lib/ctx-core";
 import { debtAging, revenue } from "@/lib/queries/reports";
 import { formatMoney } from "@/lib/money";
+import { purgeOldAttempts } from "@/lib/auth/attempts-db";
 
 export type JobResult = Record<string, number | string>;
 
@@ -24,7 +25,8 @@ export async function nightly(today: ISODate = todayISO()): Promise<JobResult> {
   const finished = await db.group.updateMany({ where: { status: "ACTIVE", endDate: { lt: fromISODate(today) } }, data: { status: "FINISHED" } });
   const freezes = await refreshFreezeStatuses(today);
   const billing = await billingSync(today);
-  return { groupsActivated: activated.count, lessons, groupsFinished: finished.count, freezeStatus: freezes, ...billing };
+  const purged = await purgeOldAttempts();
+  return { groupsActivated: activated.count, lessons, groupsFinished: finished.count, freezeStatus: freezes, ...billing, loginAttemptsPurged: purged.attempts, resetCodesPurged: purged.resets };
 }
 
 /** Sync every open enrollment (and ones closed in the last 60 days); notify families that fell into debt. */

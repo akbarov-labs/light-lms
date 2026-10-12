@@ -195,8 +195,13 @@ model User {
   locale         String?
   archivedAt     DateTime?
   createdAt      DateTime  @default(now())
+  /// sessions issued before this moment are rejected (password changed or reset)
+  passwordChangedAt  DateTime?
+  /// set by an admin reset: the user must pick a new password after signing in
+  mustChangePassword Boolean   @default(false)
 
   branches       UserBranch[]
+  passwordResets PasswordReset[]
   groups         Group[]            @relation("GroupTeacher")
   lessons        Lesson[]           @relation("LessonTeacher")
   markedLessons  Lesson[]           @relation("LessonMarkedBy")
@@ -663,4 +668,29 @@ model Notification {
   sentAt    DateTime?
 
   @@index([status, createdAt])
+}
+
+/// Login and reset-code attempts for rate limiting (key = "login:phone:998…", "login:ip:…", "reset:…").
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  key       String
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+  @@index([createdAt])
+}
+
+/// One-time code sent to a staff member's linked Telegram chat to set a new password.
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  codeHash  String
+  attempts  Int       @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
 }
