@@ -32,8 +32,8 @@ function StaffForm({ ctx, branches, user }: { ctx: Ctx; branches: { id: string; 
       </FormGrid>
       <Checkbox name="isTeacher" label={t("settings.isTeacher")} defaultChecked={user?.isTeacher} />
       <div>
-        <div className="mb-1 text-xs font-medium text-slate-600">{t("settings.perms")}</div>
-        <p className="mb-2 text-xs text-slate-500">{t("settings.permsHint")}</p>
+        <div className="mb-1 text-xs font-medium text-zinc-600">{t("settings.perms")}</div>
+        <p className="mb-2 text-xs text-zinc-500">{t("settings.permsHint")}</p>
         <div className="grid gap-1.5 sm:grid-cols-2">
           {PERMS.filter((p) => ctx.role === "OWNER" || ctx.can(p)).map((p) => (
             <Checkbox key={p} name="perms" value={p} label={t(`perm.${p}`)} defaultChecked={current.has(p)} />
@@ -41,7 +41,7 @@ function StaffForm({ ctx, branches, user }: { ctx: Ctx; branches: { id: string; 
         </div>
       </div>
       <div>
-        <div className="mb-1 text-xs font-medium text-slate-600">{t("settings.staffBranches")}</div>
+        <div className="mb-1 text-xs font-medium text-zinc-600">{t("settings.staffBranches")}</div>
         <div className="grid gap-1.5 sm:grid-cols-2">
           {branches.map((b) => <Checkbox key={b.id} name="branchIds" value={b.id} label={b.name} defaultChecked={mine.has(b.id)} />)}
         </div>
@@ -79,14 +79,14 @@ export default async function StaffPage() {
         <tbody>
           {visible.map((u) => (
             <Tr key={u.id} className={u.archivedAt ? "opacity-50" : ""}>
-              <Td className="font-medium text-slate-900">{u.name}{u.archivedAt && <> <Badge>{t("settings.archived")}</Badge></>}</Td>
+              <Td className="font-medium text-zinc-900">{u.name}{u.archivedAt && <> <Badge>{t("settings.archived")}</Badge></>}</Td>
               <Td className="whitespace-nowrap">{formatPhone(u.phone)}</Td>
               <Td>
                 <Badge tone={u.role === "OWNER" ? "violet" : u.role === "MANAGER" ? "blue" : "gray"}>{t(`role.${u.role}`)}</Badge>
                 {u.isTeacher && u.role !== "TEACHER" && <> <Badge tone="green">{t("role.TEACHER")}</Badge></>}
               </Td>
               <Td className="text-xs">{u.role === "OWNER" ? t("common.allBranches") : u.branches.map((b) => b.branch.name).join(", ") || "—"}</Td>
-              <Td>{u.telegramChatId ? <Badge tone="green">{t("settings.linked")}</Badge> : <span className="text-xs text-slate-400">{t("settings.notLinked")}</span>}</Td>
+              <Td>{u.telegramChatId ? <Badge tone="green">{t("settings.linked")}</Badge> : <span className="text-xs text-zinc-500">{t("settings.notLinked")}</span>}</Td>
               <Td className="whitespace-nowrap text-right">
                 {(ctx.role === "OWNER" || (u.role !== "OWNER" && u.role !== "MANAGER" && staffInScope(ctx, u.branches.map((b) => b.branchId)))) && (
                   <div className="flex justify-end gap-1">

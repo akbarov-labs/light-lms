@@ -41,7 +41,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             <Modal label={t("common.edit")} title={lead.name} variant="secondary" wide><LeadForm ctx={ctx} lead={lead} /></Modal>
             <ActionForm action={toggleLeadArchiveAction}>
               <input type="hidden" name="id" value={lead.id} />
-              <SubmitButton variant="ghost">{lead.archivedAt ? t("common.restore") : t("common.archive")}</SubmitButton>
+              <SubmitButton variant="ghost" confirm={lead.archivedAt ? undefined : t("leads.archiveConfirm")}>{lead.archivedAt ? t("common.restore") : t("common.archive")}</SubmitButton>
             </ActionForm>
           </>
         }
@@ -85,9 +85,9 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
           </ActionForm>
           <ul className="space-y-3">
             {lead.notes.map((n) => (
-              <li key={n.id} className="rounded-lg bg-slate-50 p-3 text-sm">
-                <div className="whitespace-pre-line text-slate-800">{n.text}</div>
-                <div className="mt-1 text-xs text-slate-500">{formatDateTime(n.createdAt)} · {n.createdById ? authors.get(n.createdById) : t("leads.formSource")}</div>
+              <li key={n.id} className="rounded-lg bg-zinc-50 p-3 text-sm">
+                <div className="whitespace-pre-line text-zinc-800">{n.text}</div>
+                <div className="mt-1 text-xs text-zinc-500">{formatDateTime(n.createdAt)} · {n.createdById ? authors.get(n.createdById) : t("leads.formSource")}</div>
               </li>
             ))}
           </ul>

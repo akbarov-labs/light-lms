@@ -10,7 +10,7 @@ import { familyAllocation, familyLedger } from "@/lib/services/wallet";
 import { payLinkForFamily } from "@/lib/payments/links";
 import { Badge, Card, PageHeader, Stat, Table, Td, Th, Tr, cx } from "@/components/ui";
 import { Checkbox, Field, FormGrid, Input, Select } from "@/components/fields";
-import { Modal, ModalForm, SubmitButton } from "@/components/client";
+import { ActionMenu, Modal, ModalForm, MoneyInput, SubmitButton } from "@/components/client";
 import { LedgerTable } from "@/components/ledger-table";
 import { PaymentForm } from "@/components/payment-form";
 import { refundAction } from "../../payments/actions";
@@ -32,7 +32,9 @@ export default async function FamilyPage({ params, searchParams }: { params: Pro
   const showMoney = ctx.can("finance.view") || ctx.can("payments.take");
   const [alloc, ledger] = await Promise.all([familyAllocation(id), showMoney ? familyLedger(id) : Promise.resolve([])]);
   const payUrl = await payLinkForFamily(id);
-  const enrollmentOptions = family.students.flatMap((s) => s.enrollments.map((e) => ({ id: e.id, label: `${fullName(s)} · ${e.group.name} #${e.group.code}${alloc.enrollments.get(e.id)?.debt ? ` (${t("common.debt").toLowerCase()} ${formatMoney(alloc.enrollments.get(e.id)!.debt)})` : ""}` })));
+  const enrollmentOptions = family.students.flatMap((s) =>
+    s.enrollments.map((e) => ({ id: e.id, studentId: s.id, who: fullName(s), label: `${fullName(s)} · ${e.group.name} #${e.group.code}`, debt: alloc.enrollments.get(e.id)?.debt ?? 0 })),
+  );
 
   const GuardianFields = ({ g }: { g?: (typeof family.guardians)[number] }) => (
     <ModalForm action={saveGuardianAction} className="space-y-3">
@@ -73,21 +75,24 @@ export default async function FamilyPage({ params, searchParams }: { params: Pro
               </Modal>
             )}
             {ctx.can("payments.refund") && (
-              <Modal label={t("pay.refund")} title={t("pay.refund")} variant="secondary">
-                <ModalForm action={refundAction} className="space-y-3">
+              <ActionMenu
+                label={t("shell.more")}
+                items={[{ key: "refund", label: t("pay.refund"), danger: true, wide: true, content: (
+                  <ModalForm action={refundAction} className="space-y-3">
                   <input type="hidden" name="familyId" value={id} />
                   <FormGrid>
-                    <Field label={t("common.amount")}><Input name="amount" inputMode="numeric" required /></Field>
+                    <Field label={t("common.amount")}><MoneyInput name="amount" required /></Field>
                     <Field label={t("common.method")}>
                       <Select name="method">{(["CASH", "CARD", "TRANSFER"] as const).map((m) => <option key={m} value={m}>{t(`method.${m}`)}</option>)}</Select>
                     </Field>
                     <Field label={t("common.date")}><Input type="date" name="date" defaultValue={todayISO()} required /></Field>
                     <Field label={t("common.reason")}><Input name="reason" required /></Field>
                   </FormGrid>
-                  <p className="text-xs text-slate-500">{t("pay.refundHint")}</p>
+                  <p className="text-xs text-zinc-500">{t("pay.refundHint")}</p>
                   <SubmitButton variant="danger">{t("pay.refund")}</SubmitButton>
                 </ModalForm>
-              </Modal>
+                ) }]}
+              />
             )}
           </>
         }
@@ -95,16 +100,16 @@ export default async function FamilyPage({ params, searchParams }: { params: Pro
       {showMoney && (
         <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Stat label={t("common.balance")} value={formatMoney(alloc.balance)} tone={alloc.balance < 0 ? "red" : alloc.balance > 0 ? "green" : undefined} />
-          <Stat label={t("common.debt")} value={formatMoney(alloc.totalDebt)} tone={alloc.totalDebt > 0 ? "red" : undefined} hint={alloc.oldestUnpaidDate ? `${t("common.from")} ${formatDate(alloc.oldestUnpaidDate)}` : undefined} />
+          <Stat label={t("common.debt")} value={formatMoney(alloc.totalDebt)} tone={alloc.totalDebt > 0 ? "red" : undefined} hint={alloc.oldestUnpaidDate ? `${formatDate(alloc.oldestUnpaidDate)} ${t("common.from").toLowerCase()}` : undefined} />
           <Stat label={t("students.prepaid")} value={formatMoney(alloc.unallocated)} />
         </div>
       )}
       <div className="mb-4 grid gap-4 lg:grid-cols-3">
         {ctx.can("payments.take") && (
           <Card className="lg:col-span-2" title={t("pay.title")}>
-            <PaymentForm ctx={ctx} familyId={id} enrollments={enrollmentOptions} defaultAmount={sp.pay ? alloc.totalDebt : undefined} studentId={sp.student} />
+            <PaymentForm ctx={ctx} familyId={id} familyName={family.name} options={enrollmentOptions} familyDebt={alloc.totalDebt} studentId={sp.student && family.students.some((x) => x.id === sp.student) ? sp.student : undefined} />
             {payUrl && alloc.totalDebt > 0 && (
-              <p className="mt-3 text-xs text-slate-500">{t("pay.link")}: <a href={payUrl} className="break-all text-accent" target="_blank" rel="noreferrer">{payUrl}</a></p>
+              <p className="mt-3 text-xs text-zinc-500">{t("pay.link")}: <a href={payUrl} className="break-all text-accent" target="_blank" rel="noreferrer">{payUrl}</a></p>
             )}
           </Card>
         )}
@@ -116,15 +121,15 @@ export default async function FamilyPage({ params, searchParams }: { params: Pro
             {family.guardians.map((g) => (
               <div key={g.id} className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="font-medium">{g.name} {g.isPrimary && <span className="text-xs text-slate-400">· {t("students.primary")}</span>}</div>
+                  <div className="font-medium">{g.name} {g.isPrimary && <span className="text-xs text-zinc-500">· {t("students.primary")}</span>}</div>
                   <a href={`tel:+${g.phone}`} className="text-xs text-accent">{formatPhone(g.phone)}</a>
                   {g.telegramChatId && <Badge tone="blue">TG</Badge>}
                 </div>
                 {ctx.can("students.edit") && <Modal label="✎" title={g.name} variant="ghost" size="sm"><GuardianFields g={g} /></Modal>}
               </div>
             ))}
-            <div className="border-t border-slate-100 pt-2">
-              <div className="mb-1 text-xs text-slate-500">{t("family.students")}</div>
+            <div className="border-t border-zinc-100 pt-2">
+              <div className="mb-1 text-xs text-zinc-500">{t("family.students")}</div>
               {family.students.map((s) => (
                 <div key={s.id} className="mb-1">
                   <Link href={`/students/${s.id}`} className="font-medium text-accent hover:underline">{fullName(s)}</Link>
@@ -145,7 +150,7 @@ export default async function FamilyPage({ params, searchParams }: { params: Pro
                   <Td className="text-sm">{u.description}</Td>
                   <Td className="whitespace-nowrap text-right">{formatMoney(u.charged)}</Td>
                   <Td className="whitespace-nowrap text-right text-emerald-700">{formatMoney(u.paid)}</Td>
-                  <Td className={cx("whitespace-nowrap text-right font-medium", u.due > 0 ? "text-rose-600" : "text-slate-400")}>{u.due > 0 ? formatMoney(u.due) : "✓"}</Td>
+                  <Td className={cx("whitespace-nowrap text-right font-medium", u.due > 0 ? "text-red-600" : "text-zinc-500")}>{u.due > 0 ? formatMoney(u.due) : "✓"}</Td>
                 </Tr>
               ))}
             </tbody>

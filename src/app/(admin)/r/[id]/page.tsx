@@ -38,24 +38,24 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
         <PrintButton label={t("common.print")} />
         <LinkButton variant="secondary" href={`/families/${entry.familyId}`}>{t("family.wallet")}</LinkButton>
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white p-5 font-mono text-sm shadow-sm print:border-0 print:p-0 print:shadow-none">
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 font-mono text-sm shadow-sm print:border-0 print:p-0 print:shadow-none">
         <div className="text-center">
           <div className="text-base font-bold">{entry.center.name}</div>
           {entry.center.phone && <div className="text-xs">{formatPhone(entry.center.phone)}</div>}
-          <div className="mt-2 border-y border-dashed border-slate-300 py-1 text-xs uppercase">
+          <div className="mt-2 border-y border-dashed border-zinc-300 py-1 text-xs uppercase">
             {entry.type === "REFUND" ? `${t("ledger.REFUND")} · ` : ""}{t("pay.receiptNo")} {entry.receiptNo}
           </div>
         </div>
         <div className="my-3 text-center text-2xl font-bold">{formatMoney(Math.abs(entry.amount))}</div>
         <dl className="space-y-1">
           {rows.map(([k, v]) => (
-            <div key={k} className="flex justify-between gap-3"><dt className="text-slate-500">{k}</dt><dd className="text-right">{v}</dd></div>
+            <div key={k} className="flex justify-between gap-3"><dt className="text-zinc-500">{k}</dt><dd className="text-right">{v}</dd></div>
           ))}
         </dl>
-        {entry.reversedBy && <div className="mt-3 rounded bg-rose-50 p-2 text-center text-xs font-bold uppercase text-rose-700">{t("pay.reversed")}</div>}
-        <div className="mt-4 border-t border-dashed border-slate-300 pt-2 text-center text-xs">{t("pay.thanks")}</div>
+        {entry.reversedBy && <div className="mt-3 rounded bg-red-50 p-2 text-center text-xs font-bold uppercase text-red-700">{t("pay.reversed")}</div>}
+        <div className="mt-4 border-t border-dashed border-zinc-300 pt-2 text-center text-xs">{t("pay.thanks")}</div>
       </div>
-      <div className="mt-3 text-center text-xs print:hidden"><Link href="/payments" className="text-slate-500 hover:text-slate-800">{t("nav.payments")} →</Link></div>
+      <div className="mt-3 text-center text-xs print:hidden"><Link href="/payments" className="text-zinc-500 hover:text-zinc-800">{t("nav.payments")} →</Link></div>
     </div>
   );
 }

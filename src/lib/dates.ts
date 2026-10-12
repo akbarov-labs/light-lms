@@ -112,3 +112,14 @@ export function formatDateTime(d: Date | null | undefined, tz: string = TZ): str
 export function* eachDate(from: ISODate, to: ISODate): Generator<ISODate> {
   for (let d = from; d <= to; d = addDays(d, 1)) yield d;
 }
+
+const MONTHS = {
+  uz: ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktyabr", "Noyabr", "Dekabr"],
+  ru: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
+};
+
+/** "2026-10" → "Oktyabr 2026" / "Октябрь 2026" */
+export function monthLabel(month: string, locale: "uz" | "ru" = "uz"): string {
+  const m = Number(month.slice(5, 7));
+  return `${MONTHS[locale][m - 1] ?? month} ${month.slice(0, 4)}`;
+}

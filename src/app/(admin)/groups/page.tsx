@@ -53,22 +53,22 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
           </>
         }
       />
-      <form className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <Input name="q" defaultValue={sp.q} placeholder={`${t("common.search")}…`} className="col-span-2 sm:col-span-1" />
-        <Select name="status" defaultValue={status}>
+      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
+        <Input name="q" type="search" defaultValue={sp.q} placeholder={`${t("common.search")}…`} aria-label={t("common.search")} className="sm:!w-64" />
+        <Select name="status" aria-label={t("common.status")} defaultValue={status}>
           <option value="current">{t("group.ACTIVE")} + {t("group.PLANNED")}</option>
           <option value="all">{t("common.all")}</option>
           {(["ACTIVE", "PLANNED", "FINISHED", "ARCHIVED"] as const).map((s) => <option key={s} value={s}>{t(`group.${s}`)}</option>)}
         </Select>
-        <Select name="teacherId" defaultValue={sp.teacherId ?? ""}>
+        <Select name="teacherId" aria-label={t("common.teacher")} defaultValue={sp.teacherId ?? ""}>
           <option value="">{t("common.teacher")}: {t("common.all")}</option>
           {teachers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </Select>
-        <Select name="courseId" defaultValue={sp.courseId ?? ""}>
+        <Select name="courseId" aria-label={t("common.course")} defaultValue={sp.courseId ?? ""}>
           <option value="">{t("common.course")}: {t("common.all")}</option>
           {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
-        <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white">{t("common.filter")}</button>
+        <button className="h-9 rounded-lg bg-zinc-900 px-3.5 text-sm font-medium text-white hover:bg-zinc-800">{t("common.filter")}</button>
       </form>
       <Card pad={false}>
         {groups.length === 0 ? (
@@ -81,15 +81,15 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
             <tbody>
               {groups.map((g) => (
                 <Tr key={g.id}>
-                  <Td className="text-slate-400">{g.code}</Td>
+                  <Td className="text-zinc-500">{g.code}</Td>
                   <Td>
-                    <Link href={`/groups/${g.id}`} className="font-medium text-slate-900 hover:text-accent">{g.name}</Link>
-                    <div className="text-xs text-slate-500">{g.course.name}{!ctx.activeBranchId && ` · ${g.branch.name}`}</div>
+                    <Link href={`/groups/${g.id}`} className="font-medium text-zinc-900 hover:text-accent">{g.name}</Link>
+                    <div className="text-xs text-zinc-500">{g.course.name}{!ctx.activeBranchId && ` · ${g.branch.name}`}</div>
                   </Td>
                   <Td>{g.teacher.name}</Td>
                   <Td className="text-xs">{slotSummary(g.slots, t)}</Td>
                   <Td>{g.room?.name ?? "—"}</Td>
-                  <Td className="text-right">{g._count.enrollments}{g.capacity ? <span className="text-slate-400"> / {g.capacity}</span> : null}</Td>
+                  <Td className={g.capacity && g._count.enrollments > g.capacity ? "text-right font-medium text-red-600" : "text-right"} title={g.capacity && g._count.enrollments > g.capacity ? t("groups.overCapacity") : undefined}>{g._count.enrollments}{g.capacity ? <span className={g._count.enrollments > g.capacity ? "" : "text-zinc-500"}> / {g.capacity}</span> : null}</Td>
                   <Td className="whitespace-nowrap">{formatDate(toISODate(g.startDate))}</Td>
                   <Td><Badge tone={groupTone[g.status]}>{t(`group.${g.status}`)}</Badge></Td>
                 </Tr>

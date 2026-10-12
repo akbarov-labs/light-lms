@@ -48,43 +48,43 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           </>
         }
       />
-      <form className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <Input name="q" defaultValue={sp.q} placeholder={t("common.search")} />
-        <Select name="source" defaultValue={sp.source ?? ""}>
+      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
+        <Input name="q" type="search" defaultValue={sp.q} placeholder={t("common.search")} aria-label={t("common.search")} className="sm:!w-64" />
+        <Select name="source" aria-label={t("common.source")} defaultValue={sp.source ?? ""}>
           <option value="">{t("common.source")}: {t("common.all")}</option>
           {sources.map((s) => <option key={s.source} value={s.source!}>{s.source}</option>)}
         </Select>
-        <Select name="assigned" defaultValue={sp.assigned ?? ""}>
+        <Select name="assigned" aria-label={t("leads.assigned")} defaultValue={sp.assigned ?? ""}>
           <option value="">{t("leads.assigned")}: {t("common.all")}</option>
           {admins.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </Select>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="archived" value="1" defaultChecked={!!sp.archived} className="h-4 w-4" /> {t("leads.showArchived")}</label>
-        <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white">{t("common.filter")}</button>
+        <button className="h-9 rounded-lg bg-zinc-900 px-3.5 text-sm font-medium text-white hover:bg-zinc-800">{t("common.filter")}</button>
       </form>
       <div className="flex gap-3 overflow-x-auto pb-4">
         {STAGES.map((stage) => {
           const col = leads.filter((l) => l.stage === stage);
           return (
-            <section key={stage} className="w-64 shrink-0 rounded-xl bg-slate-100/70 p-2">
+            <section key={stage} className="w-64 shrink-0 rounded-xl bg-zinc-100/70 p-2">
               <header className="mb-2 flex items-center justify-between px-1">
                 <Badge tone={leadTone[stage]}>{t(`lead.${stage}`)}</Badge>
-                <span className="text-xs text-slate-500">{col.length}</span>
+                <span className="text-xs text-zinc-500">{col.length}</span>
               </header>
               <div className="space-y-2">
                 {col.map((l) => {
                   const overdue = l.nextContactAt && toISODate(l.nextContactAt) <= today && stage !== "ENROLLED" && stage !== "LOST";
                   return (
-                    <Link key={l.id} href={`/leads/${l.id}`} className="block rounded-lg border border-slate-200 bg-white p-2.5 text-sm shadow-sm hover:border-accent">
-                      <div className="font-medium text-slate-900">{l.name}</div>
-                      <div className="text-xs text-slate-500">{formatPhone(l.phone)}</div>
-                      {l.course && <div className="mt-1 text-xs text-slate-600">{l.course.name}</div>}
+                    <Link key={l.id} href={`/leads/${l.id}`} className="block rounded-lg border border-zinc-200 bg-white p-2.5 text-sm shadow-sm hover:border-accent">
+                      <div className="font-medium text-zinc-900">{l.name}</div>
+                      <div className="text-xs text-zinc-500">{formatPhone(l.phone)}</div>
+                      {l.course && <div className="mt-1 text-xs text-zinc-600">{l.course.name}</div>}
                       <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
-                        {l.source && <span className="text-slate-400">{l.source}</span>}
-                        {l.nextContactAt && <span className={cx(overdue ? "font-medium text-rose-600" : "text-slate-500")}>☎ {formatDate(l.nextContactAt)}</span>}
-                        {l._count.notes > 0 && <span className="text-slate-400">✎{l._count.notes}</span>}
-                        {l.studentId && <span className="text-emerald-600">✓</span>}
+                        {l.source && <span className="text-zinc-500">{l.source}</span>}
+                        {l.nextContactAt && <span className={cx(overdue ? "font-medium text-red-600" : "text-zinc-500")}>☎ {formatDate(l.nextContactAt)}</span>}
+                        {l._count.notes > 0 && <span className="text-zinc-500">✎{l._count.notes}</span>}
+                        {l.studentId && <span className="text-emerald-700">✓</span>}
                       </div>
-                      {stage === "LOST" && l.lostReason && <div className="mt-1 text-xs text-slate-500">{l.lostReason}</div>}
+                      {stage === "LOST" && l.lostReason && <div className="mt-1 text-xs text-zinc-500">{l.lostReason}</div>}
                     </Link>
                   );
                 })}

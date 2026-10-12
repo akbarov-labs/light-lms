@@ -63,21 +63,19 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
           </>
         }
       />
-      <form className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <Input name="q" defaultValue={sp.q} placeholder={`${t("common.search")}: ${t("common.fullName")}, ${t("common.phone").toLowerCase()}`} className="col-span-2" />
-        <Select name="groupId" defaultValue={sp.groupId ?? ""}>
+      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
+        <Input name="q" type="search" defaultValue={sp.q} placeholder={`${t("common.fullName")}, ${t("common.phone").toLowerCase()}…`} aria-label={t("common.search")} className="sm:!w-72" />
+        <Select name="groupId" aria-label={t("common.group")} defaultValue={sp.groupId ?? ""}>
           <option value="">{t("students.filterGroup")}: {t("common.all")}</option>
           {groups.map((g) => <option key={g.id} value={g.id}>{g.name} #{g.code}</option>)}
         </Select>
-        <Select name="status" defaultValue={sp.status ?? "ACTIVE"}>
+        <Select name="status" aria-label={t("common.status")} defaultValue={sp.status ?? "ACTIVE"}>
           <option value="ACTIVE">{t("student.ACTIVE")}</option>
           <option value="ARCHIVED">{t("student.ARCHIVED")}</option>
           <option value="all">{t("common.all")}</option>
         </Select>
-        <div className="col-span-2 flex items-center gap-3 sm:col-span-1">
-          <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" name="debt" value="1" defaultChecked={sp.debt === "1"} className="h-4 w-4" /> {t("students.withDebt")}</label>
-          <button className="ml-auto rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white">{t("common.filter")}</button>
-        </div>
+        <label className="flex h-9 items-center gap-2 text-sm text-zinc-700"><input type="checkbox" name="debt" value="1" defaultChecked={sp.debt === "1"} className="h-4 w-4 accent-[rgb(var(--accent))]" /> {t("students.withDebt")}</label>
+        <button className="h-9 rounded-lg bg-zinc-900 px-3.5 text-sm font-medium text-white hover:bg-zinc-800">{t("common.filter")}</button>
       </form>
       <Card pad={false}>
         {students.length === 0 ? (
@@ -93,20 +91,20 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
                 return (
                   <Tr key={s.id}>
                     <Td>
-                      <Link href={`/students/${s.id}`} className="font-medium text-slate-900 hover:text-accent">{fullName(s)}</Link>
+                      <Link href={`/students/${s.id}`} className="font-medium text-zinc-900 hover:text-accent">{fullName(s)}</Link>
                       {s.status === "ARCHIVED" && <> <Badge>{t("student.ARCHIVED")}</Badge></>}
-                      {s.tags.length > 0 && <div className="mt-0.5 flex flex-wrap gap-1">{s.tags.map((tg) => <span key={tg} className="text-xs text-slate-400">#{tg}</span>)}</div>}
+                      {s.tags.length > 0 && <div className="mt-0.5 flex flex-wrap gap-1">{s.tags.map((tg) => <span key={tg} className="text-xs text-zinc-500">#{tg}</span>)}</div>}
                     </Td>
                     <Td className="whitespace-nowrap text-xs">{formatPhone(s.phone ?? s.family.guardians[0]?.phone)}</Td>
                     <Td>
                       <div className="flex flex-wrap gap-1">
-                        {s.enrollments.length === 0 && <span className="text-xs text-slate-400">{t("students.noGroup")}</span>}
+                        {s.enrollments.length === 0 && <span className="text-xs text-zinc-500">{t("students.noGroup")}</span>}
                         {s.enrollments.map((e) => (
                           <Link key={e.id} href={`/groups/${e.group.id}`}><Badge tone={enrollmentTone[e.status]}>{e.group.name}</Badge></Link>
                         ))}
                       </div>
                     </Td>
-                    {balances && <Td className={cx("whitespace-nowrap text-right font-medium", bal < 0 ? "text-rose-600" : bal > 0 ? "text-emerald-600" : "text-slate-400")}>{formatMoney(bal)}</Td>}
+                    {balances && <Td className={cx("whitespace-nowrap text-right font-medium", bal < 0 ? "text-red-600" : bal > 0 ? "text-emerald-700" : "text-zinc-500")}>{formatMoney(bal)}</Td>}
                   </Tr>
                 );
               })}

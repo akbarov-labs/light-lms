@@ -25,7 +25,7 @@ export function SalaryBreakdown({ ctx, result, lessons, showLessons = true }: { 
               </Tr>
             ))}
             {result.adjustments.map((a, i) => (
-              <Tr key={a.id ?? i}><Td colSpan={4} className="text-sm">{a.amount > 0 ? "＋" : "−"} {a.reason}</Td><Td className={a.amount < 0 ? "whitespace-nowrap text-right text-rose-600" : "whitespace-nowrap text-right text-emerald-700"}>{formatMoney(a.amount)}</Td></Tr>
+              <Tr key={a.id ?? i}><Td colSpan={4} className="text-sm">{a.amount > 0 ? "＋" : "−"} {a.reason}</Td><Td className={a.amount < 0 ? "whitespace-nowrap text-right text-red-600" : "whitespace-nowrap text-right text-emerald-700"}>{formatMoney(a.amount)}</Td></Tr>
             ))}
             <Tr><Td className="font-semibold">{t("common.total")}</Td><Td className="text-right font-semibold">{result.lessonsHeld}</Td><Td /><Td /><Td className="whitespace-nowrap text-right text-base font-semibold">{formatMoney(result.total)}</Td></Tr>
           </tbody>

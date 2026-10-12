@@ -13,7 +13,7 @@ export default async function HolidaysPage() {
   return (
     <div className="space-y-4">
       <Card title={t("settings.newHoliday")}>
-        <p className="mb-3 text-sm text-slate-500">{t("settings.holidayHint")}</p>
+        <p className="mb-3 text-sm text-zinc-500">{t("settings.holidayHint")}</p>
         <ActionForm action={addHolidayAction} reset>
           <FormGrid cols={3}>
             <Field label={t("common.date")}><Input type="date" name="date" required /></Field>

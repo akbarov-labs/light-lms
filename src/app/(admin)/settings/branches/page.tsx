@@ -50,13 +50,13 @@ export default async function BranchesPage() {
             </>
           }
         >
-          <div className="mb-3 text-sm text-slate-500">{[b.address, b.phone].filter(Boolean).join(" · ") || "—"}</div>
-          <div className="mb-2 text-xs font-semibold uppercase text-slate-500">{t("settings.rooms")}</div>
+          <div className="mb-3 text-sm text-zinc-500">{[b.address, b.phone].filter(Boolean).join(" · ") || "—"}</div>
+          <div className="mb-2 text-xs font-semibold uppercase text-zinc-500">{t("settings.rooms")}</div>
           <div className="flex flex-wrap gap-2">
             {b.rooms.map((r) => (
-              <div key={r.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-2 py-1 text-sm">
-                <span className={r.archivedAt ? "text-slate-400 line-through" : ""}>{r.name}</span>
-                {r.capacity && <span className="text-xs text-slate-400">({r.capacity})</span>}
+              <div key={r.id} className="flex items-center gap-2 rounded-lg border border-zinc-200 px-2 py-1 text-sm">
+                <span className={r.archivedAt ? "text-zinc-500 line-through" : ""}>{r.name}</span>
+                {r.capacity && <span className="text-xs text-zinc-500">({r.capacity})</span>}
                 <ActionForm action={toggleRoomArchiveAction}>
                   <input type="hidden" name="id" value={r.id} />
                   <SubmitButton variant="ghost" size="sm">{r.archivedAt ? "↺" : "✕"}</SubmitButton>

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatDate, formatDateTime, monthRange, shiftMonth, toISODate, todayISO } from "@/lib/dates";
+import { monthLabel } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { liveSalary } from "@/lib/salary/service";
 import type { SalaryResult } from "@/lib/salary/engine";
@@ -37,11 +38,11 @@ export default async function TeacherSalaryPage({ params, searchParams }: { para
       <PageHeader
         back={{ href: `/salary?month=${month}`, label: t("nav.salary") }}
         title={teacher.name}
-        subtitle={<span className="flex items-center gap-2">{month} <Badge tone={slip?.status === "PAID" ? "green" : slip?.status === "LOCKED" ? "blue" : "gray"}>{t(`payslip.${slip?.status ?? "DRAFT"}`)}</Badge></span>}
+        subtitle={<span className="flex items-center gap-2">{monthLabel(month, ctx.locale)} <Badge tone={slip?.status === "PAID" ? "green" : slip?.status === "LOCKED" ? "blue" : "gray"}>{t(`payslip.${slip?.status ?? "DRAFT"}`)}</Badge></span>}
         actions={
           <>
-            <LinkButton variant="secondary" href={`/salary/${teacherId}?month=${shiftMonth(month, -1)}`}>←</LinkButton>
-            <LinkButton variant="secondary" href={`/salary/${teacherId}?month=${shiftMonth(month, 1)}`}>→</LinkButton>
+            <LinkButton variant="secondary" href={`/salary/${teacherId}?month=${shiftMonth(month, -1)}`} aria-label={monthLabel(shiftMonth(month, -1), ctx.locale)}>← {monthLabel(shiftMonth(month, -1), ctx.locale)}</LinkButton>
+            <LinkButton variant="secondary" href={`/salary/${teacherId}?month=${shiftMonth(month, 1)}`} aria-label={monthLabel(shiftMonth(month, 1), ctx.locale)}>{monthLabel(shiftMonth(month, 1), ctx.locale)} →</LinkButton>
             {(!slip || slip.status === "DRAFT") && (
               <ActionForm action={payslipAction}>{hidden("lock")}<SubmitButton confirm={t("common.confirm")}>{t("salary.lock")}</SubmitButton></ActionForm>
             )}
@@ -54,7 +55,7 @@ export default async function TeacherSalaryPage({ params, searchParams }: { para
           </>
         }
       />
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Stat label={t("salary.live")} value={formatMoney(result.total)} />
         {locked && <Stat label={t("salary.lockedTotal")} value={formatMoney(slip!.total)} hint={slip!.lockedAt ? formatDateTime(slip!.lockedAt) : undefined} />}
         {slip?.paidAt && <Stat label={t("salary.paidAt")} value={formatDate(slip.paidAt)} tone="green" />}
@@ -117,11 +118,11 @@ export default async function TeacherSalaryPage({ params, searchParams }: { para
                 <input type="hidden" name="month" value={month} />
                 <Input name="amount" placeholder="+300000 / −50000" required />
                 <Input name="reason" placeholder={t("common.reason")} required />
-                <p className="text-xs text-slate-500">{t("salary.adjustmentHint")}</p>
+                <p className="text-xs text-zinc-500">{t("salary.adjustmentHint")}</p>
                 <SubmitButton variant="secondary" size="sm">{t("salary.addAdjustment")}</SubmitButton>
               </ActionForm>
             ) : (
-              <p className="text-sm text-slate-500">{t("error.locked")}</p>
+              <p className="text-sm text-zinc-500">{t("error.locked")}</p>
             )}
             {result.adjustments.length > 0 && (
               <Table className="mt-3">

@@ -29,12 +29,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   return (
     <>
       <PageHeader title={t("nav.reports")} subtitle={`${formatDate(p.from)} – ${formatDate(p.to)}`} />
-      <form className="mb-4 flex flex-wrap gap-2">
-        <Input type="date" name="from" defaultValue={p.from} className="w-auto" />
-        <Input type="date" name="to" defaultValue={p.to} className="w-auto" />
-        <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white">{t("common.filter")}</button>
+      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
+        <Input type="date" aria-label={t("common.from")} name="from" defaultValue={p.from} className="w-auto" />
+        <Input type="date" aria-label={t("common.to")} name="to" defaultValue={p.to} className="w-auto" />
+        <button className="h-9 rounded-lg bg-zinc-900 px-3.5 text-sm font-medium text-white hover:bg-zinc-800">{t("common.filter")}</button>
       </form>
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Stat label={t("reports.revenue")} value={formatMoney(rev.total)} tone="green" />
         <Stat label={t("reports.expenses")} value={formatMoney(exp.total)} />
         <Stat label={t("reports.profit")} value={formatMoney(rev.total - exp.total)} tone={rev.total - exp.total < 0 ? "red" : "green"} />
@@ -51,23 +51,23 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         </Card>
         <Card title={t("reports.students")}>
           <div className="grid grid-cols-2 gap-3 text-sm">
-            <div><div className="text-slate-500">{t("reports.active")}</div><div className="text-xl font-semibold">{students.active}</div></div>
-            <div><div className="text-slate-500">{t("reports.new")}</div><div className="text-xl font-semibold text-emerald-600">+{students.newStudents}</div></div>
-            <div><div className="text-slate-500">{t("reports.left")}</div><div className="text-xl font-semibold text-rose-600">−{students.left}</div></div>
-            <div><div className="text-slate-500">{t("reports.conversion")}</div><div className="text-xl font-semibold">{students.trialsActivated}/{students.trials}{students.trials ? ` (${Math.round((students.trialsActivated / students.trials) * 100)}%)` : ""}</div></div>
+            <div><div className="text-zinc-500">{t("reports.active")}</div><div className="text-xl font-semibold">{students.active}</div></div>
+            <div><div className="text-zinc-500">{t("reports.new")}</div><div className="text-xl font-semibold text-emerald-700">+{students.newStudents}</div></div>
+            <div><div className="text-zinc-500">{t("reports.left")}</div><div className="text-xl font-semibold text-red-600">−{students.left}</div></div>
+            <div><div className="text-zinc-500">{t("reports.conversion")}</div><div className="text-xl font-semibold">{students.trialsActivated}/{students.trials}{students.trials ? ` (${Math.round((students.trialsActivated / students.trials) * 100)}%)` : ""}</div></div>
           </div>
           {students.leftReasons.length > 0 && (
-            <div className="mt-3 border-t border-slate-100 pt-2 text-xs">
-              <div className="mb-1 text-slate-500">{t("reports.leftReasons")}</div>
+            <div className="mt-3 border-t border-zinc-100 pt-2 text-xs">
+              <div className="mb-1 text-zinc-500">{t("reports.leftReasons")}</div>
               {students.leftReasons.map(([r, n]) => <div key={r} className="flex justify-between"><span>{r}</span><span>{n}</span></div>)}
             </div>
           )}
         </Card>
         <Card title={`${t("reports.funnel")} (${funnel.total} · ${funnel.conversion}%)`}>
-          <ShareBars money={false} rows={funnel.byStage.map(([k, v]) => ({ label: t(`lead.${k}`), value: v }))} />
-          {funnel.bySource.length > 0 && <div className="mt-3 border-t border-slate-100 pt-2 text-xs"><div className="mb-1 text-slate-500">{t("reports.bySource")}</div>{funnel.bySource.map(([k, v]) => <div key={k} className="flex justify-between"><span>{k}</span><span>{v}</span></div>)}</div>}
-          {funnel.byAdmin.length > 0 && <div className="mt-2 text-xs"><div className="mb-1 text-slate-500">{t("reports.byAdmin")}</div>{funnel.byAdmin.map(([k, v]) => <div key={k} className="flex justify-between"><span>{k}</span><span>{v}</span></div>)}</div>}
-          {funnel.lostReasons.length > 0 && <div className="mt-2 text-xs"><div className="mb-1 text-slate-500">{t("reports.lostReasons")}</div>{funnel.lostReasons.map(([k, v]) => <div key={k} className="flex justify-between"><span>{k}</span><span>{v}</span></div>)}</div>}
+          <ShareBars money={false} rows={(["NEW", "CONTACTED", "TRIAL_BOOKED", "TRIAL_DONE", "ENROLLED", "LOST"] as const).map((k) => ({ label: t(`lead.${k}`), value: funnel.byStage.find(([s]) => s === k)?.[1] ?? 0 }))} />
+          {funnel.bySource.length > 0 && <div className="mt-3 border-t border-zinc-100 pt-2 text-xs"><div className="mb-1 text-zinc-500">{t("reports.bySource")}</div>{funnel.bySource.map(([k, v]) => <div key={k} className="flex justify-between"><span>{k}</span><span>{v}</span></div>)}</div>}
+          {funnel.byAdmin.length > 0 && <div className="mt-2 text-xs"><div className="mb-1 text-zinc-500">{t("reports.byAdmin")}</div>{funnel.byAdmin.map(([k, v]) => <div key={k} className="flex justify-between"><span>{k}</span><span>{v}</span></div>)}</div>}
+          {funnel.lostReasons.length > 0 && <div className="mt-2 text-xs"><div className="mb-1 text-zinc-500">{t("reports.lostReasons")}</div>{funnel.lostReasons.map(([k, v]) => <div key={k} className="flex justify-between"><span>{k}</span><span>{v}</span></div>)}</div>}
         </Card>
       </div>
       <Card className="mb-4" pad={false} title={t("reports.billedBy")}>

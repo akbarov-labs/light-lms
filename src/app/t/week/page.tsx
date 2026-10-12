@@ -22,7 +22,7 @@ export default async function TeacherWeek() {
         if (list.length === 0) return null;
         return (
           <section key={d}>
-            <h2 className="mb-2 text-sm font-semibold text-slate-600">{t(`common.weekday.${weekdayOf(d)}` as "common.weekday.1")}, {formatDate(d)}</h2>
+            <h2 className="mb-2 text-sm font-semibold text-zinc-600">{t(`common.weekday.${weekdayOf(d)}` as "common.weekday.1")}, {formatDate(d)}</h2>
             <ul className="space-y-2">
               {list.map((l) => (
                 <li key={l.id}>
@@ -37,7 +37,7 @@ export default async function TeacherWeek() {
           </section>
         );
       })}
-      {lessons.length === 0 && <p className="text-center text-sm text-slate-500">{t("t.noLessons")}</p>}
+      {lessons.length === 0 && <p className="text-center text-sm text-zinc-500">{t("t.noLessons")}</p>}
     </div>
   );
 }

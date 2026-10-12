@@ -31,5 +31,9 @@ export function attendanceLabels(t: TFn) {
     topic: t("lessons.topic"),
     trial: t("enrollment.TRIAL"),
     empty: t("lessons.noStudents"),
+    unsaved: t("lessons.unsaved"),
+    notMarkedYet: t("lessons.notMarkedYet"),
+    gradeComment: t("lessons.gradeComment"),
+    savedAll: t("lessons.savedAll"),
   };
 }

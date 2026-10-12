@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireStaff, studentScope } from "@/lib/ctx";
+import type { DictKey } from "@/lib/i18n";
 import { db } from "@/lib/db";
 import { addDays, formatDate, formatDateTime, fromISODate, toISODate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
@@ -50,6 +51,8 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   });
   const users = new Map((await db.user.findMany({ where: { id: { in: [...new Set(events.map((e) => e.userId).filter(Boolean))] as string[] } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
   const open = student.enrollments.filter((e) => !e.endDate);
+  const studentDebt = student.enrollments.reduce((sum, e) => sum + (alloc.enrollments.get(e.id)?.debt ?? 0), 0);
+  const hasSiblings = student.family.students.length > 1;
   const myUnits = alloc.units.filter((u) => u.enrollmentId && enrollmentIds.includes(u.enrollmentId));
 
   return (
@@ -79,9 +82,14 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
       />
 
       {showMoney && (
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label={t("students.familyBalance")} value={formatMoney(alloc.balance)} tone={alloc.balance < 0 ? "red" : alloc.balance > 0 ? "green" : undefined} href={`/families/${student.familyId}`} />
-          <Stat label={t("common.debt")} value={formatMoney(alloc.totalDebt)} tone={alloc.totalDebt > 0 ? "red" : undefined} hint={alloc.oldestUnpaidDate ? `${t("common.from")} ${formatDate(alloc.oldestUnpaidDate)}` : undefined} />
+        <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <Stat
+            label={t("common.debt")}
+            value={formatMoney(studentDebt)}
+            tone={studentDebt > 0 ? "red" : undefined}
+            hint={hasSiblings && alloc.totalDebt !== studentDebt ? `${t("students.familyDebt")}: ${formatMoney(alloc.totalDebt)}` : alloc.oldestUnpaidDate && studentDebt > 0 ? `${formatDate(alloc.oldestUnpaidDate)} ${t("common.from").toLowerCase()}` : undefined}
+          />
+          <Stat label={t("students.familyBalance")} value={formatMoney(alloc.balance)} tone={alloc.balance < 0 ? "red" : alloc.balance > 0 ? "green" : undefined} hint={hasSiblings ? t("students.otherKids") : undefined} href={`/families/${student.familyId}`} />
           <Stat label={t("students.prepaid")} value={formatMoney(alloc.unallocated)} />
           <Stat label={t("students.groups")} value={open.length} />
         </div>
@@ -99,22 +107,22 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               [t("common.createdAt"), formatDate(student.createdAt)],
             ]}
           />
-          {student.notes && <p className="mt-3 whitespace-pre-line rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{student.notes}</p>}
+          {student.notes && <p className="mt-3 whitespace-pre-line rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{student.notes}</p>}
         </Card>
         <Card title={<Link href={`/families/${student.familyId}`} className="hover:text-accent">{student.family.name} →</Link>}>
           <div className="space-y-2 text-sm">
             {student.family.guardians.map((g) => (
               <div key={g.id} className="flex items-center justify-between gap-2">
                 <div>
-                  <div className="font-medium">{g.name} {g.isPrimary && <span className="text-xs text-slate-400">· {t("students.primary")}</span>}</div>
+                  <div className="font-medium">{g.name} {g.isPrimary && <span className="text-xs text-zinc-500">· {t("students.primary")}</span>}</div>
                   <a href={`tel:+${g.phone}`} className="text-xs text-accent">{formatPhone(g.phone)}</a>
                 </div>
                 {g.telegramChatId && <Badge tone="blue">TG</Badge>}
               </div>
             ))}
             {student.family.students.length > 1 && (
-              <div className="border-t border-slate-100 pt-2">
-                <div className="mb-1 text-xs text-slate-500">{t("students.siblings")}</div>
+              <div className="border-t border-zinc-100 pt-2">
+                <div className="mb-1 text-xs text-zinc-500">{t("students.siblings")}</div>
                 {student.family.students.filter((s) => s.id !== id).map((s) => (
                   <Link key={s.id} href={`/students/${s.id}`} className="block text-accent hover:underline">{fullName(s)}</Link>
                 ))}
@@ -146,8 +154,8 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                 return (
                   <Tr key={e.id} className={e.endDate ? "opacity-60" : ""}>
                     <Td>
-                      <Link href={`/groups/${e.groupId}`} className="font-medium text-slate-900 hover:text-accent">{e.group.name} <span className="text-slate-400">#{e.group.code}</span></Link>
-                      <div className="text-xs text-slate-500">{e.group.course.name} · {e.group.teacher.name}</div>
+                      <Link href={`/groups/${e.groupId}`} className="font-medium text-zinc-900 hover:text-accent">{e.group.name} <span className="text-zinc-500">#{e.group.code}</span></Link>
+                      <div className="text-xs text-zinc-500">{e.group.course.name} · {e.group.teacher.name}</div>
                       {freezes.length > 0 && (
                         <div className="mt-1 space-y-0.5">
                           {freezes.map((f) => (
@@ -167,8 +175,8 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                     </Td>
                     <Td>
                       <Badge tone={enrollmentTone[e.status]}>{t(`enrollment.${e.status}`)}</Badge>
-                      {e.transferredTo && <div className="text-xs text-slate-500">{t("enr.movedTo", { group: `${e.transferredTo.group.name} #${e.transferredTo.group.code}` })}</div>}
-                      {e.leftReason && <div className="text-xs text-slate-500">{e.leftReason}</div>}
+                      {e.transferredTo && <div className="text-xs text-zinc-500">{t("enr.movedTo", { group: `${e.transferredTo.group.name} #${e.transferredTo.group.code}` })}</div>}
+                      {e.leftReason && <div className="text-xs text-zinc-500">{e.leftReason}</div>}
                       {(e.discountPercent || e.discountAmount || e.priceOverride) && (
                         <div className="text-xs text-emerald-700">
                           {e.priceOverride ? `${formatMoney(e.priceOverride)} ` : ""}
@@ -180,9 +188,9 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                     </Td>
                     <Td className="whitespace-nowrap text-xs">
                       {formatDate(toISODate(e.startDate))} – {e.endDate ? formatDate(toISODate(e.endDate)) : "…"}
-                      <div className="text-slate-400">{e.activatedAt ? `${t("enr.activatedAt")}: ${formatDate(toISODate(e.activatedAt))}` : t("enr.trialUntilActivated")}</div>
+                      <div className="text-zinc-500">{e.activatedAt ? `${t("enr.activatedAt")}: ${formatDate(toISODate(e.activatedAt))}` : t("enr.trialUntilActivated")}</div>
                     </Td>
-                    {showMoney && <Td className={cx("whitespace-nowrap text-right font-medium", (eb?.debt ?? 0) > 0 ? "text-rose-600" : "text-slate-400")}>{formatMoney(eb?.debt ?? 0)}<div className="text-xs font-normal text-slate-400">{formatMoney(eb?.paid ?? 0)} / {formatMoney(eb?.charged ?? 0)}</div></Td>}
+                    {showMoney && <Td className={cx("whitespace-nowrap text-right font-medium", (eb?.debt ?? 0) > 0 ? "text-red-600" : "text-zinc-500")}>{formatMoney(eb?.debt ?? 0)}<div className="text-xs font-normal text-zinc-500">{formatMoney(eb?.paid ?? 0)} / {formatMoney(eb?.charged ?? 0)}</div></Td>}
                     <Td><EnrollmentActions ctx={ctx} e={e} groups={groups} /></Td>
                   </Tr>
                 );
@@ -202,7 +210,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                   <Td className="text-sm">{u.description}</Td>
                   <Td className="whitespace-nowrap text-right">{formatMoney(u.charged)}</Td>
                   <Td className="whitespace-nowrap text-right text-emerald-700">{formatMoney(u.paid)}</Td>
-                  <Td className={cx("whitespace-nowrap text-right font-medium", u.due > 0 ? "text-rose-600" : "text-slate-400")}>{u.due > 0 ? formatMoney(u.due) : `✓ ${t("students.unitPaid")}`}</Td>
+                  <Td className={cx("whitespace-nowrap text-right font-medium", u.due > 0 ? "text-red-600" : "text-zinc-500")}>{u.due > 0 ? formatMoney(u.due) : `✓ ${t("students.unitPaid")}`}</Td>
                 </Tr>
               ))}
             </tbody>
@@ -222,7 +230,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                     <Td className="whitespace-nowrap text-xs"><Link href={`/lessons/${a.lesson.id}`} className="hover:text-accent">{formatDate(toISODate(a.lesson.date))} {a.lesson.startTime}</Link></Td>
                     <Td className="text-xs">{a.lesson.group.name}</Td>
                     <Td><Badge tone={attendanceTone[a.status]}>{attendanceMark[a.status]} {t(`attendance.${a.status}`)}</Badge></Td>
-                    <Td className="text-right text-xs">{a.grade ?? ""}{a.comment && <span className="ml-1 text-slate-500">{a.comment}</span>}</Td>
+                    <Td className="text-right text-xs">{a.grade ?? ""}{a.comment && <span className="ml-1 text-zinc-500">{a.comment}</span>}</Td>
                   </Tr>
                 ))}
               </tbody>
@@ -233,11 +241,11 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           {events.length === 0 ? (
             <EmptyState>{t("common.empty")}</EmptyState>
           ) : (
-            <ul className="divide-y divide-slate-100 text-sm">
+            <ul className="divide-y divide-zinc-100 text-sm">
               {events.map((ev) => (
                 <li key={ev.id} className="flex justify-between gap-3 px-4 py-2">
-                  <span><code className="text-xs text-slate-600">{ev.entity}.{ev.action}</code></span>
-                  <span className="whitespace-nowrap text-xs text-slate-500">{formatDateTime(ev.createdAt)} · {ev.userId ? users.get(ev.userId) : t("audit.system")}</span>
+                  <span className="text-zinc-700">{(() => { const k = `hist.${ev.action}` as DictKey; const label = t(k); return label === k ? `${ev.entity} · ${ev.action}` : label; })()}</span>
+                  <span className="whitespace-nowrap text-xs text-zinc-500">{formatDateTime(ev.createdAt)} · {ev.userId ? users.get(ev.userId) : t("audit.system")}</span>
                 </li>
               ))}
             </ul>
@@ -247,7 +255,8 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
 
       {showMoney && (
         <Card className="mt-4" pad={false} title={t("students.ledger")}>
-          <LedgerTable ctx={ctx} rows={ledger.filter((l) => !l.studentId || l.studentId === id)} />
+          {hasSiblings && <p className="border-b border-zinc-100 px-4 py-2 text-xs text-zinc-500">{t("students.ledgerHint")}</p>}
+          <LedgerTable ctx={ctx} rows={hasSiblings ? ledger.filter((l) => l.studentId === id) : ledger} showBalance={!hasSiblings} />
         </Card>
       )}
     </>

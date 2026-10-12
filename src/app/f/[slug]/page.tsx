@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { hexToRgbTriplet } from "@/lib/color";
+import { accentVars } from "@/lib/color";
 import { isLocale, makeT } from "@/lib/i18n";
 import { PublicLeadForm } from "./form";
 
@@ -15,7 +15,7 @@ export default async function PublicLeadPage({ params, searchParams }: { params:
   const t = makeT(lang);
   const utm = Object.fromEntries(Object.entries(sp).filter(([k, v]) => k.startsWith("utm_") && v)) as Record<string, string>;
   return (
-    <main style={{ ["--accent" as string]: hexToRgbTriplet(center.accentColor) }} className="flex min-h-screen items-start justify-center px-4 py-10 sm:items-center">
+    <main style={accentVars(center.accentColor) as React.CSSProperties} className="flex min-h-screen items-start justify-center px-4 py-10 sm:items-center">
       <div className="w-full max-w-md">
         <div className="mb-5 text-center">
           {center.logoUrl ? (
@@ -25,9 +25,9 @@ export default async function PublicLeadPage({ params, searchParams }: { params:
             <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-accent text-xl font-bold text-accent-fg">{center.name.slice(0, 1)}</div>
           )}
           <h1 className="text-xl font-semibold">{center.name}</h1>
-          <p className="mt-1 text-sm text-slate-500">{t("leads.formHint")}</p>
+          <p className="mt-1 text-sm text-zinc-500">{t("leads.formHint")}</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 font-medium">{t("leads.formTitle")}</h2>
           <PublicLeadForm
             slug={slug}
@@ -38,8 +38,8 @@ export default async function PublicLeadPage({ params, searchParams }: { params:
           />
         </div>
         <div className="mt-3 flex justify-center gap-3 text-sm">
-          <a href={`?${new URLSearchParams({ ...utm, lang: "uz" })}`} className={lang === "uz" ? "font-semibold" : "text-slate-500"}>O&apos;zbekcha</a>
-          <a href={`?${new URLSearchParams({ ...utm, lang: "ru" })}`} className={lang === "ru" ? "font-semibold" : "text-slate-500"}>Русский</a>
+          <a href={`?${new URLSearchParams({ ...utm, lang: "uz" })}`} className={lang === "uz" ? "font-semibold" : "text-zinc-500"}>O&apos;zbekcha</a>
+          <a href={`?${new URLSearchParams({ ...utm, lang: "ru" })}`} className={lang === "ru" ? "font-semibold" : "text-zinc-500"}>Русский</a>
         </div>
       </div>
     </main>

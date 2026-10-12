@@ -18,10 +18,10 @@ export default async function TeacherLesson({ params }: { params: Promise<{ id: 
   const date = toISODate(lesson.date);
   return (
     <div className="space-y-4">
-      <Link href="/t" className="text-sm text-slate-500">← {t("t.today")}</Link>
+      <Link href="/t" className="text-sm text-zinc-500">← {t("t.today")}</Link>
       <div>
-        <h1 className="text-lg font-semibold">{lesson.group.name} <span className="text-slate-400">#{lesson.group.code}</span></h1>
-        <div className="flex items-center gap-2 text-sm text-slate-500">
+        <h1 className="text-lg font-semibold">{lesson.group.name} <span className="text-zinc-500">#{lesson.group.code}</span></h1>
+        <div className="flex items-center gap-2 text-sm text-zinc-500">
           {formatDate(date)} · {lesson.startTime}–{lesson.endTime}{lesson.room ? ` · ${lesson.room.name}` : ""}
           <Badge tone={lesson.status === "HELD" ? "green" : lesson.status === "CANCELLED" ? "red" : "gray"}>{t(`lesson.${lesson.status}`)}</Badge>
         </div>
@@ -34,6 +34,7 @@ export default async function TeacherLesson({ params }: { params: Promise<{ id: 
         maxGrade={ctx.settings.gradeScale === "100" ? 100 : 5}
         topic={lesson.topic}
         disabled={lesson.status === "CANCELLED" || date > todayISO()}
+        stickyClass="bottom-[76px]"
       />
     </div>
   );

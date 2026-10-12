@@ -58,7 +58,7 @@ export async function StudentForm({ ctx, student, prefill }: { ctx: Ctx; student
               </Select>
             </Field>
           </FormGrid>
-          <p className="mt-2 text-xs text-slate-500">{t("students.siblingHint")}</p>
+          <p className="mt-2 text-xs text-zinc-500">{t("students.siblingHint")}</p>
         </Card>
       )}
       {!student && groups.length > 0 && (

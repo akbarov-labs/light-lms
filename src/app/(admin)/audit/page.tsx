@@ -45,22 +45,22 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <PageHeader title={t("nav.audit")} subtitle={total} actions={ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/audit?${qs}`}>{t("common.export")}</LinkButton>} />
-      <form className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-6">
-        <Select name="entity" defaultValue={sp.entity ?? ""}>
+      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
+        <Select name="entity" aria-label={t("audit.entity")} defaultValue={sp.entity ?? ""}>
           <option value="">{t("audit.entity")}: {t("common.all")}</option>
           {ENTITIES.map((e) => <option key={e} value={e}>{e}</option>)}
         </Select>
-        <Select name="userId" defaultValue={sp.userId ?? ""}>
+        <Select name="userId" aria-label={t("audit.user")} defaultValue={sp.userId ?? ""}>
           <option value="">{t("audit.user")}: {t("common.all")}</option>
           <option value="system">{t("audit.system")}</option>
           {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </Select>
-        <Input name="action" defaultValue={sp.action} placeholder={t("audit.action")} />
-        <Input type="date" name="from" defaultValue={sp.from} />
-        <Input type="date" name="to" defaultValue={sp.to} />
+        <Input name="action" defaultValue={sp.action} placeholder={t("audit.action")} aria-label={t("audit.action")} />
+        <Input type="date" aria-label={t("common.from")} name="from" defaultValue={sp.from} />
+        <Input type="date" aria-label={t("common.to")} name="to" defaultValue={sp.to} />
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1 text-xs"><input type="checkbox" name="sync" value="1" defaultChecked={!!sp.sync} /> sync</label>
-          <button className="ml-auto rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white">{t("common.filter")}</button>
+          <button className="ml-auto h-9 rounded-lg bg-zinc-900 px-3.5 text-sm font-medium text-white hover:bg-zinc-800">{t("common.filter")}</button>
         </div>
       </form>
       <Card pad={false}>
@@ -76,7 +76,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
                     <Td className="text-xs">{l.userId ? names.get(l.userId) : t("audit.system")}</Td>
                     <Td className="text-xs">{href ? <Link href={href} className="text-accent">{l.entity}</Link> : l.entity}</Td>
                     <Td className="text-xs font-medium">{l.action}</Td>
-                    <Td className="max-w-xl break-all font-mono text-[11px] text-slate-500">
+                    <Td className="max-w-xl break-all font-mono text-[11px] text-zinc-500">
                       {l.before !== null && <div>− {short(l.before)}</div>}
                       {l.after !== null && <div>+ {short(l.after)}</div>}
                     </Td>

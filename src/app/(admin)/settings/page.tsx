@@ -59,15 +59,15 @@ export default async function CenterSettings() {
         </div>
       </Card>
       <Card title={t("settings.payme")}>
-        <p className="mb-3 text-sm text-slate-500">{t("settings.paymeHint")}</p>
+        <p className="mb-3 text-sm text-zinc-500">{t("settings.paymeHint")}</p>
         <FormGrid cols={3}>
           <Field label={t("settings.paymeMerchantId")}><Input name="paymeMerchantId" defaultValue={c.paymeMerchantId ?? ""} autoComplete="off" /></Field>
           <Field label={t("settings.paymeKey")} hint={c.paymeKey ? "••••••  (−  = o'chirish)" : undefined}><Input name="paymeKey" type="password" autoComplete="new-password" placeholder={c.paymeKey ? "••••••" : ""} /></Field>
           <div className="pt-6"><Checkbox name="paymeTestMode" label={t("settings.paymeTestMode")} defaultChecked={c.paymeTestMode} /></div>
         </FormGrid>
-        <p className="mt-3 text-xs text-slate-500">{t("settings.paymeEndpoint")}: <code className="rounded bg-slate-100 px-1">{appUrl}/api/payme</code></p>
+        <p className="mt-3 text-xs text-zinc-500">{t("settings.paymeEndpoint")}: <code className="rounded bg-zinc-100 px-1">{appUrl}/api/payme</code></p>
       </Card>
-      <div className="flex justify-end"><SubmitButton>{t("common.save")}</SubmitButton></div>
+      <div className="sticky bottom-4 z-10 flex justify-end rounded-xl border border-line bg-white/95 p-2 shadow-pop backdrop-blur"><SubmitButton>{t("common.save")}</SubmitButton></div>
     </ActionForm>
   );
 }

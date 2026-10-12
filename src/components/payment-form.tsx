@@ -1,33 +1,36 @@
 import type { Ctx } from "@/lib/ctx";
 import { todayISO } from "@/lib/dates";
-import { Field, FormGrid, Input, Select } from "./fields";
-import { ActionForm, SubmitButton } from "./client";
-import { takePaymentAction } from "@/app/(admin)/payments/actions";
+import { PaymentFormClient, type PayOption } from "./payment-form-client";
 
-/** Take-payment form for a family (optionally pointed at one of its enrollments). */
-export function PaymentForm({ ctx, familyId, enrollments, defaultAmount, studentId }: { ctx: Ctx; familyId: string; enrollments: { id: string; label: string }[]; defaultAmount?: number; studentId?: string }) {
+/** Take-payment form for a family; when opened from a student, that student's group and debt come first. */
+export function PaymentForm({ ctx, familyId, familyName, options, familyDebt, studentId }: { ctx: Ctx; familyId: string; familyName: string; options: (PayOption & { studentId: string })[]; familyDebt: number; studentId?: string }) {
   const { t } = ctx;
+  const mine = studentId ? options.filter((o) => o.studentId === studentId) : options;
+  const preferred = mine.find((o) => o.debt > 0) ?? (studentId ? mine[0] : undefined);
   return (
-    <ActionForm action={takePaymentAction} className="space-y-3">
-      <input type="hidden" name="familyId" value={familyId} />
-      {studentId && <input type="hidden" name="studentId" value={studentId} />}
-      <FormGrid>
-        <Field label={t("common.amount")}><Input name="amount" inputMode="numeric" required defaultValue={defaultAmount && defaultAmount > 0 ? defaultAmount : ""} placeholder="600 000" autoFocus /></Field>
-        <Field label={t("common.method")}>
-          <Select name="method" defaultValue="CASH">
-            {(["CASH", "CARD", "TRANSFER"] as const).map((m) => <option key={m} value={m}>{t(`method.${m}`)}</option>)}
-          </Select>
-        </Field>
-        <Field label={t("common.date")}><Input type="date" name="date" defaultValue={todayISO()} required /></Field>
-        <Field label={t("pay.forGroup")}>
-          <Select name="enrollmentId" defaultValue="">
-            <option value="">{t("pay.anyGroup")}</option>
-            {enrollments.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
-          </Select>
-        </Field>
-      </FormGrid>
-      <Field label={t("common.note")}><Input name="note" /></Field>
-      <SubmitButton>{t("students.takePayment")}</SubmitButton>
-    </ActionForm>
+    <PaymentFormClient
+      familyId={familyId}
+      studentId={studentId}
+      options={options}
+      defaultOption={preferred?.id ?? ""}
+      familyDebt={familyDebt}
+      familyWho={familyName}
+      today={todayISO()}
+      labels={{
+        amount: t("common.amount"),
+        method: t("common.method"),
+        date: t("common.date"),
+        forGroup: t("pay.forGroup"),
+        anyGroup: t("pay.anyGroup"),
+        note: t("common.note"),
+        continue: t("pay.continue"),
+        confirm: t("pay.confirm"),
+        edit: t("pay.edit"),
+        confirmTitle: t("pay.confirmTitle"),
+        debtNow: t("pay.debtNow"),
+        family: t("pay.family"),
+        methods: { CASH: t("method.CASH"), CARD: t("method.CARD"), TRANSFER: t("method.TRANSFER") },
+      }}
+    />
   );
 }

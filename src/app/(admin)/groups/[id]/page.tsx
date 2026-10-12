@@ -7,7 +7,7 @@ import { formatMoney } from "@/lib/money";
 import { attendanceMark, attendanceTone, enrollmentTone, fullName, groupTone, lessonTone, slotSummary } from "@/lib/format";
 import { allocationsFor } from "@/lib/services/wallet";
 import { Badge, Card, EmptyState, KV, LinkButton, PageHeader, Table, Td, Th, Tr, cx } from "@/components/ui";
-import { ActionForm, Modal, SubmitButton } from "@/components/client";
+import { ActionMenu, Modal, ModalForm, SubmitButton } from "@/components/client";
 import { EnrollForm, EnrollmentActions } from "../../enrollments/ui";
 import { setGroupStatusAction } from "../actions";
 
@@ -55,30 +55,58 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
     <>
       <PageHeader
         back={{ href: "/groups", label: t("nav.groups") }}
-        title={<>{group.name} <span className="text-slate-400">#{group.code}</span></>}
+        title={<>{group.name} <span className="text-zinc-500">#{group.code}</span></>}
         subtitle={<Badge tone={groupTone[group.status]}>{t(`group.${group.status}`)}</Badge>}
         actions={
           ctx.can("groups.edit") && (
             <>
               <LinkButton variant="secondary" href={`/groups/${id}/edit`}>{t("common.edit")}</LinkButton>
-              {(ctx.can("finance.view") || ctx.can("settings")) && !ctx.branchIds && <LinkButton variant="ghost" href={`/audit?entity=Group&entityId=${id}`}>{t("students.history")}</LinkButton>}
-              {group.status === "ACTIVE" || group.status === "PLANNED" ? (
-                <ActionForm action={setGroupStatusAction}>
-                  <input type="hidden" name="id" value={id} />
-                  <SubmitButton variant="ghost" name="status" value="FINISHED" confirm={t("common.confirm")}>{t("groups.finish")}</SubmitButton>
-                </ActionForm>
-              ) : (
-                <ActionForm action={setGroupStatusAction}>
-                  <input type="hidden" name="id" value={id} />
-                  <SubmitButton variant="ghost" name="status" value="ACTIVE">{t("common.restore")}</SubmitButton>
-                </ActionForm>
-              )}
-              {ctx.can("archive") && group.status !== "ARCHIVED" && (
-                <ActionForm action={setGroupStatusAction}>
-                  <input type="hidden" name="id" value={id} />
-                  <SubmitButton variant="ghost" name="status" value="ARCHIVED" confirm={t("common.confirm")}>{t("common.archive")}</SubmitButton>
-                </ActionForm>
-              )}
+              <ActionMenu
+                label={t("shell.more")}
+                items={[
+                  ...((ctx.can("finance.view") || ctx.can("settings")) && !ctx.branchIds
+                    ? [{ key: "history", label: t("students.history"), href: `/audit?entity=Group&entityId=${id}` }]
+                    : []),
+                  group.status === "ACTIVE" || group.status === "PLANNED"
+                    ? {
+                        key: "finish",
+                        label: t("groups.finish"),
+                        content: (
+                          <ModalForm action={setGroupStatusAction} className="space-y-4">
+                            <input type="hidden" name="id" value={id} />
+                            <p className="text-sm text-zinc-600">{t("groups.finishHint")}</p>
+                            <SubmitButton name="status" value="FINISHED">{t("groups.finish")}</SubmitButton>
+                          </ModalForm>
+                        ),
+                      }
+                    : {
+                        key: "restore",
+                        label: t("common.restore"),
+                        content: (
+                          <ModalForm action={setGroupStatusAction} className="space-y-4">
+                            <input type="hidden" name="id" value={id} />
+                            <SubmitButton name="status" value="ACTIVE">{t("common.restore")}</SubmitButton>
+                          </ModalForm>
+                        ),
+                      },
+                  ...(ctx.can("archive") && group.status !== "ARCHIVED"
+                    ? [
+                        {
+                          key: "archive",
+                          label: t("common.archive"),
+                          danger: true,
+                          content: (
+                            <ModalForm action={setGroupStatusAction} className="space-y-4">
+                              <input type="hidden" name="id" value={id} />
+                              <p className="text-sm text-zinc-600">{t("groups.archiveHint")}</p>
+                              <SubmitButton variant="danger" name="status" value="ARCHIVED">{t("common.archive")}</SubmitButton>
+                            </ModalForm>
+                          ),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
             </>
           )
         }
@@ -122,17 +150,17 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
                 const debt = allocs.get(e.student.familyId)?.enrollments.get(e.id)?.debt ?? 0;
                 return (
                   <Tr key={e.id} className={e.endDate ? "opacity-60" : ""}>
-                    <Td><Link href={`/students/${e.student.id}`} className="font-medium text-slate-900 hover:text-accent">{fullName(e.student)}</Link></Td>
+                    <Td><Link href={`/students/${e.student.id}`} className="font-medium text-zinc-900 hover:text-accent">{fullName(e.student)}</Link></Td>
                     <Td>
                       <Badge tone={enrollmentTone[e.status]}>{t(`enrollment.${e.status}`)}</Badge>
-                      {e.transferredTo && <span className="ml-1 text-xs text-slate-500">{t("enr.movedTo", { group: `${e.transferredTo.group.name} #${e.transferredTo.group.code}` })}</span>}
-                      {(e.discountPercent || e.discountAmount) && <span className="ml-1 text-xs text-emerald-600">−{e.discountPercent ? `${e.discountPercent}%` : formatMoney(e.discountAmount)}</span>}
+                      {e.transferredTo && <span className="ml-1 text-xs text-zinc-500">{t("enr.movedTo", { group: `${e.transferredTo.group.name} #${e.transferredTo.group.code}` })}</span>}
+                      {(e.discountPercent || e.discountAmount) && <span className="ml-1 text-xs text-emerald-700">−{e.discountPercent ? `${e.discountPercent}%` : formatMoney(e.discountAmount)}</span>}
                     </Td>
                     <Td className="whitespace-nowrap text-xs">
                       {formatDate(toISODate(e.startDate))} – {e.endDate ? formatDate(toISODate(e.endDate)) : "…"}
-                      {e.activatedAt && <div className="text-slate-400">{t("enr.activatedAt")}: {formatDate(toISODate(e.activatedAt))}</div>}
+                      {e.activatedAt && <div className="text-zinc-500">{t("enr.activatedAt")}: {formatDate(toISODate(e.activatedAt))}</div>}
                     </Td>
-                    <Td className={cx("whitespace-nowrap text-right font-medium", debt > 0 ? "text-rose-600" : "text-slate-400")}>{debt > 0 ? formatMoney(debt) : "0"}</Td>
+                    <Td className={cx("whitespace-nowrap text-right font-medium", debt > 0 ? "text-red-600" : "text-zinc-500")}>{debt > 0 ? formatMoney(debt) : "0"}</Td>
                     <Td><EnrollmentActions ctx={ctx} e={e} groups={otherGroups} /></Td>
                   </Tr>
                 );
@@ -151,7 +179,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
               <tbody>
                 {past.map((l) => (
                   <Tr key={l.id}>
-                    <Td className="whitespace-nowrap"><Link href={`/lessons/${l.id}`} className="font-medium hover:text-accent">{formatDate(toISODate(l.date))}</Link> <span className="text-xs text-slate-500">{l.startTime}</span></Td>
+                    <Td className="whitespace-nowrap"><Link href={`/lessons/${l.id}`} className="font-medium hover:text-accent">{formatDate(toISODate(l.date))}</Link> <span className="text-xs text-zinc-500">{l.startTime}</span></Td>
                     <Td className="text-xs">{l.teacherId !== group.teacherId ? <span className="text-amber-700">{l.teacher.name}</span> : null}</Td>
                     <Td>
                       {l.status === "SCHEDULED" && toISODate(l.date) <= today ? (
@@ -160,7 +188,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
                         <Badge tone={lessonTone[l.status]}>{t(`lesson.${l.status}`)}</Badge>
                       )}
                     </Td>
-                    <Td className="text-right text-xs text-slate-500">{l.attendance.length > 0 && `${l.attendance.filter((a) => a.status === "PRESENT" || a.status === "LATE").length}/${l.attendance.length}`}</Td>
+                    <Td className="text-right text-xs text-zinc-500">{l.attendance.length > 0 && `${l.attendance.filter((a) => a.status === "PRESENT" || a.status === "LATE").length}/${l.attendance.length}`}</Td>
                   </Tr>
                 ))}
               </tbody>
@@ -175,7 +203,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
               <tbody>
                 {upcoming.map((l) => (
                   <Tr key={l.id}>
-                    <Td className="whitespace-nowrap"><Link href={`/lessons/${l.id}`} className="font-medium hover:text-accent">{formatDate(toISODate(l.date))}</Link> <span className="text-xs text-slate-500">{t(`common.weekday.${new Date(l.date).getUTCDay() || 7}` as "common.weekday.1")} {l.startTime}–{l.endTime}</span></Td>
+                    <Td className="whitespace-nowrap"><Link href={`/lessons/${l.id}`} className="font-medium hover:text-accent">{formatDate(toISODate(l.date))}</Link> <span className="text-xs text-zinc-500">{t(`common.weekday.${new Date(l.date).getUTCDay() || 7}` as "common.weekday.1")} {l.startTime}–{l.endTime}</span></Td>
                     <Td className="text-xs">{l.room?.name}{l.teacherId !== group.teacherId && <span className="ml-1 text-amber-700">{l.teacher.name}</span>}</Td>
                     <Td><Badge tone={lessonTone[l.status]}>{t(`lesson.${l.status}`)}</Badge></Td>
                   </Tr>
@@ -203,7 +231,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
                     const a = l.attendance.find((x) => x.studentId === e.studentId);
                     return (
                       <Td key={l.id} className="text-center">
-                        {a ? <Badge tone={attendanceTone[a.status]}>{attendanceMark[a.status]}{a.grade !== null ? ` ${a.grade}` : ""}</Badge> : <span className="text-slate-300">·</span>}
+                        {a ? <Badge tone={attendanceTone[a.status]}>{attendanceMark[a.status]}{a.grade !== null ? ` ${a.grade}` : ""}</Badge> : <span className="text-zinc-300">·</span>}
                       </Td>
                     );
                   })}

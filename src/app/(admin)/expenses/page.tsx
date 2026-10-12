@@ -52,16 +52,16 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
           </>
         }
       />
-      <form className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Input type="date" name="from" defaultValue={sp.from ?? m.start} />
-        <Input type="date" name="to" defaultValue={sp.to ?? m.end} />
-        <Select name="category" defaultValue={sp.category ?? ""}>
+      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
+        <Input type="date" aria-label={t("common.from")} name="from" defaultValue={sp.from ?? m.start} />
+        <Input type="date" aria-label={t("common.to")} name="to" defaultValue={sp.to ?? m.end} />
+        <Select name="category" aria-label={t("expenses.category")} defaultValue={sp.category ?? ""}>
           <option value="">{t("expenses.category")}: {t("common.all")}</option>
           {categories.map((c) => <option key={c} value={c}>{c}</option>)}
         </Select>
-        <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white">{t("common.filter")}</button>
+        <button className="h-9 rounded-lg bg-zinc-900 px-3.5 text-sm font-medium text-white hover:bg-zinc-800">{t("common.filter")}</button>
       </form>
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Stat label={t("common.total")} value={formatMoney(total)} />
         {[...byCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c, v]) => <Stat key={c} label={c} value={formatMoney(v)} />)}
       </div>

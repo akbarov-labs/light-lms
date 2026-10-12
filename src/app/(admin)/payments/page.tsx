@@ -5,8 +5,9 @@ import { db } from "@/lib/db";
 import { formatDate, monthRange, toISODate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { listPayments } from "@/lib/queries/payments";
-import { Badge, Card, EmptyState, LinkButton, PageHeader, Pagination, Stat, Table, Td, Th, Tr, cx } from "@/components/ui";
+import { buttonClass, Badge, Card, EmptyState, LinkButton, PageHeader, Pagination, Stat, Table, Td, Th, Tr, cx } from "@/components/ui";
 import { Input, Select } from "@/components/fields";
+import { QuickPayButton } from "@/components/command-palette";
 
 const PAGE = 50;
 
@@ -22,30 +23,38 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   const qs = new URLSearchParams(Object.entries(sp).filter(([k, v]) => v && k !== "page") as [string, string][]).toString();
   return (
     <>
-      <PageHeader title={t("nav.payments")} actions={ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/payments?${qs}`}>{t("common.export")}</LinkButton>} />
-      <form className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-6">
-        <Input type="date" name="from" defaultValue={sp.from ?? month.start} />
-        <Input type="date" name="to" defaultValue={sp.to ?? month.end} />
-        <Select name="type" defaultValue={sp.type ?? ""}>
+      <PageHeader
+        title={t("nav.payments")}
+        actions={
+          <>
+            {ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/payments?${qs}`}>{t("common.export")}</LinkButton>}
+            {ctx.can("payments.take") && <QuickPayButton label={`+ ${t("students.takePayment")}`} className={buttonClass("primary")} />}
+          </>
+        }
+      />
+      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
+        <Input type="date" aria-label={t("common.from")} name="from" defaultValue={sp.from ?? month.start} />
+        <Input type="date" aria-label={t("common.to")} name="to" defaultValue={sp.to ?? month.end} />
+        <Select name="type" aria-label={t("common.filter")} defaultValue={sp.type ?? ""}>
           <option value="">{t("payments.typeAll")}</option>
           <option value="PAYMENT">{t("payments.onlyPayments")}</option>
           <option value="REFUND">{t("payments.onlyRefunds")}</option>
           <option value="REVERSAL">{t("payments.onlyReversals")}</option>
         </Select>
-        <Select name="method" defaultValue={sp.method ?? ""}>
+        <Select name="method" aria-label={t("common.method")} defaultValue={sp.method ?? ""}>
           <option value="">{t("common.method")}: {t("common.all")}</option>
           {(["CASH", "CARD", "TRANSFER", "PAYME"] as const).map((m) => <option key={m} value={m}>{t(`method.${m}`)}</option>)}
         </Select>
-        <Select name="cashier" defaultValue={sp.cashier ?? ""}>
+        <Select name="cashier" aria-label={t("pay.cashier")} defaultValue={sp.cashier ?? ""}>
           <option value="">{t("payments.cashierAll")}</option>
           {cashiers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
         <div className="flex gap-2">
-          <Input name="q" defaultValue={sp.q} placeholder={t("common.search")} />
-          <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white">{t("common.filter")}</button>
+          <Input name="q" type="search" defaultValue={sp.q} placeholder={t("common.search")} aria-label={t("common.search")} className="sm:!w-64" />
+          <button className="h-9 rounded-lg bg-zinc-900 px-3.5 text-sm font-medium text-white hover:bg-zinc-800">{t("common.filter")}</button>
         </div>
       </form>
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Stat label={t("payments.received")} value={formatMoney(totals.payments)} tone="green" />
         <Stat label={t("payments.onlyRefunds")} value={formatMoney(totals.refunds)} />
         <Stat label={t("payments.onlyReversals")} value={formatMoney(totals.reversals)} />
@@ -65,11 +74,11 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                   <Td className="whitespace-nowrap text-xs">{formatDate(toISODate(r.date))}</Td>
                   <Td className="text-xs">{r.receiptNo ? <Link href={`/r/${r.id}`} className="text-accent hover:underline">{r.receiptNo}</Link> : "—"}</Td>
                   <Td>
-                    <Link href={`/families/${r.family.id}`} className="font-medium text-slate-900 hover:text-accent">{r.student ? `${r.student.lastName} ${r.student.firstName}` : r.family.name}</Link>
-                    <div className="text-xs text-slate-500">{r.type !== "PAYMENT" && <Badge tone={r.type === "REFUND" ? "amber" : "red"}>{t(`ledger.${r.type}`)}</Badge>} {r.description}</div>
+                    <Link href={`/families/${r.family.id}`} className="font-medium text-zinc-900 hover:text-accent">{r.student ? `${r.student.lastName} ${r.student.firstName}` : r.family.name}</Link>
+                    <div className="text-xs text-zinc-500">{r.type !== "PAYMENT" && <Badge tone={r.type === "REFUND" ? "amber" : "red"}>{t(`ledger.${r.type}`)}</Badge>} {r.description}</div>
                   </Td>
                   <Td>{r.method ? t(`method.${r.method}`) : "—"}</Td>
-                  <Td className={cx("whitespace-nowrap text-right font-medium", r.amount < 0 ? "text-rose-600" : "text-emerald-700")}>{formatMoney(r.amount)}</Td>
+                  <Td className={cx("whitespace-nowrap text-right font-medium", r.amount < 0 ? "text-red-600" : "text-emerald-700")}>{formatMoney(r.amount)}</Td>
                   <Td className="text-xs">{r.createdById ? users.get(r.createdById) : "Payme"}</Td>
                 </Tr>
               ))}

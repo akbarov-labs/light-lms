@@ -48,7 +48,7 @@ export default async function LessonPage({ params }: { params: Promise<{ id: str
                   <ModalForm action={cancelLessonAction} className="space-y-3">
                     <input type="hidden" name="lessonId" value={id} />
                     <Field label={t("common.reason")}><Input name="reason" required /></Field>
-                    <p className="text-xs text-slate-500">{t("lessons.cancelHint")}</p>
+                    <p className="text-xs text-zinc-500">{t("lessons.cancelHint")}</p>
                     <SubmitButton variant="danger">{t("lessons.cancel")}</SubmitButton>
                   </ModalForm>
                 </Modal>

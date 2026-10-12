@@ -1,64 +1,129 @@
 import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
+import {
+  BarChart3,
+  BookOpen,
+  CircleAlert,
+  Banknote,
+  LayoutDashboard,
+  Receipt,
+  ScrollText,
+  Settings,
+  Smartphone,
+  Sun,
+  UserPlus,
+  Users,
+  UsersRound,
+  Wallet,
+
+} from "lucide-react";
 import type { Ctx } from "@/lib/ctx";
 import type { DictKey } from "@/lib/i18n";
 import type { Perm } from "@/lib/perms";
 import { db } from "@/lib/db";
-import { hexToRgbTriplet } from "@/lib/color";
-import { logoutAction, setBranchAction, setLangAction } from "@/app/actions";
-import { AutoSubmitSelect, MobileNavToggle } from "./client";
-import { NavLink } from "./nav-link";
+import { accentVars } from "@/lib/color";
+import { setBranchAction } from "@/app/actions";
+import { AutoSubmitSelect, CloseLabelProvider, SavedLabelProvider, Toaster } from "./client";
+import { CommandPalette, QuickPayButton, SearchTrigger } from "./command-palette";
+import { MobileNav, NavLink, UserMenu } from "./nav-link";
+import { buttonClass } from "./ui";
 
 interface NavItem {
   href: string;
   key: DictKey;
-  icon: string;
+  icon: LucideIcon;
   any?: Perm[];
-  staffOnly?: boolean;
   teacherOnly?: boolean;
   unscopedOnly?: boolean;
 }
 
-const NAV: NavItem[] = [
-  { href: "/", key: "nav.dashboard", icon: "◧", any: ["finance.view"] },
-  { href: "/today", key: "nav.today", icon: "☀", staffOnly: true },
-  { href: "/leads", key: "nav.leads", icon: "✦", any: ["leads"] },
-  { href: "/students", key: "nav.students", icon: "☺", staffOnly: true },
-  { href: "/groups", key: "nav.groups", icon: "▦", staffOnly: true },
-  { href: "/courses", key: "nav.courses", icon: "❖", staffOnly: true },
-  { href: "/payments", key: "nav.payments", icon: "₪", any: ["payments.take", "finance.view"] },
-  { href: "/debtors", key: "nav.debtors", icon: "!", any: ["payments.take", "finance.view"] },
-  { href: "/salary", key: "nav.salary", icon: "$", any: ["finance.view"] },
-  { href: "/expenses", key: "nav.expenses", icon: "↧", any: ["finance.view"] },
-  { href: "/reports", key: "nav.reports", icon: "▤", any: ["finance.view"] },
-  { href: "/audit", key: "nav.audit", icon: "≡", any: ["finance.view", "settings"], unscopedOnly: true },
-  { href: "/settings", key: "nav.settings", icon: "⚙", any: ["settings", "staff.manage"] },
-  { href: "/t", key: "nav.teacher", icon: "✎", teacherOnly: true },
+const NAV: { group?: DictKey; items: NavItem[] }[] = [
+  {
+    items: [
+      { href: "/", key: "nav.dashboard", icon: LayoutDashboard, any: ["finance.view"] },
+      { href: "/today", key: "nav.today", icon: Sun },
+    ],
+  },
+  {
+    group: "nav.group.crm",
+    items: [
+      { href: "/leads", key: "nav.leads", icon: UserPlus, any: ["leads"] },
+      { href: "/students", key: "nav.students", icon: Users },
+    ],
+  },
+  {
+    group: "nav.group.study",
+    items: [
+      { href: "/groups", key: "nav.groups", icon: UsersRound },
+      { href: "/courses", key: "nav.courses", icon: BookOpen },
+    ],
+  },
+  {
+    group: "nav.group.money",
+    items: [
+      { href: "/payments", key: "nav.payments", icon: Wallet, any: ["payments.take", "finance.view"] },
+      { href: "/debtors", key: "nav.debtors", icon: CircleAlert, any: ["payments.take", "finance.view"] },
+      { href: "/salary", key: "nav.salary", icon: Banknote, any: ["finance.view"] },
+      { href: "/expenses", key: "nav.expenses", icon: Receipt, any: ["finance.view"] },
+      { href: "/reports", key: "nav.reports", icon: BarChart3, any: ["finance.view"] },
+    ],
+  },
+  {
+    group: "nav.group.system",
+    items: [
+      { href: "/audit", key: "nav.audit", icon: ScrollText, any: ["finance.view", "settings"], unscopedOnly: true },
+      { href: "/settings", key: "nav.settings", icon: Settings, any: ["settings", "staff.manage"] },
+      { href: "/t", key: "nav.teacher", icon: Smartphone, teacherOnly: true },
+    ],
+  },
 ];
 
-export function visibleNav(ctx: Ctx): NavItem[] {
-  return NAV.filter((n) => {
-    if (n.teacherOnly) return ctx.isTeacher;
-    if (ctx.role === "TEACHER") return false;
-    if (n.unscopedOnly && ctx.branchIds) return false;
-    if (n.any) return n.any.some((p) => ctx.can(p));
-    return true;
-  });
+function allowed(ctx: Ctx, n: NavItem): boolean {
+  if (n.teacherOnly) return ctx.isTeacher;
+  if (ctx.role === "TEACHER") return false;
+  if (n.unscopedOnly && ctx.branchIds) return false;
+  if (n.any) return n.any.some((p) => ctx.can(p));
+  return true;
+}
+
+export function visibleNav(ctx: Ctx) {
+  return NAV.map((g) => ({ ...g, items: g.items.filter((n) => allowed(ctx, n)) })).filter((g) => g.items.length > 0);
 }
 
 function Nav({ ctx }: { ctx: Ctx }) {
   return (
-    <nav className="flex flex-col gap-0.5 p-3">
-      <div className="mb-3 px-2">
-        <div className="truncate text-sm font-semibold text-slate-900">{ctx.center.name}</div>
-        <div className="text-xs text-slate-500">{ctx.t("app.name")}</div>
-      </div>
-      {visibleNav(ctx).map((n) => (
-        <NavLink key={n.href} href={n.href}>
-          <span className="w-4 text-center text-slate-400">{n.icon}</span>
-          {ctx.t(n.key)}
-        </NavLink>
+    <nav className="flex flex-col gap-5 px-3 py-4" aria-label={ctx.t("shell.menu")}>
+      {visibleNav(ctx).map((g, gi) => (
+        <div key={gi}>
+          {g.group && <div className="mb-1 px-2.5 text-xs font-medium text-zinc-400">{ctx.t(g.group)}</div>}
+          <div className="flex flex-col gap-0.5">
+            {g.items.map((n) => {
+              const Icon = n.icon;
+              return (
+                <NavLink key={n.href} href={n.href}>
+                  <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                  {ctx.t(n.key)}
+                </NavLink>
+              );
+            })}
+          </div>
+        </div>
       ))}
     </nav>
+  );
+}
+
+function CenterMark({ ctx }: { ctx: Ctx }) {
+  return (
+    <div className="flex items-center gap-2.5 px-5 py-4">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-semibold text-accent-fg" aria-hidden>
+        {ctx.center.name.slice(0, 1)}
+      </span>
+      <div className="min-w-0">
+        <div className="truncate text-sm font-semibold leading-tight text-zinc-950">{ctx.center.name}</div>
+        <div className="truncate text-xs text-zinc-500">{ctx.userName}</div>
+      </div>
+    </div>
   );
 }
 
@@ -69,44 +134,70 @@ export async function AdminShell({ ctx, children }: { ctx: Ctx; children: ReactN
     orderBy: { name: "asc" },
   });
   const { t } = ctx;
+  const pages = visibleNav(ctx).flatMap((g) => g.items.map((n) => ({ href: n.href, label: t(n.key) })));
   return (
-    <div style={{ ["--accent" as string]: hexToRgbTriplet(ctx.center.accentColor) }} className="min-h-screen">
-      <aside className="fixed inset-y-0 left-0 hidden w-60 overflow-y-auto border-r border-slate-200 bg-white lg:block print:hidden">
-        <Nav ctx={ctx} />
-      </aside>
-      <div className="lg:pl-60">
-        <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-slate-200 bg-white/90 px-3 py-2 backdrop-blur sm:px-6 print:hidden">
-          <MobileNavToggle>
-            <Nav ctx={ctx} />
-          </MobileNavToggle>
-          <form action={setBranchAction} className="min-w-0">
-            <AutoSubmitSelect name="branchId" defaultValue={ctx.activeBranchId ?? ""} className="max-w-[11rem] rounded-lg border border-slate-300 bg-white py-1.5 pl-2 pr-7 text-sm" aria-label={t("common.branch")}>
-              {(!ctx.branchIds || ctx.branchIds.length > 1) && <option value="">{t("common.allBranches")}</option>}
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </AutoSubmitSelect>
-          </form>
-          <form action="/students" className="hidden flex-1 sm:block">
-            <input name="q" placeholder={`${t("common.search")}: ${t("nav.students").toLowerCase()}…`} className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-          </form>
-          <div className="ml-auto flex items-center gap-1">
-            <form action={setLangAction} className="flex rounded-lg border border-slate-200 text-xs">
-              {(["uz", "ru"] as const).map((l) => (
-                <button key={l} name="lang" value={l} className={l === ctx.locale ? "rounded-md bg-slate-900 px-2 py-1 font-semibold text-white" : "px-2 py-1 text-slate-500 hover:text-slate-900"}>
-                  {l.toUpperCase()}
-                </button>
-              ))}
-            </form>
-            <span className="hidden text-sm text-slate-600 md:inline">{ctx.userName}</span>
-            <span className="hidden text-xs text-slate-400 md:inline">· {t(`role.${ctx.role}`)}</span>
-            <form action={logoutAction}>
-              <button className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-900">{t("common.logout")}</button>
-            </form>
-          </div>
-        </header>
-        <main className="mx-auto max-w-7xl px-3 py-5 sm:px-6">{children}</main>
-      </div>
+    <div style={accentVars(ctx.center.accentColor) as React.CSSProperties} className="min-h-screen">
+      <SavedLabelProvider value={t("shell.saved")}>
+        <CloseLabelProvider value={t("shell.close")}>
+          <CommandPalette
+            pages={pages}
+            labels={{
+              search: t("shell.search"),
+              payTitle: t("shell.quickPayTitle"),
+              students: t("shell.students"),
+              groups: t("shell.groups"),
+              pages: t("shell.pages"),
+              noResults: t("shell.noResults"),
+              typeMore: t("shell.typeMore"),
+              hint: t("shell.navHint"),
+              debt: t("students.familyDebt").toLowerCase(),
+            }}
+          >
+            <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col overflow-y-auto border-r border-line bg-white lg:flex print:hidden">
+              <CenterMark ctx={ctx} />
+              <Nav ctx={ctx} />
+            </aside>
+            <div className="lg:pl-60">
+              <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line bg-white/90 px-3 backdrop-blur-md sm:gap-3 sm:px-6 print:hidden">
+                <MobileNav label={t("shell.menu")} closeLabel={t("shell.close")}>
+                  <CenterMark ctx={ctx} />
+                  <Nav ctx={ctx} />
+                </MobileNav>
+                <div className="hidden min-w-0 flex-1 sm:block">
+                  <SearchTrigger label={t("shell.search")} />
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                  {ctx.can("payments.take") && (
+                    <QuickPayButton label={`+ ${t("shell.quickPay")}`} className={buttonClass("primary", "sm")} />
+                  )}
+                  {branches.length > 0 && (
+                    <form action={setBranchAction}>
+                      <AutoSubmitSelect
+                        name="branchId"
+                        defaultValue={ctx.activeBranchId ?? ""}
+                        className="h-8 max-w-[10rem] rounded-lg border border-zinc-200 bg-white pl-2.5 pr-7 text-[13px] text-zinc-700 hover:border-zinc-300"
+                        aria-label={t("common.branch")}
+                      >
+                        {(!ctx.branchIds || ctx.branchIds.length > 1) && <option value="">{t("common.allBranches")}</option>}
+                        {branches.map((b) => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </AutoSubmitSelect>
+                    </form>
+                  )}
+                  <UserMenu name={ctx.userName} role={t(`role.${ctx.role}`)} locale={ctx.locale} logoutLabel={t("common.logout")} languageLabel={t("common.language")} accountLabel={t("shell.account")} />
+                </div>
+              </header>
+              <div className="border-b border-line bg-white px-3 py-2 sm:hidden print:hidden">
+                <SearchTrigger label={t("shell.searchShort")} />
+              </div>
+              <main className="mx-auto max-w-[1280px] px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+            </div>
+            <Toaster />
+          </CommandPalette>
+        </CloseLabelProvider>
+      </SavedLabelProvider>
     </div>
   );
 }
+

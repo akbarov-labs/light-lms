@@ -82,10 +82,10 @@ export default async function CoursesPage() {
                 const upcoming = history.find((h) => h.price === c.price && h.from > new Date().toISOString().slice(0, 10));
                 return (
                   <Tr key={c.id} className={c.archivedAt ? "opacity-50" : ""}>
-                    <Td className="font-medium text-slate-900">{c.name}{c.level && <span className="ml-1 text-xs text-slate-500">· {c.level}</span>}</Td>
+                    <Td className="font-medium text-zinc-900">{c.name}{c.level && <span className="ml-1 text-xs text-zinc-500">· {c.level}</span>}</Td>
                     <Td>
                       <Badge tone={c.pricingType === "SUBSCRIPTION" ? "blue" : "violet"}>{t(`pricing.${c.pricingType}`)}</Badge>
-                      <div className="mt-1 text-xs text-slate-500">
+                      <div className="mt-1 text-xs text-zinc-500">
                         {c.pricingType === "SUBSCRIPTION"
                           ? t(`renewal.${c.renewal}`)
                           : `${c.packageLessons === 1 ? t("courses.perLesson") : c.packageLessons ? t("courses.lessonsN", { n: c.packageLessons }) : t("courses.wholeCourse")}${c.installments > 1 ? ` · ${c.installments}×` : ""}`}
@@ -93,7 +93,7 @@ export default async function CoursesPage() {
                     </Td>
                     <Td className="whitespace-nowrap text-right font-medium">
                       {formatMoney(c.price)}
-                      {upcoming && <div className="text-xs font-normal text-amber-600">{t("courses.priceChanged", { date: formatDate(upcoming.from), price: formatMoney(upcoming.price) })}</div>}
+                      {upcoming && <div className="text-xs font-normal text-amber-700">{t("courses.priceChanged", { date: formatDate(upcoming.from), price: formatMoney(upcoming.price) })}</div>}
                     </Td>
                     <Td>{c.lessonMinutes} {t("common.minutes")}{c.lessonsPerWeek ? ` · ${c.lessonsPerWeek}×` : ""}</Td>
                     <Td>{c._count.groups}</Td>
