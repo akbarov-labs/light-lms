@@ -8,6 +8,7 @@ import { parseCsv } from "@/lib/csv-parse";
 import { normalizePhone } from "@/lib/phone";
 import { parseMoney } from "@/lib/money";
 import { fromISODate, monthRange, shiftMonth, todayISO } from "@/lib/dates";
+import { centerUsage } from "@/lib/services/plan-usage";
 
 /** Import students from CSV (HANDOFF §17). One transaction per row so a bad row never blocks the rest. */
 export async function importStudentsAction(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -23,6 +24,8 @@ export async function importStudentsAction(_: ActionState, fd: FormData): Promis
     const nextMonth = monthRange(shiftMonth(todayISO().slice(0, 7), 1)).start;
     const errors: string[] = [];
     let created = 0;
+    // plan limit: each imported row with a group becomes a new active student
+    let seats = (await centerUsage(ctx.centerId)).remaining;
     for (const [i, r] of rows.entries()) {
       const n = i + 1;
       const [lastName, firstName, phoneRaw, parentRaw, codeRaw, balanceRaw] = r;
@@ -45,9 +48,14 @@ export async function importStudentsAction(_: ActionState, fd: FormData): Promis
         errors.push(t("import.row", { n, msg: t("import.balanceNeedsRefund") }));
         continue;
       }
+      if (group && seats <= 0) {
+        errors.push(t("import.row", { n, msg: t("plan.importFull") }));
+        continue;
+      }
       const phone = normalizePhone(phoneRaw);
       const parent = normalizePhone(parentRaw) ?? phone;
       if (dry) {
+        if (group) seats--;
         created++;
         continue;
       }
@@ -83,6 +91,7 @@ export async function importStudentsAction(_: ActionState, fd: FormData): Promis
           await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Student", entityId: s.id, action: "import", after: { row: n, group: code || null, balance } });
         });
         created++;
+        if (group) seats--;
       } catch (e) {
         errors.push(t("import.row", { n, msg: String((e as Error).message).slice(0, 120) }));
       }

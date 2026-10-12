@@ -1,5 +1,8 @@
 // Uzbek (Latin) — default UI language. Every key here must exist in ru.ts (enforced by types).
+import { saasUz } from "./saas";
+
 export const uz = {
+  ...saasUz,
   "app.name": "lms-light",
   "common.save": "Saqlash",
   "common.cancel": "Bekor qilish",

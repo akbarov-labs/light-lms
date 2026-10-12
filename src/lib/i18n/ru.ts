@@ -1,7 +1,9 @@
 import type { DictKey } from "./uz";
+import { saasRu } from "./saas";
 
 // Russian. Types guarantee the same keys as uz.ts.
 export const ru: Record<DictKey, string> = {
+  ...saasRu,
   "app.name": "lms-light",
   "common.save": "Сохранить",
   "common.cancel": "Отмена",

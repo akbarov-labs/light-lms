@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
 import { buildCsp, securityHeaders } from "@/lib/auth/headers";
 
-const PUBLIC = [/^\/login/, /^\/f\//, /^\/pay\//, /^\/api\/payme/, /^\/api\/health/, /^\/_next\//, /^\/favicon/];
+const PUBLIC = [/^\/login/, /^\/signup/, /^\/f\//, /^\/pay\//, /^\/api\/payme/, /^\/api\/health/, /^\/_next\//, /^\/favicon/];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

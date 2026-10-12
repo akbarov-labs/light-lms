@@ -10,6 +10,7 @@ import { enqueue, familyChats } from "@/lib/notify";
 import { msg } from "@/lib/messages";
 import { readSettings } from "@/lib/settings";
 import { advanceLeadsForStudent } from "./leads";
+import { assertSeatFor } from "./plan-usage";
 
 export interface Actor {
   userId: string | null;
@@ -64,6 +65,7 @@ export async function enrollStudent(actor: Actor, input: EnrollInput, branchChec
     const open = await tx.enrollment.findFirst({ where: { studentId: student.id, groupId: group.id, endDate: null } });
     if (open) throw new UserError("error.alreadyEnrolled");
     if (group.capacity && (await openCount(tx, group.id)) >= group.capacity) throw new UserError("error.groupFull", { capacity: group.capacity });
+    if (!input.trial) await assertSeatFor(tx, actor.centerId, student.id);
 
     const e = await tx.enrollment.create({
       data: {
@@ -110,6 +112,7 @@ export async function activateEnrollment(actor: Actor, enrollmentId: string, dat
   const run = async (tx: Tx) => {
     const e = await loadEnrollment(tx, actor, enrollmentId);
     if (e.status !== "TRIAL") return;
+    await assertSeatFor(tx, actor.centerId, e.studentId);
     const picked = date ?? (await nextLessonDate(tx, e.groupId, todayISO())) ?? todayISO();
     const when = picked < toISODate(e.startDate) ? toISODate(e.startDate) : picked;
     const updated = await tx.enrollment.update({ where: { id: e.id }, data: { status: "ACTIVE", activatedAt: fromISODate(when) } });

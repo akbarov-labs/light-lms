@@ -14,9 +14,10 @@ Ishlaydi:
 - To'lovlar, chek, bekor qilish (faqat ruxsat bilan), qaytarish, qarzdorlar + eslatma, oila hamyoni.
 - O'qituvchi oyligi (4 model, bonus/jarima, qulflash, to'landi → xarajat), xarajatlar, hisobotlar, egasi paneli, "Bugun" sahifasi, audit jurnali, CSV eksport (Excel uchun), Excel/CSV import.
 - O'qituvchi telefondan `/t`: bugungi darslar, davomat, oylik. O'zbek/rus tili.
+- SaaS: yangi markaz o'zi ro'yxatdan o'tadi (`/signup`), 4 qadamli sozlash ustasi (filial/xonalar → kurs → guruh → o'qituvchi), tariflar (Bepul ≤30, Start ≤100, Growth ≤300, Pro ≤1000 faol o'quvchi; Sozlamalar → Tarif), platforma admini (`/platform`: barcha markazlar, tarifni o'zgartirish, markazni o'chirish).
 - Telegram bot (token qo'yilsa): raqam bo'yicha ulanish, balans, jadval, davomat, to'lov havolasi, o'qituvchi davomati, kunlik hisobot. Payme Merchant API (kalit qo'yilsa).
 
-Tekshirildi: typecheck, lint, 134 unit test, 21 ta baza testi, `next build`, noldan Docker (`down -v && up --build`), brauzerda asosiy oqimlar (lid → sinov → faollashtirish → to'lov → chek → bekor qilish, ko'chirish, o'qituvchi telefondan davomat, oylikni qulflash → xarajat → foyda, rus tili); mustaqil ko'rib chiqish topgan barcha xatolar tuzatildi va qayta tekshirildi.
+Tekshirildi: typecheck, lint, 160 unit test, 21 ta baza testi, `next build`, noldan Docker (`down -v && up --build`), brauzerda asosiy oqimlar (lid → sinov → faollashtirish → to'lov → chek → bekor qilish, ko'chirish, o'qituvchi telefondan davomat, oylikni qulflash → xarajat → foyda, rus tili); mustaqil ko'rib chiqish topgan barcha xatolar tuzatildi va qayta tekshirildi.
 
 Eslatma: bu Macda 3000-portni boshqa loyiha band qilgan, shuning uchun `.env` da `WEB_PORT=3010` (http://localhost:3010).
 
@@ -24,7 +25,7 @@ Production (VPS) tayyorgarligi: kirish urinishlarini cheklash (raqam + IP, 15 da
 
 Qolgan / v2: Click, Uzum, SMS, baholar va oylik hisobot kartasi, imtihon va sertifikat, ommaviy oferta, Telegram Mini App. Bot haqiqiy token bilan sinalmagan (token yo'q edi); Payme test kassada sinalmagan (faqat testlar bilan). Haqiqiy domen va Let's Encrypt sertifikati sinalmagan (lokal `localhost` sertifikati bilan sinaldi).
 
-**English:** The full MVP runs from a clean clone with `docker compose up --build`. Everything in HANDOFF §5 marked MVP is built: CRM, groups/lessons/attendance, the billing engine (self-healing, idempotent), payments and debts, teacher salaries, expenses, reports, owner dashboard, teacher mobile pages, Telegram bot, Payme endpoint, CSV export/import, audit log, uz/ru. Verified with typecheck, lint, 134 unit + 21 DB integration tests, production build, a clean Docker run and browser walkthroughs; an independent review's findings were fixed. Production readiness: login limiting (per phone + per IP, DB-backed), password reset (admin temporary password; Telegram code for linked staff), sessions revoked on password change, nonce CSP + HSTS + secure cookies, startup refusal of a weak `AUTH_SECRET` over HTTPS, and `docker-compose.prod.yml` with Caddy auto-HTTPS, nightly backups (14 days) with a restore script and log rotation — see [DEPLOY.md](DEPLOY.md). Not verified live: the bot with a real token, Payme against its test cashbox, and a real domain/Let's Encrypt certificate (tested locally with Caddy's localhost certificate). Next (v2): Click, Uzum, SMS, report cards, exams/certificates, public offer, Mini App.
+**English:** The full MVP runs from a clean clone with `docker compose up --build`. Everything in HANDOFF §5 marked MVP is built: CRM, groups/lessons/attendance, the billing engine (self-healing, idempotent), payments and debts, teacher salaries, expenses, reports, owner dashboard, teacher mobile pages, Telegram bot, Payme endpoint, CSV export/import, audit log, uz/ru. SaaS onboarding: self-serve signup at `/signup`, a skippable 4-step setup wizard, plan limits on active students (Settings → Plan) and a platform admin area at `/platform` (phones in `PLATFORM_ADMIN_PHONES`). Verified with typecheck, lint, 160 unit + 21 DB integration tests, production build, a clean Docker run and browser walkthroughs; an independent review's findings were fixed. Production readiness: login limiting (per phone + per IP, DB-backed), password reset (admin temporary password; Telegram code for linked staff), sessions revoked on password change, nonce CSP + HSTS + secure cookies, startup refusal of a weak `AUTH_SECRET` over HTTPS, and `docker-compose.prod.yml` with Caddy auto-HTTPS, nightly backups (14 days) with a restore script and log rotation — see [DEPLOY.md](DEPLOY.md). Not verified live: the bot with a real token, Payme against its test cashbox, and a real domain/Let's Encrypt certificate (tested locally with Caddy's localhost certificate). Next (v2): Click, Uzum, SMS, report cards, exams/certificates, public offer, Mini App.
 <!-- STATUS:END -->
 
 ## Ishga tushirish / Run
@@ -66,6 +67,12 @@ Ochiq lid formasi: http://localhost:3000/f/demo
 
 Sozlamalar → Payme: Merchant ID va kalit. Payme kabinetiga endpoint: `<APP_URL>/api/payme`. Kalit bo'lmasa to'lov tugmalari ko'rinmaydi.
 Ota-onaga yuboriladigan havola: `<APP_URL>/pay/<familyId>` → Payme checkout.
+
+### Yangi markaz va platforma admini / Signup and platform admin
+
+- Yangi markaz: http://localhost:3000/signup → markaz, egasi va filial yaratiladi, keyin sozlash ustasi `/setup` ochiladi (istalgan qadamni o'tkazib yuborish mumkin).
+- Tarif limiti faol o'quvchilarga qo'yiladi (sinovdagilar hisobga olinmaydi). Limit to'lsa yangi o'quvchini faollashtirib bo'lmaydi; mavjudlari ishlayveradi. To'lov tizimi hali ulanmagan — tarifni platforma admini qo'lda o'zgartiradi.
+- Platforma admini: `.env` da `PLATFORM_ADMIN_PHONES=998901234567` (vergul bilan bir nechta). Shu raqam bilan kirgan xodimda menyuda "Platforma" (`/platform`) paydo bo'ladi.
 
 ## Ishlab chiqish / Development
 

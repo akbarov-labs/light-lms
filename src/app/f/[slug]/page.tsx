@@ -10,7 +10,7 @@ export default async function PublicLeadPage({ params, searchParams }: { params:
   const { slug } = await params;
   const sp = await searchParams;
   const center = await db.center.findUnique({ where: { slug }, include: { courses: { where: { archivedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } } } });
-  if (!center) notFound();
+  if (!center || center.disabledAt) notFound();
   const lang = isLocale(sp.lang) ? sp.lang : isLocale(center.locale) ? center.locale : "uz";
   const t = makeT(lang);
   const utm = Object.fromEntries(Object.entries(sp).filter(([k, v]) => k.startsWith("utm_") && v)) as Record<string, string>;

@@ -66,6 +66,8 @@ export async function seedDemo(_client?: PrismaClient) {
       phone: "998712000000",
       accentColor: "#2563eb",
       settings: { trialLessons: 1, reminderDaysBefore: 3 },
+      plan: "PRO",
+      onboarding: { completedAt: new Date().toISOString() },
     },
   });
   const chilonzor = await db.branch.create({ data: { centerId: center.id, name: "Chilonzor", address: "Chilonzor 9-kvartal, 12-uy", phone: "998712000001" } });

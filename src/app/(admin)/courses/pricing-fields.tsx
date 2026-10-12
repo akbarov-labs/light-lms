@@ -4,15 +4,16 @@ import { useState } from "react";
 
 type Labels = Record<"pricingType" | "SUBSCRIPTION" | "PACKAGE" | "renewal" | "CALENDAR" | "GROUP_START" | "STUDENT_START" | "pricePerMonth" | "pricePackage" | "packageLessons" | "packageLessonsHint" | "installments" | "priceFrom" | "priceFromHint", string>;
 
-const input = "block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20";
-const label = "mb-1 block text-xs font-medium text-zinc-600";
+const input =
+  "block h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 transition-[border-color,box-shadow] hover:border-zinc-300 focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/15 sm:text-sm";
+const label = "mb-1.5 block text-[13px] font-medium text-zinc-700";
 
 export function PricingFields({ l, initial }: { l: Labels; initial?: { pricingType: string; price: number; renewal: string; packageLessons: number | null; installments: number; isEdit: boolean } }) {
   const [type, setType] = useState(initial?.pricingType ?? "SUBSCRIPTION");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
   const priceChanged = initial?.isEdit && price.replace(/\D/g, "") !== String(initial.price);
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
       <label className="block">
         <span className={label}>{l.pricingType}</span>
         <select name="pricingType" className={input} value={type} onChange={(e) => setType(e.target.value)}>
@@ -28,7 +29,7 @@ export function PricingFields({ l, initial }: { l: Labels; initial?: { pricingTy
         <label className="block sm:col-span-2">
           <span className={label}>{l.priceFrom}</span>
           <input type="date" name="priceFrom" className={input} />
-          <span className="mt-1 block text-xs text-zinc-500">{l.priceFromHint}</span>
+          <span className="mt-1.5 block text-xs text-zinc-500">{l.priceFromHint}</span>
         </label>
       )}
       {type === "SUBSCRIPTION" ? (
@@ -45,7 +46,7 @@ export function PricingFields({ l, initial }: { l: Labels; initial?: { pricingTy
           <label className="block">
             <span className={label}>{l.packageLessons}</span>
             <input name="packageLessons" type="number" min={1} className={input} defaultValue={initial?.packageLessons ?? ""} />
-            <span className="mt-1 block text-xs text-zinc-500">{l.packageLessonsHint}</span>
+            <span className="mt-1.5 block text-xs text-zinc-500">{l.packageLessonsHint}</span>
           </label>
           <label className="block">
             <span className={label}>{l.installments}</span>

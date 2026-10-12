@@ -5,6 +5,7 @@ import { allowedBranches, effectivePerms, type Perm, type RoleName } from "./per
 import { makeT, type Locale, type TFn } from "./i18n";
 import { readSettings, type CenterSettings } from "./settings";
 import { UserError } from "./user-error";
+import { isPlatformAdmin } from "./platform";
 
 export interface Ctx {
   userId: string;
@@ -22,6 +23,8 @@ export interface Ctx {
   locale: Locale;
   t: TFn;
   can: (p: Perm) => boolean;
+  /** Listed in PLATFORM_ADMIN_PHONES: may open /platform (all centers). */
+  isPlatformAdmin: boolean;
 }
 
 export { UserError };
@@ -59,6 +62,7 @@ export function buildCtx(user: UserWithCenter, opts: { activeBranchId?: string |
     locale,
     t: makeT(locale),
     can: (p) => perms.has(p),
+    isPlatformAdmin: isPlatformAdmin(user.phone),
   };
 }
 

@@ -16,8 +16,8 @@ export async function submitLeadAction(_: PublicLeadState, fd: FormData): Promis
   const t = makeT(isLocale(lang) ? lang : "uz");
   if (String(fd.get("website") ?? "") !== "") return { ok: true }; // honeypot
   const slug = String(fd.get("slug") ?? "");
-  const center = await db.center.findUnique({ where: { slug }, select: { id: true } });
-  if (!center) return { error: t("leads.notFound") };
+  const center = await db.center.findUnique({ where: { slug }, select: { id: true, disabledAt: true } });
+  if (!center || center.disabledAt) return { error: t("leads.notFound") };
   const name = String(fd.get("name") ?? "").trim().slice(0, 120);
   const phone = normalizePhone(String(fd.get("phone") ?? ""));
   if (!name) return { error: t("error.invalid", { details: t("leads.formName") }) };

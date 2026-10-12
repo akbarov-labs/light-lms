@@ -108,6 +108,13 @@ enum LinkKind {
   STAFF
 }
 
+enum Plan {
+  FREE
+  START
+  GROWTH
+  PRO
+}
+
 enum NotificationStatus {
   PENDING
   SENT
@@ -130,6 +137,13 @@ model Center {
   paymeTestMode      Boolean  @default(true)
   receiptSeq         Int      @default(0)
   groupSeq           Int      @default(0)
+  /// SaaS plan: caps active students (see src/lib/plans.ts). No billing integration yet.
+  plan               Plan     @default(FREE)
+  /// Set by a platform admin: staff can't sign in, public forms are closed. Data is kept.
+  disabledAt         DateTime?
+  disabledReason     String?
+  /// Setup wizard progress: { step, done: { branch, course, group, teacher }, courseId?, groupId?, dismissedAt?, completedAt? }
+  onboarding         Json     @default("{}")
   createdAt          DateTime @default(now())
 
   branches      Branch[]

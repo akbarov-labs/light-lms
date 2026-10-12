@@ -18,6 +18,9 @@ export const RULES = {
   resetRequestPhone: { limit: 3, windowMs: 60 * MIN, resetOnSuccess: false },
   resetRequestIp: { limit: 10, windowMs: 60 * MIN, resetOnSuccess: false },
   resetVerifyIp: { limit: 20, windowMs: 15 * MIN, resetOnSuccess: false },
+  // public "create your center": every attempt counts; a created center is recorded as spent budget too
+  signupIp: { limit: 5, windowMs: 15 * MIN, resetOnSuccess: false },
+  signupCreatedIp: { limit: 3, windowMs: 24 * 60 * MIN, resetOnSuccess: false },
 } satisfies Record<string, Rule>;
 
 export type RuleName = keyof typeof RULES;
@@ -74,6 +77,8 @@ export const attemptKey = {
   resetRequestPhone: (phone: string) => `reset-req:phone:${phone}`,
   resetRequestIp: (ip: string) => `reset-req:ip:${ip}`,
   resetVerifyIp: (ip: string) => `reset-verify:ip:${ip}`,
+  signupIp: (ip: string) => `signup:ip:${ip}`,
+  signupCreatedIp: (ip: string) => `signup-created:ip:${ip}`,
 };
 
 /** In-memory store for tests and scripts. */

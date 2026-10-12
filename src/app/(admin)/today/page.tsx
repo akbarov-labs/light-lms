@@ -8,6 +8,7 @@ import { formatPhone } from "@/lib/phone";
 import { fullName, leadTone, lessonTone } from "@/lib/format";
 import { listDebtors } from "@/lib/queries/debtors";
 import { Badge, Card, EmptyState, LinkButton, PageHeader, Table, Td, Tr } from "@/components/ui";
+import { OwnerNotices } from "@/components/setup-banner";
 
 export default async function TodayPage() {
   const ctx = await requireStaff();
@@ -41,6 +42,7 @@ export default async function TodayPage() {
   return (
     <>
       <PageHeader title={t("nav.today")} subtitle={formatDate(today)} />
+      <OwnerNotices ctx={ctx} />
       <div className="grid gap-4 xl:grid-cols-2 [&>*]:min-w-0">
         {missing.length > 0 && (
           <Card className="border-amber-200 xl:col-span-2" pad={false} title={<span className="text-amber-800">{`${t("today.missingPast")} (${missing.length})`}</span>}>

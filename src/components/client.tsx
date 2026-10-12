@@ -151,7 +151,7 @@ function DialogShell({ d, title, wide, closeLabel, children }: { d: ReturnType<t
       onClick={(e) => {
         if (e.target === d.ref.current) d.close();
       }}
-      className={cx("w-[calc(100%-2rem)] rounded-2xl border border-line p-0 text-left text-zinc-900 shadow-pop", wide ? "max-w-2xl" : "max-w-md")}
+      className={cx("w-[calc(100%-2rem)] whitespace-normal rounded-2xl border border-line p-0 text-left text-zinc-900 shadow-pop", wide ? "max-w-2xl" : "max-w-md")}
     >
       <div className="flex items-center justify-between gap-3 px-5 pb-1 pt-4">
         <h3 id={titleId} className="text-base font-semibold tracking-[-0.01em]">{title}</h3>

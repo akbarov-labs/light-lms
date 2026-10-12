@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   BookOpen,
+  Building2,
   CircleAlert,
   Banknote,
   LayoutDashboard,
@@ -35,6 +36,7 @@ interface NavItem {
   any?: Perm[];
   teacherOnly?: boolean;
   unscopedOnly?: boolean;
+  platformOnly?: boolean;
 }
 
 const NAV: { group?: DictKey; items: NavItem[] }[] = [
@@ -74,11 +76,13 @@ const NAV: { group?: DictKey; items: NavItem[] }[] = [
       { href: "/audit", key: "nav.audit", icon: ScrollText, any: ["finance.view", "settings"], unscopedOnly: true },
       { href: "/settings", key: "nav.settings", icon: Settings, any: ["settings", "staff.manage"] },
       { href: "/t", key: "nav.teacher", icon: Smartphone, teacherOnly: true },
+      { href: "/platform", key: "nav.platform", icon: Building2, platformOnly: true },
     ],
   },
 ];
 
 function allowed(ctx: Ctx, n: NavItem): boolean {
+  if (n.platformOnly) return ctx.isPlatformAdmin;
   if (n.teacherOnly) return ctx.isTeacher;
   if (ctx.role === "TEACHER") return false;
   if (n.unscopedOnly && ctx.branchIds) return false;

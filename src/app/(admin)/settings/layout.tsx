@@ -14,6 +14,7 @@ export default async function SettingsLayout({ children }: { children: ReactNode
           { href: "/settings", label: t("settings.center"), exact: true },
           { href: "/settings/branches", label: t("settings.branches") },
           { href: "/settings/holidays", label: t("settings.holidays") },
+          { href: "/settings/plan", label: t("plan.title") },
         ]
       : []),
     ...(ctx.can("staff.manage") ? [{ href: "/settings/staff", label: t("settings.staff") }] : []),

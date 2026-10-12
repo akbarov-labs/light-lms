@@ -36,7 +36,7 @@ export async function loginAction(_: LoginState, fd: FormData): Promise<LoginSta
   // locked: refuse without checking the password (and without recording, so the lock does not extend itself)
   if (!verdict.allowed) return { error: t("auth.locked", { minutes: retryMinutes(verdict.retryAfterMs) }), phone: rawPhone, at: Date.now() };
 
-  const user = phone ? await db.user.findUnique({ where: { phone } }) : null;
+  const user = phone ? await db.user.findUnique({ where: { phone }, include: { center: { select: { disabledAt: true } } } }) : null;
   // Always run bcrypt so response time does not reveal whether the phone exists.
   const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
   if (!user || !ok) {
@@ -44,6 +44,11 @@ export async function loginAction(_: LoginState, fd: FormData): Promise<LoginSta
     return { error: t("auth.invalid"), phone: rawPhone, at: Date.now() };
   }
   if (user.archivedAt) return { error: t("auth.archived"), at: Date.now() };
+  if (user.center.disabledAt) {
+    // a switched-off center (platform admin) counts as a failed attempt, so the limiter still sees it
+    await recordAttempt(dbAttemptStore, keys, false);
+    return { error: t("auth.centerDisabled"), phone: rawPhone, at: Date.now() };
+  }
   await recordAttempt(dbAttemptStore, keys, true);
 
   await issueSession({ sub: user.id, cid: user.centerId, pwc: user.mustChangePassword });

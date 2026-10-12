@@ -7,6 +7,7 @@ import { formatMoney } from "@/lib/money";
 import { attendanceStats, debtAging, revenue, revenueByMonth, studentStats } from "@/lib/queries/reports";
 import { Card, PageHeader, Stat, Table, Td, Th, Tr } from "@/components/ui";
 import { BarChart } from "@/components/bar-chart";
+import { OwnerNotices } from "@/components/setup-banner";
 
 export default async function Dashboard() {
   const ctx = await requireCtx();
@@ -52,6 +53,7 @@ export default async function Dashboard() {
   return (
     <>
       <PageHeader title={t("nav.dashboard")} subtitle={ctx.center.name} />
+      <OwnerNotices ctx={ctx} />
       <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Stat label={`${t("reports.revenue")} · ${t("reports.thisMonth")}`} value={formatMoney(revNow.total)} hint={`${t("reports.lastMonth")}: ${formatMoney(revPrev.total)}${delta !== null ? ` (${delta > 0 ? "+" : ""}${delta}%)` : ""}`} href="/payments" />
         <Stat label={t("reports.totalDebt")} value={formatMoney(aging.total)} tone="red" hint={t("dash.debtFamilies", { n: aging.families })} href="/debtors" />
