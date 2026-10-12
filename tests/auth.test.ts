@@ -39,11 +39,13 @@ describe("LoginAttempt store", () => {
     expect((await check()).allowed).toBe(true);
   });
 
-  it("purges attempts older than a day", async () => {
-    await db.loginAttempt.create({ data: { key: "login:ip:old", success: false, createdAt: new Date(Date.now() - 2 * 86400_000) } });
+  it("purges attempts older than two days, keeps the 24 h signup window intact", async () => {
+    await db.loginAttempt.create({ data: { key: "login:ip:old", success: false, createdAt: new Date(Date.now() - 3 * 86400_000) } });
+    await db.loginAttempt.create({ data: { key: "signup-created:ip:recent", success: false, createdAt: new Date(Date.now() - 36 * 3600_000) } });
     const r = await purgeOldAttempts();
     expect(r.attempts).toBeGreaterThanOrEqual(1);
     expect(await db.loginAttempt.count({ where: { key: "login:ip:old" } })).toBe(0);
+    expect(await db.loginAttempt.count({ where: { key: "signup-created:ip:recent" } })).toBe(1);
   });
 });
 

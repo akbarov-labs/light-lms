@@ -20,10 +20,10 @@ export const dbAttemptStore: AttemptStore = {
   },
 };
 
-/** Attempts older than this are useless for any rule (longest window is 1 hour). */
+/** Purge attempts after 2 days: the longest window is 24 h (signupCreatedIp), so this leaves a margin. */
 export async function purgeOldAttempts(now: Date = new Date()): Promise<{ attempts: number; resets: number }> {
   const [a, r] = await Promise.all([
-    db.loginAttempt.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 24 * 3600_000) } } }),
+    db.loginAttempt.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 2 * 24 * 3600_000) } } }),
     db.passwordReset.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 7 * 24 * 3600_000) } } }),
   ]);
   return { attempts: a.count, resets: r.count };
