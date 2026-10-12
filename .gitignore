@@ -10,3 +10,4 @@ coverage
 .docker-anon
 .impeccable/review
 .impeccable/live
+backups/

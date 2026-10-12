@@ -1,0 +1,126 @@
+# Production on one VPS: Caddy (automatic HTTPS) → web; Postgres not exposed; nightly backups; rotated logs.
+# Usage (see DEPLOY.md):  cp .env.prod.example .env  → fill it →  docker compose -f docker-compose.prod.yml up -d --build
+name: lms-light-prod
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://lms:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/lms?schema=public
+  AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env (openssl rand -base64 32)}
+  APP_URL: ${APP_URL:-https://${DOMAIN:?set DOMAIN in .env}}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  SEED_DEMO: ${SEED_DEMO:-false}
+  TZ: Asia/Tashkent
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: lms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: lms
+      TZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # no published ports: only the app containers reach the database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lms -d lms"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    shm_size: 256mb
+    restart: unless-stopped
+    logging: *logging
+
+  migrate:
+    build:
+      context: .
+      target: tools
+    environment: *app-env
+    command: ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed-if-empty.ts"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    logging: *logging
+
+  web:
+    build:
+      context: .
+      target: web
+    environment: *app-env
+    # not published: Caddy is the only way in (it also sets X-Forwarded-For for login limiting)
+    expose:
+      - "3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *logging
+
+  worker:
+    build:
+      context: .
+      target: tools
+    environment: *app-env
+    command: ["npx", "tsx", "src/worker/index.ts"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    logging: *logging
+
+  caddy:
+    image: caddy:2.10.0-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+  backup:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: db
+      PGUSER: lms
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGDATABASE: lms
+      TZ: Asia/Tashkent
+      BACKUP_CRON: ${BACKUP_CRON:-30 2 * * *}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./deploy/backup.sh:/usr/local/bin/backup.sh:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    # crond runs backup.sh on schedule (Tashkent time); output goes to the container log
+    command:
+      - 'echo "$$BACKUP_CRON /bin/sh /usr/local/bin/backup.sh > /proc/1/fd/1 2>&1" > /etc/crontabs/root && echo "[backup] schedule: $$BACKUP_CRON ($$TZ), keep $$BACKUP_KEEP_DAYS days" && exec crond -f -l 8'
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

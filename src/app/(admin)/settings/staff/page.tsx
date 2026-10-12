@@ -104,13 +104,14 @@ export default async function StaffPage() {
                                 label: t("settings.resetPassword"),
                                 title: `${t("settings.resetPassword")} · ${u.name}`,
                                 content: (
-                                  <>
+                                  // the dialog lives inside a nowrap/right-aligned cell
+                                  <div className="whitespace-normal text-left">
                                     <p className="mb-4 text-sm text-zinc-600">{t("settings.resetPasswordHint")}</p>
                                     <ActionForm action={resetStaffPasswordAction} quiet>
                                       <input type="hidden" name="id" value={u.id} />
                                       <SubmitButton confirm={t("settings.resetPasswordConfirm")}>{t("settings.resetPassword")}</SubmitButton>
                                     </ActionForm>
-                                  </>
+                                  </div>
                                 ),
                               }]
                             : []),
@@ -120,7 +121,7 @@ export default async function StaffPage() {
                             danger: !u.archivedAt,
                             title: u.name,
                             content: (
-                              <ModalForm action={toggleStaffArchiveAction}>
+                              <ModalForm action={toggleStaffArchiveAction} className="whitespace-normal text-left">
                                 <input type="hidden" name="id" value={u.id} />
                                 <p className="mb-4 text-sm text-zinc-600">{t("common.confirm")}</p>
                                 <SubmitButton variant={u.archivedAt ? "primary" : "danger"}>{u.archivedAt ? t("common.restore") : t("common.archive")}</SubmitButton>

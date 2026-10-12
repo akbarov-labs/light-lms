@@ -17,6 +17,7 @@ import { syncGroup } from "@/lib/billing/sync";
 import { assertBranch, staffInScope, type Ctx } from "@/lib/ctx";
 import { adminResetPassword, BCRYPT_ROUNDS, setPassword } from "@/lib/auth/password";
 import { MIN_PASSWORD } from "@/lib/auth/security";
+import { issueSession } from "@/lib/auth/session-cookie";
 
 // ---------------------------------------------------------------- center
 
@@ -265,6 +266,8 @@ export async function saveStaffAction(_: ActionState, fd: FormData): Promise<Act
       await tx.userBranch.deleteMany({ where: { userId, ...(ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) } });
       if (branches.length) await tx.userBranch.createMany({ data: branches.map((b) => ({ userId, branchId: b.id })), skipDuplicates: true });
     });
+    // own password changed here: other sessions end, this one gets a fresh token
+    if (f.id === ctx.userId && f.password) await issueSession({ sub: ctx.userId, cid: ctx.centerId });
     revalidatePath("/settings/staff");
   });
 }
