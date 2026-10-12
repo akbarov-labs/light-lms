@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatDate, monthRange, toISODate, todayISO } from "@/lib/dates";
@@ -29,7 +30,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
         actions={
           <>
             {ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/expenses?${qs}`}>{t("common.export")}</LinkButton>}
-            <Modal label={`+ ${t("expenses.new")}`} title={t("expenses.new")}>
+            <Modal label={t("expenses.new")} icon={<Plus className="h-4 w-4" aria-hidden />} title={t("expenses.new")}>
               <ModalForm action={addExpenseAction} className="space-y-3">
                 <FormGrid>
                   <Field label={t("expenses.category")}>

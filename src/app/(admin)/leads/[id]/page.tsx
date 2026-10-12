@@ -51,7 +51,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
           <Card>
             <KV
               items={[
-                [t("common.phone"), <a key="p" href={`tel:+${lead.phone}`} className="text-accent">{formatPhone(lead.phone)}</a>],
+                [t("common.phone"), <a key="p" href={`tel:+${lead.phone}`} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{formatPhone(lead.phone)}</a>],
                 [t("common.source"), lead.source ?? "—"],
                 [t("leads.interestedCourse"), lead.course?.name ?? "—"],
                 [t("common.branch"), lead.branch?.name ?? "—"],
@@ -91,7 +91,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               </li>
             ))}
           </ul>
-          {lead.student && <p className="mt-3 text-sm"><Link className="text-accent" href={`/students/${lead.student.id}`}>{fullName(lead.student)} →</Link></p>}
+          {lead.student && <p className="mt-3 text-sm"><Link className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900" href={`/students/${lead.student.id}`}>{fullName(lead.student)}</Link></p>}
         </Card>
       </div>
     </>

@@ -28,7 +28,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
         actions={
           <>
             {ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/payments?${qs}`}>{t("common.export")}</LinkButton>}
-            {ctx.can("payments.take") && <QuickPayButton label={`+ ${t("students.takePayment")}`} className={buttonClass("primary")} />}
+            {ctx.can("payments.take") && <QuickPayButton label={t("students.takePayment")} className={buttonClass("primary")} />}
           </>
         }
       />
@@ -55,7 +55,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
         </div>
       </form>
       <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Stat label={t("payments.received")} value={formatMoney(totals.payments)} tone="green" />
+        <Stat label={t("payments.received")} value={formatMoney(totals.payments)} />
         <Stat label={t("payments.onlyRefunds")} value={formatMoney(totals.refunds)} />
         <Stat label={t("payments.onlyReversals")} value={formatMoney(totals.reversals)} />
         <Stat label={t("payments.net")} value={formatMoney(totals.net)} />
@@ -72,9 +72,9 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
               {rows.map((r) => (
                 <Tr key={r.id} className={r.reversedBy ? "opacity-50" : ""}>
                   <Td className="whitespace-nowrap text-xs">{formatDate(toISODate(r.date))}</Td>
-                  <Td className="text-xs">{r.receiptNo ? <Link href={`/r/${r.id}`} className="text-accent hover:underline">{r.receiptNo}</Link> : "—"}</Td>
+                  <Td className="text-xs">{r.receiptNo ? <Link href={`/r/${r.id}`} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{r.receiptNo}</Link> : "—"}</Td>
                   <Td>
-                    <Link href={`/families/${r.family.id}`} className="font-medium text-zinc-900 hover:text-accent">{r.student ? `${r.student.lastName} ${r.student.firstName}` : r.family.name}</Link>
+                    <Link href={`/families/${r.family.id}`} className="font-medium text-zinc-900 hover:underline hover:decoration-zinc-400">{r.student ? `${r.student.lastName} ${r.student.firstName}` : r.family.name}</Link>
                     <div className="text-xs text-zinc-500">{r.type !== "PAYMENT" && <Badge tone={r.type === "REFUND" ? "amber" : "red"}>{t(`ledger.${r.type}`)}</Badge>} {r.description}</div>
                   </Td>
                   <Td>{r.method ? t(`method.${r.method}`) : "—"}</Td>

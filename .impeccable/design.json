@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-12T08:00:00Z",
+  "title": "Design System: lms-light",
+  "extensions": {
+    "colorMeta": {
+      "accent-default": { "role": "primary", "displayName": "Center Accent", "canonical": "rgb(var(--accent))", "tonalRamp": ["#172554", "#1E3A8A", "#1D4ED8", "#2563EB", "#3B82F6", "#93C5FD", "#BFDBFE", "#EFF6FF"] },
+      "canvas": { "role": "neutral", "displayName": "Canvas", "tonalRamp": ["#09090B", "#18181B", "#3F3F46", "#71717A", "#A1A1AA", "#E4E4E7", "#F4F4F5", "#FAFAFA"] },
+      "line": { "role": "neutral", "displayName": "Hairline" },
+      "ink": { "role": "neutral", "displayName": "Ink" },
+      "text-muted": { "role": "neutral", "displayName": "Muted Text" },
+      "debt": { "role": "semantic", "displayName": "Debt Red", "tonalRamp": ["#450A0A", "#7F1D1D", "#B91C1C", "#DC2626", "#EF4444", "#FCA5A5", "#FECACA", "#FEF2F2"] },
+      "ok": { "role": "semantic", "displayName": "Paid Green", "tonalRamp": ["#022C22", "#064E3B", "#047857", "#059669", "#10B981", "#6EE7B7", "#A7F3D0", "#ECFDF5"] },
+      "warn": { "role": "semantic", "displayName": "Warning Amber", "tonalRamp": ["#451A03", "#78350F", "#B45309", "#D97706", "#F59E0B", "#FCD34D", "#FDE68A", "#FFFBEB"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The one money figure atop a student page and the payment summary." },
+      "headline": { "displayName": "Headline", "purpose": "Page titles; stat values." },
+      "title": { "displayName": "Title", "purpose": "Card headers." },
+      "body": { "displayName": "Body", "purpose": "Table cells, forms, dialogs. 16px inputs on phones." },
+      "label": { "displayName": "Label", "purpose": "Field and stat labels, back links." },
+      "caption": { "displayName": "Caption", "purpose": "Badges, column headers, sub-lines, nav group labels." },
+      "receipt": { "displayName": "Receipt Mono", "purpose": "Printable payment receipt only." }
+    },
+    "shadows": [
+      { "name": "pop", "value": "0 8px 24px -6px rgb(9 9 11 / 0.18), 0 2px 6px -2px rgb(9 9 11 / 0.08)", "purpose": "Dialogs, command palette, row menus, toasts." }
+    ],
+    "motion": [
+      { "name": "toast-in", "value": "220ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Toast entrance: fade plus 8px rise and 0.98 scale." },
+      { "name": "pop-in", "value": "140ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Menus and popovers: fade plus 4px drop." },
+      { "name": "reduced-motion", "value": "1ms", "purpose": "All animation and transition durations under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1536px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one primary action per page header; filled with the center accent.",
+      "html": "<button class=\"ds-btn-primary\">To'lov qabul qilish</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: rgb(var(--accent, 37 99 235)); color: rgb(var(--accent-fg, 255 255 255)); font: 500 14px/1 Geist, ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: filter .15s; } .ds-btn-primary:hover { filter: brightness(.94); } .ds-btn-primary:active { filter: brightness(.9); } .ds-btn-primary:focus-visible { outline: 2px solid rgb(var(--accent, 37 99 235)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Everything that is not the primary action; add actions carry a leading plus icon.",
+      "html": "<button class=\"ds-btn-secondary\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"M12 5v14\"/></svg>Guruhga qo'shish</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 1px solid #E4E4E7; border-radius: 8px; background: #fff; color: #27272A; font: 500 14px/1 Geist, ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background-color .15s, border-color .15s; } .ds-btn-secondary:hover { border-color: #D4D4D8; background: #FAFAFA; } .ds-btn-secondary:focus-visible { outline: 2px solid rgb(var(--accent, 37 99 235)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Tertiary header actions such as archive.",
+      "html": "<button class=\"ds-btn-ghost\">Arxivlash</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: #52525B; font: 500 14px/1 Geist, ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background-color .15s, color .15s; } .ds-btn-ghost:hover { background: #F4F4F5; color: #18181B; } .ds-btn-ghost:focus-visible { outline: 2px solid rgb(var(--accent, 37 99 235)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "36px field; accent border and soft ring on focus.",
+      "html": "<label class=\"ds-field\"><span>Summa</span><input class=\"ds-input\" value=\"500 000\"></label>",
+      "css": ".ds-field { display: block; font-family: Geist, ui-sans-serif, system-ui, sans-serif; } .ds-field span { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 500; color: #3F3F46; } .ds-input { display: block; width: 240px; height: 36px; padding: 0 12px; border: 1px solid #E4E4E7; border-radius: 8px; background: #fff; color: #18181B; font: 400 14px Geist, ui-sans-serif, system-ui, sans-serif; font-variant-numeric: tabular-nums; transition: border-color .15s, box-shadow .15s; } .ds-input:hover { border-color: #D4D4D8; } .ds-input:focus { outline: none; border-color: rgb(var(--accent, 37 99 235)); box-shadow: 0 0 0 3px rgb(var(--accent, 37 99 235) / .15); }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "Pill with a status dot; tones gray, green, red, amber, sky, violet.",
+      "html": "<span class=\"ds-badge ds-badge-green\"><i></i>Faol</span> <span class=\"ds-badge ds-badge-amber\"><i></i>Sinov</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 9999px; font: 500 12px/16px Geist, ui-sans-serif, system-ui, sans-serif; white-space: nowrap; } .ds-badge i { width: 6px; height: 6px; border-radius: 9999px; } .ds-badge-green { background: #ECFDF5; color: #065F46; } .ds-badge-green i { background: #10B981; } .ds-badge-amber { background: #FFFBEB; color: #92400E; } .ds-badge-amber i { background: #F59E0B; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "White surface, 12px radius, hairline border, no shadow; header with title and actions.",
+      "html": "<section class=\"ds-card\"><header><h2>O'quvchilar</h2><button class=\"ds-mini\">+ Qo'shish</button></header><div class=\"ds-card-body\">Ahmedova Yasmina <b>807 800 so'm</b></div></section>",
+      "css": ".ds-card { width: 360px; overflow: hidden; border: 1px solid #E4E4E7; border-radius: 12px; background: #fff; font-family: Geist, ui-sans-serif, system-ui, sans-serif; } .ds-card header { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 16px; border-bottom: 1px solid #F4F4F5; } .ds-card h2 { margin: 0; font-size: 13px; font-weight: 600; color: #18181B; } .ds-mini { height: 32px; padding: 0 10px; border: 1px solid #E4E4E7; border-radius: 8px; background: #fff; font: 500 13px Geist, sans-serif; color: #27272A; } .ds-card-body { display: flex; justify-content: space-between; padding: 16px; font-size: 14px; color: #3F3F46; } .ds-card-body b { font-weight: 400; color: #DC2626; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Sidebar Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "36px item with a line icon; active gets a zinc fill and the accent icon.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item is-active\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/></svg>O'quvchilar</a><a class=\"ds-nav-item\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"6\" width=\"20\" height=\"12\" rx=\"2\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/></svg>Oyliklar</a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; gap: 2px; width: 216px; font-family: Geist, ui-sans-serif, system-ui, sans-serif; } .ds-nav-item { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 8px; color: #52525B; font-size: 14px; text-decoration: none; transition: background-color .15s, color .15s; } .ds-nav-item svg { color: #A1A1AA; } .ds-nav-item:hover { background: #FAFAFA; color: #09090B; } .ds-nav-item.is-active { background: #F4F4F5; color: #09090B; font-weight: 500; } .ds-nav-item.is-active svg { color: rgb(var(--accent, 37 99 235)); } .ds-nav-item:focus-visible { outline: 2px solid rgb(var(--accent, 37 99 235)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Payment Confirm Summary",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Step two of the payment flow: the amount, context, and one consequence line before committing.",
+      "html": "<div class=\"ds-confirm\"><div class=\"ds-confirm-k\">Tasdiqlang</div><div class=\"ds-confirm-amt\">500 000 so'm</div><div class=\"ds-confirm-meta\">Naqd · Hamidov Bekzod · IELTS 7.0 #3 · 12.10.2026</div><div class=\"ds-confirm-rest\">Qarz qoladi: 400 000 so'm</div></div>",
+      "css": ".ds-confirm { width: 340px; padding: 16px; border: 1px solid #E4E4E7; border-radius: 12px; background: #FAFAFA; font-family: Geist, ui-sans-serif, system-ui, sans-serif; } .ds-confirm-k { font-size: 13px; color: #71717A; } .ds-confirm-amt { margin-top: 4px; font-size: 28px; font-weight: 600; letter-spacing: -0.02em; color: #09090B; font-variant-numeric: tabular-nums; } .ds-confirm-meta { margin-top: 6px; font-size: 13px; color: #52525B; } .ds-confirm-rest { margin-top: 12px; padding-top: 12px; border-top: 1px solid #E4E4E7; font-size: 13px; color: #DC2626; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Ledger",
+    "overview": "The category standard played straight, at the craft level of Stripe Dashboard, Linear, Vercel/Geist and Notion. The screen is a calm grey-white ledger where nothing competes with the one fact the receptionist needs: who owes what, and what to do next. Density is moderate to high, built for someone at a front desk all day, but every row has air and every number lines up.\n\nThe system is white-label: the learning center's own color is the only brand color, and it shows up in exactly three places. Everything else is monochrome zinc. This rejects the generic \"Tailwind template\" look (slate cards, uppercase eyebrow labels, unicode glyph icons, walls of colored buttons), not the SaaS convention itself.\n\nMoney is the product. A payment always shows a summary before it is committed and a toast or receipt after. Red means debt and nothing else.",
+    "keyCharacteristics": [
+      "Monochrome zinc on a near-white canvas, white surfaces, 1px hairlines, almost no shadow.",
+      "One accent, the center's color, with a contrast-computed foreground.",
+      "Geist Sans with tabular figures everywhere money or counts appear.",
+      "Line icons (Lucide, 1.75 stroke in nav) instead of glyphs.",
+      "One primary action per header; everything else secondary, ghost or inside a \"⋯\" menu."
+    ],
+    "rules": [
+      { "name": "The Three Places Rule", "body": "The center accent appears on the primary button, the focus ring and the active nav icon. Not on links, headings, chart bars, stats or badges.", "section": "colors" },
+      { "name": "The Red Means Owed Rule", "body": "Red is used only for money owed and destructive confirmations. A neutral balance, a total or a chart is never red.", "section": "colors" },
+      { "name": "The Neutral Link Rule", "body": "Links are ink with a zinc-300 underline that darkens on hover (decoration-zinc-300 hover:decoration-zinc-900); they never borrow the accent.", "section": "colors" },
+      { "name": "The Tabular Money Rule", "body": "Every table and every .tnum element uses tabular figures; amounts are right-aligned and formatted as \"1 300 000 so'm\" with thin grouping.", "section": "typography" },
+      { "name": "The No Eyebrow Rule", "body": "No uppercase letter-spaced labels above headings. Group and column labels are sentence case at 12px in muted text.", "section": "typography" },
+      { "name": "The Float-Only Shadow Rule", "body": "If it does not overlay other content, it has no shadow; cards and stats rely on the hairline.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the center accent to the primary button, focus ring and active nav icon.",
+      "Do right-align every amount with tabular figures and the \"so'm\" suffix.",
+      "Do show one money truth per screen, with a summary before any money action and a toast or receipt after.",
+      "Do use Lucide line icons at 16px; label icon-only buttons with aria-label.",
+      "Do use 16px inputs on phones and 44px touch targets for attendance marks and the hamburger.",
+      "Do put secondary row actions in the \"⋯\" menu instead of adding buttons."
+    ],
+    "donts": [
+      "Don't use red for anything other than money owed or destructive confirmation.",
+      "Don't color links, headings or charts with the accent; the latest chart period is ink (#18181B), the rest zinc-200.",
+      "Don't add uppercase letter-spaced eyebrow labels or unicode glyph icons (→, ✓, ✕, ＋).",
+      "Don't put shadows on cards or stats.",
+      "Don't use text-zinc-400 for readable text; muted text is zinc-500.",
+      "Don't show a signed balance to parents; say \"Qolgan qarz\" or \"Oldindan to'langan\"."
+    ]
+  }
+}

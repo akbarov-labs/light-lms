@@ -102,7 +102,7 @@ export function Tr({ children, className }: { children: ReactNode; className?: s
 /** Right-aligned money cell content; debts read red, credits green when asked. */
 export function Money({ amount, tone, className }: { amount: number; tone?: "debt" | "credit" | "auto"; className?: string }) {
   const color =
-    tone === "debt" ? (amount > 0 ? "text-red-600" : "text-zinc-400") : tone === "credit" ? "text-emerald-700" : tone === "auto" ? (amount < 0 ? "text-red-600" : amount > 0 ? "text-emerald-700" : "text-zinc-400") : "";
+    tone === "debt" ? (amount > 0 ? "text-red-600" : "text-zinc-500") : tone === "credit" ? "text-emerald-700" : tone === "auto" ? (amount < 0 ? "text-red-600" : amount > 0 ? "text-emerald-700" : "text-zinc-500") : "";
   return <span className={cx("tnum whitespace-nowrap", color, className)}>{formatMoney(amount)}</span>;
 }
 

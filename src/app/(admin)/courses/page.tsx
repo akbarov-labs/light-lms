@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import type { Course } from "@prisma/client";
 import { requireStaff, type Ctx } from "@/lib/ctx";
 import { db } from "@/lib/db";
@@ -64,7 +65,7 @@ export default async function CoursesPage() {
         actions={
           <>
             {ctx.can("export") && <LinkButton variant="secondary" href="/api/export/courses">{t("common.export")}</LinkButton>}
-            {canEdit && <Modal label={`+ ${t("courses.new")}`} title={t("courses.new")} wide><CourseForm ctx={ctx} /></Modal>}
+            {canEdit && <Modal label={t("courses.new")} icon={<Plus className="h-4 w-4" aria-hidden />} title={t("courses.new")} wide><CourseForm ctx={ctx} /></Modal>}
           </>
         }
       />

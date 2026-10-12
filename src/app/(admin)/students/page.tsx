@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { requireStaff, studentScope } from "@/lib/ctx";
@@ -59,7 +60,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
           <>
             {ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/students?${exportQs}`}>{t("common.export")}</LinkButton>}
             {ctx.can("students.edit") && <LinkButton variant="secondary" href="/students/import">{t("import.button")}</LinkButton>}
-            {ctx.can("students.edit") && <LinkButton href="/students/new">+ {t("students.new")}</LinkButton>}
+            {ctx.can("students.edit") && <LinkButton href="/students/new"><Plus className="h-4 w-4" aria-hidden />{t("students.new")}</LinkButton>}
           </>
         }
       />
@@ -91,7 +92,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
                 return (
                   <Tr key={s.id}>
                     <Td>
-                      <Link href={`/students/${s.id}`} className="font-medium text-zinc-900 hover:text-accent">{fullName(s)}</Link>
+                      <Link href={`/students/${s.id}`} className="font-medium text-zinc-900 hover:underline hover:decoration-zinc-400">{fullName(s)}</Link>
                       {s.status === "ARCHIVED" && <> <Badge>{t("student.ARCHIVED")}</Badge></>}
                       {s.tags.length > 0 && <div className="mt-0.5 flex flex-wrap gap-1">{s.tags.map((tg) => <span key={tg} className="text-xs text-zinc-500">#{tg}</span>)}</div>}
                     </Td>

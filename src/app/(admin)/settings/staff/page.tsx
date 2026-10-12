@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { requireStaff, staffInScope, type Ctx } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatPhone } from "@/lib/phone";
@@ -65,7 +66,7 @@ export default async function StaffPage() {
       actions={
         <>
           {ctx.can("export") && <LinkButton variant="secondary" size="sm" href="/api/export/staff">{t("common.export")}</LinkButton>}
-          <Modal label={`+ ${t("settings.newStaff")}`} title={t("settings.newStaff")} wide>
+          <Modal label={t("settings.newStaff")} icon={<Plus className="h-4 w-4" aria-hidden />} title={t("settings.newStaff")} wide>
             <StaffForm ctx={ctx} branches={branches} />
           </Modal>
         </>

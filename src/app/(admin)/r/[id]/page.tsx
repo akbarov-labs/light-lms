@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { familyScope, requireStaff } from "@/lib/ctx";
@@ -23,14 +24,17 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
     entry.createdById ? db.user.findUnique({ where: { id: entry.createdById }, select: { name: true } }) : null,
     db.ledgerEntry.aggregate({ where: { familyId: entry.familyId, createdAt: { lte: entry.createdAt } }, _sum: { amount: true } }),
   ]);
+  const balance = after._sum.amount ?? 0;
+  const paidOn = formatDate(toISODate(entry.date));
+  const stamped = formatDateTime(entry.createdAt);
   const who = entry.student ? fullName(entry.student) : entry.family.students.map(fullName).join(", ");
   const rows: [string, string][] = [
-    [t("common.date"), `${formatDate(toISODate(entry.date))} (${formatDateTime(entry.createdAt)})`],
+    [t("common.date"), stamped.startsWith(paidOn) ? stamped : `${paidOn} (${stamped})`],
     [t("common.student"), who],
     ...(entry.enrollment ? [[t("common.group"), `${entry.enrollment.group.name} #${entry.enrollment.group.code}`] as [string, string]] : []),
     [t("common.method"), entry.method ? t(`method.${entry.method}`) : "—"],
     [t("pay.cashier"), cashier?.name ?? "—"],
-    [t("pay.newBalance"), formatMoney(after._sum.amount ?? 0)],
+    balance < 0 ? [t("pay.debtLeft"), formatMoney(-balance)] : balance > 0 ? [t("students.prepaid"), formatMoney(balance)] : [t("common.debt"), t("pay.noDebt")],
   ];
   return (
     <div className="mx-auto max-w-sm">
@@ -55,7 +59,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
         {entry.reversedBy && <div className="mt-3 rounded bg-red-50 p-2 text-center text-xs font-bold uppercase text-red-700">{t("pay.reversed")}</div>}
         <div className="mt-4 border-t border-dashed border-zinc-300 pt-2 text-center text-xs">{t("pay.thanks")}</div>
       </div>
-      <div className="mt-3 text-center text-xs print:hidden"><Link href="/payments" className="text-zinc-500 hover:text-zinc-800">{t("nav.payments")} →</Link></div>
+      <div className="mt-3 text-center text-xs print:hidden"><Link href="/payments" className="inline-flex items-center gap-1 text-zinc-500 hover:text-zinc-800">{t("nav.payments")}<ChevronRight className="h-3.5 w-3.5" aria-hidden /></Link></div>
     </div>
   );
 }

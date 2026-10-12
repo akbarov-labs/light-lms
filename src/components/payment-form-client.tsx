@@ -15,7 +15,7 @@ export interface PayOption {
   debt: number;
 }
 
-type Labels = Record<"amount" | "method" | "date" | "forGroup" | "anyGroup" | "note" | "continue" | "confirm" | "edit" | "confirmTitle" | "debtNow" | "family", string> & { methods: Record<"CASH" | "CARD" | "TRANSFER", string> };
+type Labels = Record<"amount" | "method" | "date" | "forGroup" | "anyGroup" | "note" | "continue" | "confirm" | "edit" | "confirmTitle" | "debtNow" | "family" | "remaining" | "overpay" | "closes", string> & { methods: Record<"CASH" | "CARD" | "TRANSFER", string> };
 
 function Submit({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -103,7 +103,10 @@ export function PaymentFormClient({ familyId, studentId, options, defaultOption,
           <div className="rounded-xl border border-line bg-zinc-50 p-4">
             <div className="text-[13px] text-zinc-500">{labels.confirmTitle}</div>
             <div className="tnum mt-1 text-[28px] font-semibold tracking-[-0.02em] text-zinc-950">{formatMoney(amount)}</div>
-            <div className="mt-1 text-sm text-zinc-600">{labels.methods[method]} · {who} · {date.split("-").reverse().join(".")}</div>
+            <div className="mt-1 text-sm text-zinc-600">{labels.methods[method]} · {chosen ? chosen.label : who} · {date.split("-").reverse().join(".")}</div>
+            <div className={cx("tnum mt-3 border-t border-zinc-200 pt-3 text-sm font-medium", debtNow - amount > 0 ? "text-red-600" : debtNow - amount < 0 ? "text-emerald-700" : "text-zinc-900")}>
+              {debtNow - amount > 0 ? labels.remaining.replace("{amount}", formatMoney(debtNow - amount)) : debtNow - amount < 0 ? labels.overpay.replace("{amount}", formatMoney(amount - debtNow)) : labels.closes}
+            </div>
           </div>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
             <button type="button" onClick={() => setStep("fill")} className={cx(buttonClass("secondary"), "w-full sm:w-auto")}>

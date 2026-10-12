@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
@@ -41,8 +42,8 @@ export default async function TeacherSalaryPage({ params, searchParams }: { para
         subtitle={<span className="flex items-center gap-2">{monthLabel(month, ctx.locale)} <Badge tone={slip?.status === "PAID" ? "green" : slip?.status === "LOCKED" ? "blue" : "gray"}>{t(`payslip.${slip?.status ?? "DRAFT"}`)}</Badge></span>}
         actions={
           <>
-            <LinkButton variant="secondary" href={`/salary/${teacherId}?month=${shiftMonth(month, -1)}`} aria-label={monthLabel(shiftMonth(month, -1), ctx.locale)}>← {monthLabel(shiftMonth(month, -1), ctx.locale)}</LinkButton>
-            <LinkButton variant="secondary" href={`/salary/${teacherId}?month=${shiftMonth(month, 1)}`} aria-label={monthLabel(shiftMonth(month, 1), ctx.locale)}>{monthLabel(shiftMonth(month, 1), ctx.locale)} →</LinkButton>
+            <LinkButton variant="secondary" href={`/salary/${teacherId}?month=${shiftMonth(month, -1)}`} aria-label={monthLabel(shiftMonth(month, -1), ctx.locale)}><ChevronLeft className="h-3.5 w-3.5" aria-hidden />{monthLabel(shiftMonth(month, -1), ctx.locale)}</LinkButton>
+            <LinkButton variant="secondary" href={`/salary/${teacherId}?month=${shiftMonth(month, 1)}`} aria-label={monthLabel(shiftMonth(month, 1), ctx.locale)}>{monthLabel(shiftMonth(month, 1), ctx.locale)}<ChevronRight className="h-3.5 w-3.5" aria-hidden /></LinkButton>
             {(!slip || slip.status === "DRAFT") && (
               <ActionForm action={payslipAction}>{hidden("lock")}<SubmitButton confirm={t("common.confirm")}>{t("salary.lock")}</SubmitButton></ActionForm>
             )}

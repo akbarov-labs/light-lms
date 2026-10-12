@@ -95,7 +95,7 @@ export default async function LessonPage({ params }: { params: Promise<{ id: str
       <Card className="mb-4">
         <KV
           items={[
-            [t("common.group"), <Link key="g" href={`/groups/${lesson.groupId}`} className="hover:text-accent">{lesson.group.name}</Link>],
+            [t("common.group"), <Link key="g" href={`/groups/${lesson.groupId}`} className="hover:underline hover:decoration-zinc-400">{lesson.group.name}</Link>],
             [t("common.course"), lesson.group.course.name],
             [t("common.teacher"), lesson.teacherId !== lesson.group.teacherId ? `${lesson.teacher.name} (${t("lessons.substitute").toLowerCase()})` : lesson.teacher.name],
             [t("common.room"), lesson.room?.name ?? "—"],
@@ -103,8 +103,10 @@ export default async function LessonPage({ params }: { params: Promise<{ id: str
           ]}
         />
       </Card>
-      <Card title={t("lessons.attendance")}>
+      <Card title={t("lessons.attendance")} pad={false}>
         <AttendanceForm
+          framed={false}
+          stickyClass="bottom-0"
           action={saveAttendanceAction}
           lessonId={id}
           rows={rows}

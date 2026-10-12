@@ -1,3 +1,4 @@
+import { Plus, RotateCcw, X } from "lucide-react";
 import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { Badge, Card, EmptyState } from "@/components/ui";
@@ -16,7 +17,7 @@ export default async function BranchesPage() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Modal label={`+ ${t("settings.newBranch")}`} title={t("settings.newBranch")}>
+        <Modal label={t("settings.newBranch")} icon={<Plus className="h-4 w-4" aria-hidden />} title={t("settings.newBranch")}>
           
             <ModalForm action={saveBranchAction} className="space-y-3">
               <Field label={t("common.name")}><Input name="name" required /></Field>
@@ -59,7 +60,7 @@ export default async function BranchesPage() {
                 {r.capacity && <span className="text-xs text-zinc-500">({r.capacity})</span>}
                 <ActionForm action={toggleRoomArchiveAction}>
                   <input type="hidden" name="id" value={r.id} />
-                  <SubmitButton variant="ghost" size="sm">{r.archivedAt ? "↺" : "✕"}</SubmitButton>
+                  <button type="submit" aria-label={r.archivedAt ? t("common.restore") : t("common.archive")} className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900">{r.archivedAt ? <RotateCcw className="h-3.5 w-3.5" aria-hidden /> : <X className="h-3.5 w-3.5" aria-hidden />}</button>
                 </ActionForm>
               </div>
             ))}

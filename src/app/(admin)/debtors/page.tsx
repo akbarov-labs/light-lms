@@ -63,13 +63,13 @@ export default async function DebtorsPage({ searchParams }: { searchParams: Prom
                   <Tr key={r.familyId}>
                     {canRemind && <Td><input type="checkbox" name="familyId" value={r.familyId} disabled={!r.telegram} aria-label={`${t("debtors.remind")}: ${r.students.map((x) => x.name).join(", ")}`} className="h-4 w-4 accent-[rgb(var(--accent))]" /></Td>}
                     <Td>
-                      {r.students.map((s) => <Link key={s.id} href={`/students/${s.id}`} className="block font-medium text-zinc-900 hover:text-accent">{s.name}</Link>)}
+                      {r.students.map((s) => <Link key={s.id} href={`/students/${s.id}`} className="block font-medium text-zinc-900 hover:underline hover:decoration-zinc-400">{s.name}</Link>)}
                     </Td>
                     <Td className="text-xs">{r.groups.map((g) => g.name).join(", ") || "—"}</Td>
                     <Td className="whitespace-nowrap text-right font-semibold text-red-600"><Link href={`/families/${r.familyId}?pay=1`}>{formatMoney(r.debt)}</Link></Td>
                     <Td className={cx("text-right", r.daysOverdue > 30 ? "font-semibold text-red-600" : "")}>{r.daysOverdue}</Td>
                     <Td className="whitespace-nowrap text-xs">{formatDate(r.lastPayment)}</Td>
-                    <Td className="whitespace-nowrap text-xs">{r.phone ? <a href={`tel:+${r.phone}`} className="text-accent">{formatPhone(r.phone)}</a> : "—"}</Td>
+                    <Td className="whitespace-nowrap text-xs">{r.phone ? <a href={`tel:+${r.phone}`} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{formatPhone(r.phone)}</a> : "—"}</Td>
                     <Td>{r.telegram ? <Badge tone="blue">Telegram</Badge> : <span className="text-xs text-zinc-500" title={t("debtors.noTelegram")}>☎</span>}</Td>
                   </Tr>
                 ))}

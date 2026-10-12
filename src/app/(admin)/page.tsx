@@ -53,19 +53,19 @@ export default async function Dashboard() {
     <>
       <PageHeader title={t("nav.dashboard")} subtitle={ctx.center.name} />
       <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Stat label={`${t("reports.revenue")} · ${t("reports.thisMonth")}`} value={formatMoney(revNow.total)} tone="green" hint={`${t("reports.lastMonth")}: ${formatMoney(revPrev.total)}${delta !== null ? ` (${delta > 0 ? "+" : ""}${delta}%)` : ""}`} href="/payments" />
+        <Stat label={`${t("reports.revenue")} · ${t("reports.thisMonth")}`} value={formatMoney(revNow.total)} hint={`${t("reports.lastMonth")}: ${formatMoney(revPrev.total)}${delta !== null ? ` (${delta > 0 ? "+" : ""}${delta}%)` : ""}`} href="/payments" />
         <Stat label={t("reports.totalDebt")} value={formatMoney(aging.total)} tone="red" hint={t("dash.debtFamilies", { n: aging.families })} href="/debtors" />
         <Stat label={t("reports.active")} value={students.active} hint={t("dash.newLeft", { a: students.newStudents, b: students.left })} href="/students" />
         <Stat label={t("reports.conversion")} value={conv !== null ? `${conv}%` : "—"} hint={`${students.trialsActivated}/${students.trials}`} />
       </div>
       <div className="mb-4 grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
         <Card className="lg:col-span-2" title={t("reports.revenueChart")}>
-          <BarChart data={chart.map((c) => ({ label: monthLabel(c.month, ctx.locale).split(" ")[0], value: c.total }))} />
+          <BarChart units={{ mln: t("chart.mln"), k: t("chart.k") }} data={chart.map((c) => ({ label: monthLabel(c.month, ctx.locale).split(" ")[0], value: c.total }))} />
         </Card>
         <Card title={t("reports.missing")}>
-          <div className="tnum text-[28px] font-semibold tracking-[-0.02em] text-amber-700">{att.missing.length}</div>
+          <div className="tnum text-[28px] font-semibold tracking-[-0.02em] text-zinc-950">{att.missing.length}</div>
           <ul className="mt-2 space-y-1 text-sm">
-            {att.missing.slice(0, 6).map((l) => <li key={l.id}><Link href={`/lessons/${l.id}`} className="text-accent hover:underline">{l.date.slice(8)}.{l.date.slice(5, 7)} {l.time}</Link> · {l.group}</li>)}
+            {att.missing.slice(0, 6).map((l) => <li key={l.id}><Link href={`/lessons/${l.id}`} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{l.date.slice(8)}.{l.date.slice(5, 7)} {l.time}</Link> · {l.group}</li>)}
           </ul>
         </Card>
       </div>
@@ -86,7 +86,7 @@ export default async function Dashboard() {
             <tbody>
               {teachers.filter((u) => u.groups.length > 0 || u._count.lessons > 0).map((u) => (
                 <Tr key={u.id}>
-                  <Td><Link href={`/salary/${u.id}`} className="hover:text-accent">{u.name}</Link></Td>
+                  <Td><Link href={`/salary/${u.id}`} className="hover:underline hover:decoration-zinc-400">{u.name}</Link></Td>
                   <Td className="text-right">{u.groups.length}</Td>
                   <Td className="text-right">{u.groups.reduce((s, g) => s + g._count.enrollments, 0)}</Td>
                   <Td className="text-right">{u._count.lessons}</Td>

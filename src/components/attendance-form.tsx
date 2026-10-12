@@ -36,6 +36,7 @@ export function AttendanceForm({
   topic,
   disabled,
   stickyClass = "bottom-4",
+  framed = true,
 }: {
   action: (prev: ActionState, fd: FormData) => Promise<ActionState>;
   lessonId: string;
@@ -46,6 +47,8 @@ export function AttendanceForm({
   disabled?: boolean;
   /** where the save bar sticks (above a phone's bottom nav) */
   stickyClass?: string;
+  /** false when the form already sits inside a Card */
+  framed?: boolean;
 }) {
   const initial = Object.fromEntries(rows.map((r) => [r.studentId, r.status ?? "PRESENT"])) as Record<string, Status>;
   const [state, setState] = useState<Record<string, Status>>(initial);
@@ -59,9 +62,9 @@ export function AttendanceForm({
   };
   const banner = disabled ? null : touched ? labels.unsaved : savedOnce ? labels.savedAll : labels.notMarkedYet;
   return (
-    <ActionForm action={action} className="space-y-3" onDone={() => { setTouched(false); setSavedOnce(true); }}>
+    <ActionForm action={action} className={framed ? "space-y-3" : ""} onDone={() => { setTouched(false); setSavedOnce(true); }}>
       <input type="hidden" name="lessonId" value={lessonId} />
-      <div className="flex flex-wrap items-center gap-2">
+      <div className={cx("flex flex-wrap items-center gap-2", !framed && "border-b border-zinc-100 p-4")}>
         <input name="topic" defaultValue={topic ?? ""} placeholder={labels.topic} aria-label={labels.topic} className={cx(input, "min-w-0 flex-1")} disabled={disabled} onChange={() => setTouched(true)} />
         <button
           type="button"
@@ -75,7 +78,7 @@ export function AttendanceForm({
           {labels.allPresent}
         </button>
       </div>
-      <ul className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-line bg-white">
+      <ul className={cx("divide-y divide-zinc-100 bg-white", framed && "overflow-hidden rounded-xl border border-line")}>
         {rows.map((r) => (
           <li key={r.studentId} className="p-3 sm:flex sm:items-center sm:gap-3">
             <input type="hidden" name="studentId" value={r.studentId} />
@@ -116,7 +119,7 @@ export function AttendanceForm({
         ))}
       </ul>
       {!disabled && (
-        <div className={cx("sticky z-10 flex items-center justify-between gap-3 rounded-xl border border-line bg-white/95 p-2 pl-4 shadow-pop backdrop-blur", stickyClass)}>
+        <div className={cx("sticky z-10 flex items-center justify-between gap-3 border-t border-line bg-white/95 py-2 pl-4 pr-2 backdrop-blur", framed ? "-mx-4 px-4" : "", stickyClass)}>
           <span className={cx("text-[13px]", touched || !savedOnce ? "font-medium text-amber-700" : "text-zinc-500")}>{banner}</span>
           <SubmitButton className="h-11 px-5 sm:h-9">{labels.save}</SubmitButton>
         </div>

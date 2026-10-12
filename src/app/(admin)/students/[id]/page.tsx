@@ -1,4 +1,6 @@
+import { AttendanceMark } from "@/components/attendance-mark";
 import Link from "next/link";
+import { Check, ChevronRight, Plus } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireStaff, studentScope } from "@/lib/ctx";
 import type { DictKey } from "@/lib/i18n";
@@ -6,9 +8,9 @@ import { db } from "@/lib/db";
 import { addDays, formatDate, formatDateTime, fromISODate, toISODate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
-import { attendanceMark, attendanceTone, enrollmentTone, fullName } from "@/lib/format";
+import { attendanceTone, enrollmentTone, fullName } from "@/lib/format";
 import { familyAllocation, familyLedger } from "@/lib/services/wallet";
-import { Badge, Card, EmptyState, KV, LinkButton, PageHeader, Stat, Table, Td, Th, Tr, cx } from "@/components/ui";
+import { Badge, Card, EmptyState, KV, LinkButton, PageHeader, Table, Td, Th, Tr, cx } from "@/components/ui";
 import { ActionForm, Modal, SubmitButton } from "@/components/client";
 import { LedgerTable } from "@/components/ledger-table";
 import { EnrollForm, EnrollmentActions } from "../../enrollments/ui";
@@ -53,6 +55,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   const open = student.enrollments.filter((e) => !e.endDate);
   const studentDebt = student.enrollments.reduce((sum, e) => sum + (alloc.enrollments.get(e.id)?.debt ?? 0), 0);
   const hasSiblings = student.family.students.length > 1;
+  const studentOldest = alloc.units.filter((u) => u.due > 0 && u.enrollmentId && enrollmentIds.includes(u.enrollmentId)).map((u) => u.firstDate).sort()[0] ?? null;
   const myUnits = alloc.units.filter((u) => u.enrollmentId && enrollmentIds.includes(u.enrollmentId));
 
   return (
@@ -82,16 +85,19 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
       />
 
       {showMoney && (
-        <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <Stat
-            label={t("common.debt")}
-            value={formatMoney(studentDebt)}
-            tone={studentDebt > 0 ? "red" : undefined}
-            hint={hasSiblings && alloc.totalDebt !== studentDebt ? `${t("students.familyDebt")}: ${formatMoney(alloc.totalDebt)}` : alloc.oldestUnpaidDate && studentDebt > 0 ? `${formatDate(alloc.oldestUnpaidDate)} ${t("common.from").toLowerCase()}` : undefined}
-          />
-          <Stat label={t("students.familyBalance")} value={formatMoney(alloc.balance)} tone={alloc.balance < 0 ? "red" : alloc.balance > 0 ? "green" : undefined} hint={hasSiblings ? t("students.otherKids") : undefined} href={`/families/${student.familyId}`} />
-          <Stat label={t("students.prepaid")} value={formatMoney(alloc.unallocated)} />
-          <Stat label={t("students.groups")} value={open.length} />
+        <div className="mb-4 rounded-xl border border-line bg-white px-5 py-4">
+          <div className="text-[13px] text-zinc-500">{t("common.debt")}</div>
+          <div className={cx("tnum mt-0.5 text-[28px] font-semibold leading-tight tracking-[-0.02em]", studentDebt > 0 ? "text-red-600" : "text-zinc-950")}>{formatMoney(studentDebt)}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-zinc-500">
+            {studentDebt > 0 && studentOldest && <span>{t("students.oldestFrom", { date: formatDate(studentOldest) })}</span>}
+            {hasSiblings && alloc.totalDebt !== studentDebt && (
+              <Link href={`/families/${student.familyId}`} className="inline-flex items-center gap-0.5 font-medium text-zinc-700 hover:text-zinc-950">
+                {t("students.familyTotal", { amount: formatMoney(alloc.totalDebt) })}
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+              </Link>
+            )}
+            {alloc.unallocated > 0 && <span>{t("students.prepaid")}: <span className="tnum font-medium text-zinc-900">{formatMoney(alloc.unallocated)}</span></span>}
+          </div>
         </div>
       )}
 
@@ -109,13 +115,13 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           />
           {student.notes && <p className="mt-3 whitespace-pre-line rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{student.notes}</p>}
         </Card>
-        <Card title={<Link href={`/families/${student.familyId}`} className="hover:text-accent">{student.family.name} →</Link>}>
+        <Card title={<Link href={`/families/${student.familyId}`} className="inline-flex items-center gap-1 hover:underline hover:decoration-zinc-400">{student.family.name}<ChevronRight className="h-3.5 w-3.5 text-zinc-400" aria-hidden /></Link>}>
           <div className="space-y-2 text-sm">
             {student.family.guardians.map((g) => (
               <div key={g.id} className="flex items-center justify-between gap-2">
                 <div>
                   <div className="font-medium">{g.name} {g.isPrimary && <span className="text-xs text-zinc-500">· {t("students.primary")}</span>}</div>
-                  <a href={`tel:+${g.phone}`} className="text-xs text-accent">{formatPhone(g.phone)}</a>
+                  <a href={`tel:+${g.phone}`} className="text-xs text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{formatPhone(g.phone)}</a>
                 </div>
                 {g.telegramChatId && <Badge tone="blue">TG</Badge>}
               </div>
@@ -124,7 +130,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               <div className="border-t border-zinc-100 pt-2">
                 <div className="mb-1 text-xs text-zinc-500">{t("students.siblings")}</div>
                 {student.family.students.filter((s) => s.id !== id).map((s) => (
-                  <Link key={s.id} href={`/students/${s.id}`} className="block text-accent hover:underline">{fullName(s)}</Link>
+                  <Link key={s.id} href={`/students/${s.id}`} className="block text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{fullName(s)}</Link>
                 ))}
               </div>
             )}
@@ -137,7 +143,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         pad={false}
         title={t("students.groups")}
         actions={ctx.can("students.edit") && student.status === "ACTIVE" && (
-          <Modal label={`+ ${t("students.addToGroup")}`} title={t("students.addToGroup")} size="sm">
+          <Modal label={t("students.addToGroup")} icon={<Plus className="h-3.5 w-3.5" aria-hidden />} title={t("students.addToGroup")} size="sm" variant="secondary">
             <EnrollForm ctx={ctx} studentId={id} groups={groups.filter((g) => !open.some((e) => e.groupId === g.id))} />
           </Modal>
         )}
@@ -154,7 +160,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                 return (
                   <Tr key={e.id} className={e.endDate ? "opacity-60" : ""}>
                     <Td>
-                      <Link href={`/groups/${e.groupId}`} className="font-medium text-zinc-900 hover:text-accent">{e.group.name} <span className="text-zinc-500">#{e.group.code}</span></Link>
+                      <Link href={`/groups/${e.groupId}`} className="font-medium text-zinc-900 hover:underline hover:decoration-zinc-400">{e.group.name} <span className="text-zinc-500">#{e.group.code}</span></Link>
                       <div className="text-xs text-zinc-500">{e.group.course.name} · {e.group.teacher.name}</div>
                       {freezes.length > 0 && (
                         <div className="mt-1 space-y-0.5">
@@ -210,7 +216,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                   <Td className="text-sm">{u.description}</Td>
                   <Td className="whitespace-nowrap text-right">{formatMoney(u.charged)}</Td>
                   <Td className="whitespace-nowrap text-right text-emerald-700">{formatMoney(u.paid)}</Td>
-                  <Td className={cx("whitespace-nowrap text-right font-medium", u.due > 0 ? "text-red-600" : "text-zinc-500")}>{u.due > 0 ? formatMoney(u.due) : `✓ ${t("students.unitPaid")}`}</Td>
+                  <Td className={cx("whitespace-nowrap text-right font-medium", u.due > 0 ? "text-red-600" : "text-zinc-500")}>{u.due > 0 ? formatMoney(u.due) : <span className="inline-flex items-center gap-1 text-emerald-700"><Check className="h-3.5 w-3.5" aria-hidden />{t("students.unitPaid")}</span>}</Td>
                 </Tr>
               ))}
             </tbody>
@@ -227,9 +233,9 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               <tbody>
                 {attendance.map((a) => (
                   <Tr key={a.id}>
-                    <Td className="whitespace-nowrap text-xs"><Link href={`/lessons/${a.lesson.id}`} className="hover:text-accent">{formatDate(toISODate(a.lesson.date))} {a.lesson.startTime}</Link></Td>
+                    <Td className="whitespace-nowrap text-xs"><Link href={`/lessons/${a.lesson.id}`} className="hover:underline hover:decoration-zinc-400">{formatDate(toISODate(a.lesson.date))} {a.lesson.startTime}</Link></Td>
                     <Td className="text-xs">{a.lesson.group.name}</Td>
-                    <Td><Badge tone={attendanceTone[a.status]}>{attendanceMark[a.status]} {t(`attendance.${a.status}`)}</Badge></Td>
+                    <Td><Badge tone={attendanceTone[a.status]}><AttendanceMark status={a.status} label="" /> {t(`attendance.${a.status}`)}</Badge></Td>
                     <Td className="text-right text-xs">{a.grade ?? ""}{a.comment && <span className="ml-1 text-zinc-500">{a.comment}</span>}</Td>
                   </Tr>
                 ))}

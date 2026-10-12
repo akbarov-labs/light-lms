@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { CornerDownLeft, FileText, Search, User, Users } from "lucide-react";
+import { CornerDownLeft, FileText, Plus, Search, User, Users } from "lucide-react";
 import { formatMoney } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
 import { cx } from "./ui";
@@ -204,6 +204,7 @@ export function QuickPayButton({ label, className }: { label: string; className?
   const open = usePalette();
   return (
     <button type="button" onClick={() => open("pay")} className={className}>
+      <Plus className="h-3.5 w-3.5" aria-hidden />
       {label}
     </button>
   );

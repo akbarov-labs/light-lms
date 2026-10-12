@@ -1,3 +1,4 @@
+import { Check, MessageSquare, Plus } from "lucide-react";
 import Link from "next/link";
 import type { LeadStage } from "@prisma/client";
 import { requireStaff } from "@/lib/ctx";
@@ -40,11 +41,11 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
     <>
       <PageHeader
         title={t("nav.leads")}
-        subtitle={<span>{t("leads.publicForm")}: <a className="text-accent" href={`/f/${ctx.center.slug}`} target="_blank" rel="noreferrer">{appUrl}/f/{ctx.center.slug}</a></span>}
+        subtitle={<span>{t("leads.publicForm")}: <a className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900" href={`/f/${ctx.center.slug}`} target="_blank" rel="noreferrer">{appUrl}/f/{ctx.center.slug}</a></span>}
         actions={
           <>
             {ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/leads?${new URLSearchParams(Object.entries(sp).filter(([, v]) => v) as [string, string][]).toString()}`}>{t("common.export")}</LinkButton>}
-            <Modal label={`+ ${t("leads.new")}`} title={t("leads.new")} wide><LeadForm ctx={ctx} /></Modal>
+            <Modal label={t("leads.new")} icon={<Plus className="h-4 w-4" aria-hidden />} title={t("leads.new")} wide><LeadForm ctx={ctx} /></Modal>
           </>
         }
       />
@@ -81,8 +82,8 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                       <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                         {l.source && <span className="text-zinc-500">{l.source}</span>}
                         {l.nextContactAt && <span className={cx(overdue ? "font-medium text-red-600" : "text-zinc-500")}>☎ {formatDate(l.nextContactAt)}</span>}
-                        {l._count.notes > 0 && <span className="text-zinc-500">✎{l._count.notes}</span>}
-                        {l.studentId && <span className="text-emerald-700">✓</span>}
+                        {l._count.notes > 0 && <span className="inline-flex items-center gap-0.5 text-zinc-500"><MessageSquare className="h-3 w-3" aria-hidden />{l._count.notes}</span>}
+                        {l.studentId && <Check className="h-3.5 w-3.5 text-emerald-700" aria-label={t("leads.converted")} />}
                       </div>
                       {stage === "LOST" && l.lostReason && <div className="mt-1 text-xs text-zinc-500">{l.lostReason}</div>}
                     </Link>

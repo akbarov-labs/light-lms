@@ -53,7 +53,7 @@ export async function GroupForm({ ctx, group }: { ctx: Ctx; group?: Group & { sl
         </FormGrid>
       </Card>
       <Card title={t("groups.schedule")}>
-        <SlotsEditor initial={group?.slots.map((s) => ({ weekday: s.weekday, startTime: s.startTime, endTime: s.endTime })) ?? []} days={days} addLabel={t("groups.addSlot")} />
+        <SlotsEditor initial={group?.slots.map((s) => ({ weekday: s.weekday, startTime: s.startTime, endTime: s.endTime })) ?? []} days={days} addLabel={t("groups.addSlot")} removeLabel={t("common.delete")} />
       </Card>
       <div className="flex justify-end"><SubmitButton>{group ? t("common.save") : t("common.create")}</SubmitButton></div>
     </ActionForm>

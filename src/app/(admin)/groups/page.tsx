@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { branchWhere, requireStaff } from "@/lib/ctx";
@@ -49,7 +50,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
         actions={
           <>
             {ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/groups?${new URLSearchParams(Object.entries(sp).filter(([, v]) => v) as [string, string][]).toString()}`}>{t("common.export")}</LinkButton>}
-            {ctx.can("groups.edit") && <LinkButton href="/groups/new">+ {t("groups.new")}</LinkButton>}
+            {ctx.can("groups.edit") && <LinkButton href="/groups/new"><Plus className="h-4 w-4" aria-hidden />{t("groups.new")}</LinkButton>}
           </>
         }
       />
@@ -83,7 +84,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
                 <Tr key={g.id}>
                   <Td className="text-zinc-500">{g.code}</Td>
                   <Td>
-                    <Link href={`/groups/${g.id}`} className="font-medium text-zinc-900 hover:text-accent">{g.name}</Link>
+                    <Link href={`/groups/${g.id}`} className="font-medium text-zinc-900 hover:underline hover:decoration-zinc-400">{g.name}</Link>
                     <div className="text-xs text-zinc-500">{g.course.name}{!ctx.activeBranchId && ` · ${g.branch.name}`}</div>
                   </Td>
                   <Td>{g.teacher.name}</Td>

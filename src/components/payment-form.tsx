@@ -29,6 +29,9 @@ export function PaymentForm({ ctx, familyId, familyName, options, familyDebt, st
         confirmTitle: t("pay.confirmTitle"),
         debtNow: t("pay.debtNow"),
         family: t("pay.family"),
+        remaining: t("pay.remaining", { amount: "{amount}" }),
+        overpay: t("pay.overpay", { amount: "{amount}" }),
+        closes: t("pay.closesDebt"),
         methods: { CASH: t("method.CASH"), CARD: t("method.CARD"), TRANSFER: t("method.TRANSFER") },
       }}
     />

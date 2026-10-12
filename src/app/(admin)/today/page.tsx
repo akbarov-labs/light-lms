@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Check, ChevronRight } from "lucide-react";
 import { branchWhere, requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { addDays, formatDate, fromISODate, toISODate, todayISO } from "@/lib/dates";
@@ -47,7 +48,7 @@ export default async function TodayPage() {
               <tbody>
                 {missing.map((l) => (
                   <Tr key={l.id}>
-                    <Td className="whitespace-nowrap text-xs"><Link href={`/lessons/${l.id}`} className="text-accent">{formatDate(toISODate(l.date))} {l.startTime}</Link></Td>
+                    <Td className="whitespace-nowrap text-xs"><Link href={`/lessons/${l.id}`} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{formatDate(toISODate(l.date))} {l.startTime}</Link></Td>
                     <Td className="text-xs">{l.group.name} #{l.group.code}</Td>
                     <Td className="text-xs">{l.teacher.name}</Td>
                   </Tr>
@@ -63,9 +64,9 @@ export default async function TodayPage() {
                 {lessons.map((l) => (
                   <Tr key={l.id}>
                     <Td className="whitespace-nowrap font-medium">{l.startTime}–{l.endTime}</Td>
-                    <Td><Link href={`/groups/${l.group.id}`} className="hover:text-accent">{l.group.name} #{l.group.code}</Link><div className="text-xs text-zinc-500">{l.teacher.name}{l.room ? ` · ${l.room.name}` : ""}</div></Td>
+                    <Td><Link href={`/groups/${l.group.id}`} className="hover:underline hover:decoration-zinc-400">{l.group.name} #{l.group.code}</Link><div className="text-xs text-zinc-500">{l.teacher.name}{l.room ? ` · ${l.room.name}` : ""}</div></Td>
                     <Td><Badge tone={lessonTone[l.status]}>{t(`lesson.${l.status}`)}</Badge></Td>
-                    <Td className="text-right">{l.status !== "CANCELLED" && <Link href={`/lessons/${l.id}`} className="text-sm text-accent hover:underline">{l._count.attendance ? `✓ ${l._count.attendance}` : t("today.markNow")}</Link>}</Td>
+                    <Td className="text-right">{l.status !== "CANCELLED" && <Link href={`/lessons/${l.id}`} className="text-sm text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{l._count.attendance ? <span className="inline-flex items-center gap-1"><Check className="h-3.5 w-3.5 text-emerald-700" aria-hidden />{l._count.attendance}</span> : t("today.markNow")}</Link>}</Td>
                   </Tr>
                 ))}
               </tbody>
@@ -79,8 +80,8 @@ export default async function TodayPage() {
                 {trials.map((e) => (
                   <Tr key={e.id}>
                     <Td className="whitespace-nowrap">{e.group.lessons[0]?.startTime}</Td>
-                    <Td><Link href={`/students/${e.student.id}`} className="font-medium hover:text-accent">{fullName(e.student)}</Link><div className="text-xs text-zinc-500">{e.group.name} #{e.group.code}</div></Td>
-                    <Td className="text-xs">{e.student.phone && <a href={`tel:+${e.student.phone}`} className="text-accent">{formatPhone(e.student.phone)}</a>}</Td>
+                    <Td><Link href={`/students/${e.student.id}`} className="font-medium hover:underline hover:decoration-zinc-400">{fullName(e.student)}</Link><div className="text-xs text-zinc-500">{e.group.name} #{e.group.code}</div></Td>
+                    <Td className="text-xs">{e.student.phone && <a href={`tel:+${e.student.phone}`} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{formatPhone(e.student.phone)}</a>}</Td>
                   </Tr>
                 ))}
               </tbody>
@@ -94,9 +95,9 @@ export default async function TodayPage() {
                 <tbody>
                   {leads.map((l) => (
                     <Tr key={l.id}>
-                      <Td><Link href={`/leads/${l.id}`} className="font-medium hover:text-accent">{l.name}</Link><div className="text-xs text-zinc-500">{formatDate(l.nextContactAt)}</div></Td>
+                      <Td><Link href={`/leads/${l.id}`} className="font-medium hover:underline hover:decoration-zinc-400">{l.name}</Link><div className="text-xs text-zinc-500">{formatDate(l.nextContactAt)}</div></Td>
                       <Td><Badge tone={leadTone[l.stage]}>{t(`lead.${l.stage}`)}</Badge></Td>
-                      <Td className="text-right text-xs"><a href={`tel:+${l.phone}`} className="text-accent">{formatPhone(l.phone)}</a></Td>
+                      <Td className="text-right text-xs"><a href={`tel:+${l.phone}`} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{formatPhone(l.phone)}</a></Td>
                     </Tr>
                   ))}
                 </tbody>
@@ -105,16 +106,21 @@ export default async function TodayPage() {
           </Card>
         )}
         {ctx.can("payments.take") && (
-          <Card pad={false} title={`${t("today.debtors")} (${debtors.length})`} actions={<Link href="/debtors" className="text-sm text-accent">{t("today.allDebtors")}</Link>}>
+          <Card pad={false} title={`${t("today.debtors")} (${debtors.length})`} actions={<Link href="/debtors" className="inline-flex items-center gap-1 text-[13px] text-zinc-600 hover:text-zinc-900">{t("today.allDebtors")}<ChevronRight className="h-3.5 w-3.5" aria-hidden /></Link>}>
             {debtors.length === 0 ? <EmptyState>{t("common.empty")}</EmptyState> : (
               <Table>
                 <tbody>
                   {debtors.slice(0, 10).map((d) => (
                     <Tr key={d.familyId}>
-                      <Td>{d.students.map((s) => <Link key={s.id} href={`/students/${s.id}`} className="block font-medium hover:text-accent">{s.name}</Link>)}</Td>
-                      <Td className="tnum whitespace-nowrap text-right font-semibold text-red-600">{formatMoney(d.debt)}</Td>
-                      <Td className="tnum text-right text-xs text-zinc-500">{d.daysOverdue > 0 ? t("today.overdueDays", { n: d.daysOverdue }) : ""}</Td>
-                      <Td className="text-right text-xs">{d.phone && <a href={`tel:+${d.phone}`} className="text-accent">{formatPhone(d.phone)}</a>}</Td>
+                      <Td>{d.students.map((s) => <Link key={s.id} href={`/students/${s.id}`} className="block font-medium hover:underline hover:decoration-zinc-400">{s.name}</Link>)}</Td>
+                      <Td className="tnum whitespace-nowrap text-right">
+                        <div className="font-semibold text-red-600">{formatMoney(d.debt)}</div>
+                        <div className="text-xs text-zinc-500">
+                          {d.daysOverdue > 0 && t("today.overdueDays", { n: d.daysOverdue })}
+                          {d.daysOverdue > 0 && d.phone && " · "}
+                          {d.phone && <a href={`tel:+${d.phone}`} className="underline decoration-zinc-300 hover:text-zinc-900">{formatPhone(d.phone)}</a>}
+                        </div>
+                      </Td>
                       <Td className="text-right"><LinkButton variant="secondary" size="sm" href={`/families/${d.familyId}?pay=1`}>{t("today.takePay")}</LinkButton></Td>
                     </Tr>
                   ))}

@@ -95,7 +95,7 @@ function Nav({ ctx }: { ctx: Ctx }) {
     <nav className="flex flex-col gap-5 px-3 py-4" aria-label={ctx.t("shell.menu")}>
       {visibleNav(ctx).map((g, gi) => (
         <div key={gi}>
-          {g.group && <div className="mb-1 px-2.5 text-xs font-medium text-zinc-400">{ctx.t(g.group)}</div>}
+          {g.group && <div className="mb-1 px-2.5 text-xs font-medium text-zinc-500">{ctx.t(g.group)}</div>}
           <div className="flex flex-col gap-0.5">
             {g.items.map((n) => {
               const Icon = n.icon;
@@ -168,7 +168,7 @@ export async function AdminShell({ ctx, children }: { ctx: Ctx; children: ReactN
                 </div>
                 <div className="ml-auto flex items-center gap-2">
                   {ctx.can("payments.take") && (
-                    <QuickPayButton label={`+ ${t("shell.quickPay")}`} className={buttonClass("primary", "sm")} />
+                    <QuickPayButton label={t("shell.quickPay")} className={buttonClass("primary", "sm")} />
                   )}
                   {branches.length > 0 && (
                     <form action={setBranchAction}>

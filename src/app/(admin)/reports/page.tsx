@@ -35,7 +35,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         <button className="h-9 rounded-lg bg-zinc-900 px-3.5 text-sm font-medium text-white hover:bg-zinc-800">{t("common.filter")}</button>
       </form>
       <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Stat label={t("reports.revenue")} value={formatMoney(rev.total)} tone="green" />
+        <Stat label={t("reports.revenue")} value={formatMoney(rev.total)} />
         <Stat label={t("reports.expenses")} value={formatMoney(exp.total)} />
         <Stat label={t("reports.profit")} value={formatMoney(rev.total - exp.total)} tone={rev.total - exp.total < 0 ? "red" : "green"} />
         <Stat label={t("reports.totalDebt")} value={formatMoney(aging.total)} tone="red" href="/debtors" />
@@ -86,7 +86,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
           <Table><tbody>{att.byTeacher.map((g) => <Tr key={g.name}><Td className="text-sm">{g.name}</Td><Td className="text-right font-medium">{g.rate}%</Td></Tr>)}</tbody></Table>
         </Card>
         <Card pad={false} title={`${t("reports.missing")} (${att.missing.length})`}>
-          <Table><tbody>{att.missing.slice(0, 30).map((l) => <Tr key={l.id}><Td className="whitespace-nowrap text-xs"><Link href={`/lessons/${l.id}`} className="text-accent">{formatDate(l.date)} {l.time}</Link></Td><Td className="text-xs">{l.group}</Td><Td className="text-xs">{l.teacher}</Td></Tr>)}</tbody></Table>
+          <Table><tbody>{att.missing.slice(0, 30).map((l) => <Tr key={l.id}><Td className="whitespace-nowrap text-xs"><Link href={`/lessons/${l.id}`} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{formatDate(l.date)} {l.time}</Link></Td><Td className="text-xs">{l.group}</Td><Td className="text-xs">{l.teacher}</Td></Tr>)}</tbody></Table>
         </Card>
       </div>
     </>

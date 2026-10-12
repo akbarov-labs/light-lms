@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
@@ -30,8 +31,8 @@ export default async function SalaryPage({ searchParams }: { searchParams: Promi
         subtitle={`${monthLabel(month, ctx.locale)} · ${t("common.total")}: ${formatMoney(total)}`}
         actions={
           <>
-            <LinkButton variant="secondary" href={`/salary?month=${shiftMonth(month, -1)}`} aria-label={monthLabel(shiftMonth(month, -1), ctx.locale)}>← {monthLabel(shiftMonth(month, -1), ctx.locale)}</LinkButton>
-            <LinkButton variant="secondary" href={`/salary?month=${shiftMonth(month, 1)}`} aria-label={monthLabel(shiftMonth(month, 1), ctx.locale)}>{monthLabel(shiftMonth(month, 1), ctx.locale)} →</LinkButton>
+            <LinkButton variant="secondary" href={`/salary?month=${shiftMonth(month, -1)}`} aria-label={monthLabel(shiftMonth(month, -1), ctx.locale)}><ChevronLeft className="h-3.5 w-3.5" aria-hidden />{monthLabel(shiftMonth(month, -1), ctx.locale)}</LinkButton>
+            <LinkButton variant="secondary" href={`/salary?month=${shiftMonth(month, 1)}`} aria-label={monthLabel(shiftMonth(month, 1), ctx.locale)}>{monthLabel(shiftMonth(month, 1), ctx.locale)}<ChevronRight className="h-3.5 w-3.5" aria-hidden /></LinkButton>
             {ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/salary?month=${month}`}>{t("common.export")}</LinkButton>}
           </>
         }
@@ -42,7 +43,7 @@ export default async function SalaryPage({ searchParams }: { searchParams: Promi
           <tbody>
             {rows.map(({ u, result, rule, slip }) => (
               <Tr key={u.id} className={u.archivedAt ? "opacity-50" : ""}>
-                <Td><Link href={`/salary/${u.id}?month=${month}`} className="font-medium text-zinc-900 hover:text-accent">{u.name}</Link></Td>
+                <Td><Link href={`/salary/${u.id}?month=${month}`} className="font-medium text-zinc-900 hover:underline hover:decoration-zinc-400">{u.name}</Link></Td>
                 <Td className="text-xs">{rule ? `${t(`salary.${rule.model}`)}${rule.percent ? ` · ${rule.percent}%` : ""}` : <span className="text-amber-700">{t("salary.noRule")}</span>}</Td>
                 <Td className="text-right">{result.lessonsHeld}</Td>
                 <Td className="whitespace-nowrap text-right font-medium">{formatMoney(result.total)}</Td>

@@ -47,7 +47,7 @@ export function LedgerTable({ ctx, rows, showStudent, showBalance = true }: { ct
             <Td className={cx("tnum whitespace-nowrap text-right font-medium", r.amount < 0 ? "text-zinc-700" : "text-emerald-700")}>{r.amount > 0 ? "+" : ""}{formatMoney(r.amount)}</Td>
             {showBalance && <Td className={cx("tnum whitespace-nowrap text-right text-xs", r.balance < 0 ? "text-red-600" : "text-zinc-500")}>{formatMoney(r.balance)}</Td>}
             <Td className="whitespace-nowrap text-right">
-              {(r.type === "PAYMENT" || r.type === "REFUND") && r.receiptNo && <Link href={`/r/${r.id}`} className="mr-2 text-xs text-accent hover:underline">{t("pay.receipt")}</Link>}
+              {(r.type === "PAYMENT" || r.type === "REFUND") && r.receiptNo && <Link href={`/r/${r.id}`} className="mr-2 text-xs text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{t("pay.receipt")}</Link>}
               {(r.type === "PAYMENT" || r.type === "REFUND") && r.method !== "PAYME" && !r.reversedBy && ctx.can("payments.refund") && (
                 <Modal label={t("pay.reverse")} title={t("pay.reverseTitle")} variant="ghost" size="sm">
                   <ModalForm action={reverseAction} className="space-y-3">

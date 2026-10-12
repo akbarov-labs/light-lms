@@ -74,7 +74,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
                   <Tr key={l.id}>
                     <Td className="whitespace-nowrap text-xs">{formatDateTime(l.createdAt)}</Td>
                     <Td className="text-xs">{l.userId ? names.get(l.userId) : t("audit.system")}</Td>
-                    <Td className="text-xs">{href ? <Link href={href} className="text-accent">{l.entity}</Link> : l.entity}</Td>
+                    <Td className="text-xs">{href ? <Link href={href} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{l.entity}</Link> : l.entity}</Td>
                     <Td className="text-xs font-medium">{l.action}</Td>
                     <Td className="max-w-xl break-all font-mono text-[11px] text-zinc-500">
                       {l.before !== null && <div>− {short(l.before)}</div>}

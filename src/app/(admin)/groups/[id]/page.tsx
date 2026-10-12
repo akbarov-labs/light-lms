@@ -1,10 +1,12 @@
+import { AttendanceMark } from "@/components/attendance-mark";
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { notFound } from "next/navigation";
 import { canAccessBranch, requireStaff, studentScope } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { addDays, formatDate, fromISODate, toISODate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
-import { attendanceMark, attendanceTone, enrollmentTone, fullName, groupTone, lessonTone, slotSummary } from "@/lib/format";
+import { attendanceTone, enrollmentTone, fullName, groupTone, lessonTone, slotSummary } from "@/lib/format";
 import { allocationsFor } from "@/lib/services/wallet";
 import { Badge, Card, EmptyState, KV, LinkButton, PageHeader, Table, Td, Th, Tr, cx } from "@/components/ui";
 import { ActionMenu, Modal, ModalForm, SubmitButton } from "@/components/client";
@@ -132,7 +134,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
         actions={
           ctx.can("students.edit") &&
           (group.status === "ACTIVE" || group.status === "PLANNED") && (
-            <Modal label={`+ ${t("groups.addStudent")}`} title={t("groups.addStudent")} size="sm">
+            <Modal label={t("groups.addStudent")} icon={<Plus className="h-3.5 w-3.5" aria-hidden />} title={t("groups.addStudent")} size="sm" variant="secondary">
               <EnrollForm ctx={ctx} groupId={id} students={students.filter((s) => !inGroup.has(s.id)).map((s) => ({ id: s.id, label: `${fullName(s)}${s.phone ? ` · ${s.phone.slice(3)}` : ""}` }))} />
             </Modal>
           )
@@ -150,7 +152,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
                 const debt = allocs.get(e.student.familyId)?.enrollments.get(e.id)?.debt ?? 0;
                 return (
                   <Tr key={e.id} className={e.endDate ? "opacity-60" : ""}>
-                    <Td><Link href={`/students/${e.student.id}`} className="font-medium text-zinc-900 hover:text-accent">{fullName(e.student)}</Link></Td>
+                    <Td className="whitespace-nowrap"><Link href={`/students/${e.student.id}`} className="font-medium text-zinc-900 hover:underline hover:decoration-zinc-400">{fullName(e.student)}</Link></Td>
                     <Td>
                       <Badge tone={enrollmentTone[e.status]}>{t(`enrollment.${e.status}`)}</Badge>
                       {e.transferredTo && <span className="ml-1 text-xs text-zinc-500">{t("enr.movedTo", { group: `${e.transferredTo.group.name} #${e.transferredTo.group.code}` })}</span>}
@@ -160,7 +162,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
                       {formatDate(toISODate(e.startDate))} – {e.endDate ? formatDate(toISODate(e.endDate)) : "…"}
                       {e.activatedAt && <div className="text-zinc-500">{t("enr.activatedAt")}: {formatDate(toISODate(e.activatedAt))}</div>}
                     </Td>
-                    <Td className={cx("whitespace-nowrap text-right font-medium", debt > 0 ? "text-red-600" : "text-zinc-500")}>{debt > 0 ? formatMoney(debt) : "0"}</Td>
+                    <Td className={cx("whitespace-nowrap text-right font-medium", debt > 0 ? "text-red-600" : "text-zinc-500")}>{formatMoney(debt)}</Td>
                     <Td><EnrollmentActions ctx={ctx} e={e} groups={otherGroups} /></Td>
                   </Tr>
                 );
@@ -179,7 +181,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
               <tbody>
                 {past.map((l) => (
                   <Tr key={l.id}>
-                    <Td className="whitespace-nowrap"><Link href={`/lessons/${l.id}`} className="font-medium hover:text-accent">{formatDate(toISODate(l.date))}</Link> <span className="text-xs text-zinc-500">{l.startTime}</span></Td>
+                    <Td className="whitespace-nowrap"><Link href={`/lessons/${l.id}`} className="font-medium hover:underline hover:decoration-zinc-400">{formatDate(toISODate(l.date))}</Link> <span className="text-xs text-zinc-500">{l.startTime}</span></Td>
                     <Td className="text-xs">{l.teacherId !== group.teacherId ? <span className="text-amber-700">{l.teacher.name}</span> : null}</Td>
                     <Td>
                       {l.status === "SCHEDULED" && toISODate(l.date) <= today ? (
@@ -203,7 +205,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
               <tbody>
                 {upcoming.map((l) => (
                   <Tr key={l.id}>
-                    <Td className="whitespace-nowrap"><Link href={`/lessons/${l.id}`} className="font-medium hover:text-accent">{formatDate(toISODate(l.date))}</Link> <span className="text-xs text-zinc-500">{t(`common.weekday.${new Date(l.date).getUTCDay() || 7}` as "common.weekday.1")} {l.startTime}–{l.endTime}</span></Td>
+                    <Td className="whitespace-nowrap"><Link href={`/lessons/${l.id}`} className="font-medium hover:underline hover:decoration-zinc-400">{formatDate(toISODate(l.date))}</Link> <span className="text-xs text-zinc-500">{t(`common.weekday.${new Date(l.date).getUTCDay() || 7}` as "common.weekday.1")} {l.startTime}–{l.endTime}</span></Td>
                     <Td className="text-xs">{l.room?.name}{l.teacherId !== group.teacherId && <span className="ml-1 text-amber-700">{l.teacher.name}</span>}</Td>
                     <Td><Badge tone={lessonTone[l.status]}>{t(`lesson.${l.status}`)}</Badge></Td>
                   </Tr>
@@ -231,7 +233,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
                     const a = l.attendance.find((x) => x.studentId === e.studentId);
                     return (
                       <Td key={l.id} className="text-center">
-                        {a ? <Badge tone={attendanceTone[a.status]}>{attendanceMark[a.status]}{a.grade !== null ? ` ${a.grade}` : ""}</Badge> : <span className="text-zinc-300">·</span>}
+                        {a ? <Badge tone={attendanceTone[a.status]}><AttendanceMark status={a.status} label={t(`attendance.${a.status}`)} />{a.grade !== null ? ` ${a.grade}` : ""}</Badge> : <span className="text-zinc-300">·</span>}
                       </Td>
                     );
                   })}
