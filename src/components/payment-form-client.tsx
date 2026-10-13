@@ -27,7 +27,7 @@ function Submit({ label }: { label: string }) {
   );
 }
 
-const field = "block w-full h-9 rounded-lg border border-zinc-200 bg-white px-3 text-base sm:text-sm text-zinc-900 hover:border-zinc-300 focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/15";
+const field = "block w-full h-9 rounded-lg border border-zinc-200 bg-white px-3 text-base sm:text-sm text-zinc-900 hover:border-zinc-300 focus:border-accent focus:outline-hidden focus:ring-[3px] focus:ring-accent/15";
 
 /** Take a payment in two steps: fill (pre-filled with this student's debt), then confirm the summary. */
 export function PaymentFormClient({ familyId, studentId, options, defaultOption, familyDebt, familyWho, today, labels }: { familyId: string; studentId?: string; options: PayOption[]; defaultOption: string; familyDebt: number; familyWho: string; today: string; labels: Labels }) {
@@ -86,7 +86,7 @@ export function PaymentFormClient({ familyId, studentId, options, defaultOption,
           <legend className="mb-1.5 block text-[13px] font-medium text-zinc-700">{labels.method}</legend>
           <div className="grid grid-cols-3 gap-1 rounded-lg bg-zinc-100 p-1">
             {(["CASH", "CARD", "TRANSFER"] as const).map((m) => (
-              <button key={m} type="button" aria-pressed={method === m} onClick={() => setMethod(m)} className={cx("h-8 rounded-md text-[13px] font-medium transition-colors", method === m ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-600 hover:text-zinc-900")}>
+              <button key={m} type="button" aria-pressed={method === m} onClick={() => setMethod(m)} className={cx("h-8 rounded-md text-[13px] font-medium transition-colors", method === m ? "bg-white text-zinc-950 shadow-xs" : "text-zinc-600 hover:text-zinc-900")}>
                 {labels.methods[m]}
               </button>
             ))}

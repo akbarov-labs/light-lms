@@ -25,7 +25,7 @@ const ON: Record<Status, string> = {
   EXCUSED: "border-sky-700 bg-sky-700 text-white",
 };
 
-const input = "h-11 rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/15 disabled:bg-zinc-50 sm:h-9 sm:text-sm";
+const input = "h-11 rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 focus:border-accent focus:outline-hidden focus:ring-[3px] focus:ring-accent/15 disabled:bg-zinc-50 sm:h-9 sm:text-sm";
 
 export function AttendanceForm({
   action,
@@ -119,7 +119,7 @@ export function AttendanceForm({
         ))}
       </ul>
       {!disabled && (
-        <div className={cx("sticky z-10 flex items-center justify-between gap-3 border-t border-line bg-white/95 py-2 pl-4 pr-2 backdrop-blur", framed ? "-mx-4 px-4" : "", stickyClass)}>
+        <div className={cx("sticky z-10 flex items-center justify-between gap-3 border-t border-line bg-white/95 py-2 pl-4 pr-2 backdrop-blur-sm", framed ? "-mx-4 px-4" : "", stickyClass)}>
           <span className={cx("text-[13px]", touched || !savedOnce ? "font-medium text-amber-700" : "text-zinc-500")}>{banner}</span>
           <SubmitButton className="h-11 px-5 sm:h-9">{labels.save}</SubmitButton>
         </div>

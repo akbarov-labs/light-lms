@@ -127,7 +127,7 @@ export function EnrollForm({ ctx, studentId, groupId, students, groups }: { ctx:
         </Field>
       )}
       <Field label={t("groups.startDate")}><Input type="date" name="startDate" defaultValue={todayISO()} required /></Field>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="trial" defaultChecked className="h-4 w-4 rounded border-zinc-300" /> {t("groups.trial")}</label>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="trial" defaultChecked className="h-4 w-4 rounded-sm border-zinc-300" /> {t("groups.trial")}</label>
       <SubmitButton>{t("common.add")}</SubmitButton>
     </ModalForm>
   );

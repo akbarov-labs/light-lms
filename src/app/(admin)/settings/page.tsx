@@ -19,7 +19,7 @@ export default async function CenterSettings() {
           <Field label={t("settings.centerName")}><Input name="name" defaultValue={c.name} required /></Field>
           <Field label={t("settings.slug")} hint={`${appUrl}/f/${c.slug}`}><Input name="slug" defaultValue={c.slug} required pattern="[a-z0-9-]{2,40}" /></Field>
           <Field label={t("common.phone")}><Input name="phone" defaultValue={c.phone ?? ""} /></Field>
-          <Field label={t("settings.accent")}><Input type="color" name="accentColor" defaultValue={c.accentColor} className="h-10 p-1" /></Field>
+          <Field label={t("settings.accent")}><Input type="color" name="accentColor" defaultValue={c.accentColor} /></Field>
           <Field label={t("settings.logo")}><Input name="logoUrl" defaultValue={c.logoUrl ?? ""} /></Field>
           <Field label={t("settings.locale")}>
             <Select name="locale" defaultValue={c.locale}>
@@ -65,9 +65,9 @@ export default async function CenterSettings() {
           <Field label={t("settings.paymeKey")} hint={c.paymeKey ? "••••••  (−  = o'chirish)" : undefined}><Input name="paymeKey" type="password" autoComplete="new-password" placeholder={c.paymeKey ? "••••••" : ""} /></Field>
           <div className="pt-6"><Checkbox name="paymeTestMode" label={t("settings.paymeTestMode")} defaultChecked={c.paymeTestMode} /></div>
         </FormGrid>
-        <p className="mt-3 text-xs text-zinc-500">{t("settings.paymeEndpoint")}: <code className="rounded bg-zinc-100 px-1 text-zinc-700">{appUrl}/api/payme</code></p>
+        <p className="mt-3 text-xs text-zinc-500">{t("settings.paymeEndpoint")}: <code className="rounded-sm bg-zinc-100 px-1 text-zinc-700">{appUrl}/api/payme</code></p>
       </Card>
-      <div className="sticky bottom-4 z-10 flex justify-end rounded-xl border border-line bg-white/95 p-2 shadow-pop backdrop-blur"><SubmitButton>{t("common.save")}</SubmitButton></div>
+      <div className="sticky bottom-4 z-10 flex justify-end rounded-xl border border-line bg-white/95 p-2 shadow-pop backdrop-blur-sm"><SubmitButton>{t("common.save")}</SubmitButton></div>
     </ActionForm>
   );
 }

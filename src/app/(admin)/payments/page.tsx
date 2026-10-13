@@ -32,7 +32,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
           </>
         }
       />
-      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
+      <form className="mb-4 flex flex-wrap items-center gap-2 *:w-full *:min-w-0 sm:*:w-auto">
         <Input type="date" aria-label={t("common.from")} name="from" defaultValue={sp.from ?? month.start} />
         <Input type="date" aria-label={t("common.to")} name="to" defaultValue={sp.to ?? month.end} />
         <Select name="type" aria-label={t("common.filter")} defaultValue={sp.type ?? ""}>
@@ -50,7 +50,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
           {cashiers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
         <div className="flex gap-2">
-          <Input name="q" type="search" defaultValue={sp.q} placeholder={t("common.search")} aria-label={t("common.search")} className="sm:!w-64" />
+          <Input name="q" type="search" defaultValue={sp.q} placeholder={t("common.search")} aria-label={t("common.search")} className="sm:w-64!" />
           <button className="h-9 rounded-lg bg-zinc-900 px-3.5 text-sm font-medium text-white hover:bg-zinc-800">{t("common.filter")}</button>
         </div>
       </form>

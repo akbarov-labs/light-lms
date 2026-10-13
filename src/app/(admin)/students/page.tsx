@@ -64,8 +64,8 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
           </>
         }
       />
-      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
-        <Input name="q" type="search" defaultValue={sp.q} placeholder={`${t("common.fullName")}, ${t("common.phone").toLowerCase()}…`} aria-label={t("common.search")} className="sm:!w-72" />
+      <form className="mb-4 flex flex-wrap items-center gap-2 *:w-full *:min-w-0 sm:*:w-auto">
+        <Input name="q" type="search" defaultValue={sp.q} placeholder={`${t("common.fullName")}, ${t("common.phone").toLowerCase()}…`} aria-label={t("common.search")} className="sm:w-72!" />
         <Select name="groupId" aria-label={t("common.group")} defaultValue={sp.groupId ?? ""}>
           <option value="">{t("students.filterGroup")}: {t("common.all")}</option>
           {groups.map((g) => <option key={g.id} value={g.id}>{g.name} #{g.code}</option>)}

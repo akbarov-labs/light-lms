@@ -186,7 +186,7 @@ export async function AdminShell({ ctx, children }: { ctx: Ctx; children: ReactN
                       <AutoSubmitSelect
                         name="branchId"
                         defaultValue={ctx.activeBranchId ?? ""}
-                        className="h-8 max-w-[10rem] rounded-lg border border-zinc-200 bg-white pl-2.5 pr-7 text-[13px] text-zinc-700 hover:border-zinc-300"
+                        className="h-8 max-w-40 rounded-lg border border-zinc-200 bg-white pl-2.5 pr-7 text-[13px] text-zinc-700 hover:border-zinc-300"
                         aria-label={t("common.branch")}
                       >
                         {(!ctx.branchIds || ctx.branchIds.length > 1) && <option value="">{t("common.allBranches")}</option>}

@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { submitLeadAction } from "./actions";
 
-const input = "block w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-base shadow-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20";
+const input = "block w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-base shadow-xs focus:border-accent focus:outline-hidden focus:ring-2 focus:ring-accent/20";
 
 export function PublicLeadForm({ slug, lang, courses, utm, l }: { slug: string; lang: string; courses: { id: string; name: string }[]; utm: Record<string, string>; l: Record<"name" | "phone" | "course" | "comment" | "submit" | "thanks", string> }) {
   const [state, action, pending] = useActionState(submitLeadAction, null);

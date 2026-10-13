@@ -385,7 +385,7 @@ Jobs must be idempotent and safe to re-run; log start/end/counts. Expose `npm ru
   - Auth: phone + password (bcryptjs), session = signed JWT in httpOnly cookie (jose), secret from env `AUTH_SECRET`.
   - Validation: zod. Styling: Tailwind CSS. Charts: a tiny SVG component or `recharts` (light).
   - Tests: **vitest** — billing engine, salary engine, Payme handlers, phone normalizer, period math.
-  - Pin exact dependency versions (no `^`), use stable releases ≥ 2 weeks old. Known-good set as of 2026-10: next 15.5.x, react 19.1.x, prisma 6.19.x, typescript 5.9.x, zod 3.25.x, tailwindcss 3.4.x, grammy 1.4x, jose 6.x, bcryptjs 3.x, vitest 3.2.x, tsx 4.20.x. Node 22 LTS images.
+  - Pin exact dependency versions (no `^`), use stable releases ≥ 2 weeks old. Known-good set as of 2026-10: next 15.5.x, react 19.1.x, prisma 6.19.x, typescript 5.9.x, zod 3.25.x, tailwindcss 4.3.x, grammy 1.4x, jose 6.x, bcryptjs 3.x, vitest 3.2.x, tsx 4.20.x. Node 22 LTS images.
 - **Docker** (`docker compose up --build` must work from a clean clone):
   - `db`: `postgres:16-alpine`, volume `pgdata`, healthcheck `pg_isready`.
   - `migrate`: one-shot, runs `prisma migrate deploy` then `seed` **only if** `SEED_DEMO=true` and DB empty; `web` and `worker` depend on it `service_completed_successfully`.

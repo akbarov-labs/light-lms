@@ -27,7 +27,7 @@ export default async function PublicLeadPage({ params, searchParams }: { params:
           <h1 className="text-xl font-semibold">{center.name}</h1>
           <p className="mt-1 text-sm text-zinc-500">{t("leads.formHint")}</p>
         </div>
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs">
           <h2 className="mb-3 font-medium">{t("leads.formTitle")}</h2>
           <PublicLeadForm
             slug={slug}

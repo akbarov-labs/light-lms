@@ -10,7 +10,7 @@ type Labels = Record<
 >;
 
 const input =
-  "block h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 hover:border-zinc-300 focus:border-zinc-900 focus:outline-none focus:ring-[3px] focus:ring-zinc-900/10";
+  "block h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 hover:border-zinc-300 focus:border-zinc-900 focus:outline-hidden focus:ring-[3px] focus:ring-zinc-900/10";
 const label = "mb-1.5 block text-[13px] font-medium text-zinc-700";
 const hint = "mt-1.5 block text-xs text-zinc-500";
 
@@ -40,7 +40,7 @@ export function SignupForm({ labels, locale, startedAt, consent }: { labels: Lab
     <form key={state?.at ?? 0} action={action} className="space-y-4">
       <input type="hidden" name="startedAt" value={startedAt} />
       {/* honeypot: people never see or fill this */}
-      <div aria-hidden className="absolute -left-[9999px] h-px w-px overflow-hidden">
+      <div aria-hidden className="absolute left-[-9999px] h-px w-px overflow-hidden">
         <label>
           Website
           <input name="website" type="text" tabIndex={-1} autoComplete="off" defaultValue="" />
@@ -70,7 +70,7 @@ export function SignupForm({ labels, locale, startedAt, consent }: { labels: Lab
           {(["uz", "ru"] as const).map((l) => (
             <label key={l} className="relative">
               <input type="radio" name="locale" value={l} defaultChecked={l === (v?.locale ?? locale)} className="peer sr-only" />
-              <span className="flex h-9 cursor-pointer items-center justify-center rounded-md text-sm text-zinc-600 transition-colors hover:text-zinc-900 peer-checked:bg-white peer-checked:font-medium peer-checked:text-zinc-900 peer-checked:shadow-sm peer-focus-visible:ring-2 peer-focus-visible:ring-zinc-900/20">
+              <span className="flex h-9 cursor-pointer items-center justify-center rounded-md text-sm text-zinc-600 transition-colors hover:text-zinc-900 peer-checked:bg-white peer-checked:font-medium peer-checked:text-zinc-900 peer-checked:shadow-xs peer-focus-visible:ring-2 peer-focus-visible:ring-zinc-900/20">
                 {l === "uz" ? "O'zbekcha" : "Русский"}
               </span>
             </label>
@@ -78,7 +78,7 @@ export function SignupForm({ labels, locale, startedAt, consent }: { labels: Lab
         </div>
       </fieldset>
       <label className="flex cursor-pointer items-start gap-2.5 text-sm leading-snug text-zinc-600">
-        <input type="checkbox" name="consent" required className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 accent-zinc-900" />
+        <input type="checkbox" name="consent" required className="mt-0.5 h-4 w-4 shrink-0 rounded-sm border-zinc-300 accent-zinc-900" />
         <span><ConsentText c={consent} /></span>
       </label>
       {state?.error && (

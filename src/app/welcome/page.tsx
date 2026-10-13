@@ -43,7 +43,7 @@ function LangSwitch({ current }: { current: Locale }) {
           name="lang"
           value={l}
           aria-pressed={l === current}
-          className={cx("h-7 rounded-md px-2.5 transition-colors", l === current ? "bg-white font-medium text-zinc-900 shadow-sm" : "text-zinc-600 hover:text-zinc-900")}
+          className={cx("h-7 rounded-md px-2.5 transition-colors", l === current ? "bg-white font-medium text-zinc-900 shadow-xs" : "text-zinc-600 hover:text-zinc-900")}
         >
           {l === "uz" ? "O'z" : "Ру"}
         </button>
@@ -57,7 +57,7 @@ function Feature({ title, body, children, flip }: { title: string; body: string;
   return (
     <div className="grid items-center gap-8 py-14 lg:grid-cols-2 lg:gap-16 lg:py-20">
       <div className={cx("max-w-md", flip && "lg:order-2")}>
-        <h3 className="text-[22px] font-semibold leading-tight tracking-[-0.02em] text-zinc-950 sm:text-2xl">{title}</h3>
+        <h3 className="text-[22px] font-semibold leading-tight tracking-[-0.02em] text-zinc-950 sm:text-2xl sm:leading-8">{title}</h3>
         <p className="mt-3 text-[15px] leading-relaxed text-zinc-600">{body}</p>
       </div>
       <div className={cx("flex justify-center", flip ? "lg:order-1 lg:justify-start" : "lg:justify-end")}>{children}</div>
@@ -138,7 +138,7 @@ function BotChat({ c }: { c: Copy["day"]["debts"] }) {
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-white" aria-hidden><Send className="h-4 w-4" /></span>
         <div className="text-sm font-semibold text-zinc-900">{c.botName}</div>
       </div>
-      <div className="max-w-[320px] rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-[14px] leading-snug text-zinc-800 shadow-sm">
+      <div className="max-w-[320px] rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-[14px] leading-snug text-zinc-800 shadow-xs">
         {c.message}
         <div className="mt-1 text-right text-[11px] text-zinc-500">10:00</div>
       </div>
@@ -234,7 +234,7 @@ export default async function WelcomePage() {
           <div className="mx-auto grid max-w-[1200px] items-center gap-12 px-4 pb-16 pt-12 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:pb-24 lg:pt-20">
             <div>
               <h1 className="max-w-[14ch] text-[40px] font-semibold leading-[1.05] tracking-[-0.035em] text-zinc-950 sm:text-[52px] lg:text-[60px]">{c.hero.title}</h1>
-              <p className="mt-5 max-w-[34rem] text-[17px] leading-relaxed text-zinc-600">{c.hero.lead}</p>
+              <p className="mt-5 max-w-136 text-[17px] leading-relaxed text-zinc-600">{c.hero.lead}</p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link href="/signup" className={primary}>{c.hero.start}<ChevronRight className="h-4 w-4" aria-hidden /></Link>
                 {demo && <a href={demo} className={secondary}>{c.hero.demo}</a>}
@@ -251,7 +251,7 @@ export default async function WelcomePage() {
         <section id="features" className="scroll-mt-16">
           <div className="mx-auto max-w-[1200px] px-4 pt-20 sm:px-6 lg:pt-28">
             <h2 className="max-w-[20ch] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-zinc-950 sm:text-[40px]">{c.day.title}</h2>
-            <p className="mt-4 max-w-[36rem] text-[17px] leading-relaxed text-zinc-600">{c.day.lead}</p>
+            <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-zinc-600">{c.day.lead}</p>
             <div className="mt-6 divide-y divide-line">
               <Feature title={c.day.leads.title} body={c.day.leads.body}><LeadsBoard c={c.day.leads} /></Feature>
               <Feature title={c.day.attendance.title} body={c.day.attendance.body} flip><AttendancePhone c={c.day.attendance} /></Feature>
@@ -291,7 +291,7 @@ export default async function WelcomePage() {
         <section id="pricing" className="scroll-mt-16 border-t border-line">
           <div className="mx-auto max-w-[1200px] px-4 py-20 sm:px-6 lg:py-28">
             <h2 className="text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-zinc-950 sm:text-[40px]">{c.pricing.title}</h2>
-            <p className="mt-4 max-w-[36rem] text-[17px] leading-relaxed text-zinc-600">{c.pricing.lead}</p>
+            <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-zinc-600">{c.pricing.lead}</p>
             <div className="mt-10 overflow-hidden rounded-2xl border border-line">
               <div className="grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-4">
                 {planOrder.map((p) => {

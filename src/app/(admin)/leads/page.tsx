@@ -49,8 +49,8 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           </>
         }
       />
-      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
-        <Input name="q" type="search" defaultValue={sp.q} placeholder={t("common.search")} aria-label={t("common.search")} className="sm:!w-64" />
+      <form className="mb-4 flex flex-wrap items-center gap-2 *:w-full *:min-w-0 sm:*:w-auto">
+        <Input name="q" type="search" defaultValue={sp.q} placeholder={t("common.search")} aria-label={t("common.search")} className="sm:w-64!" />
         <Select name="source" aria-label={t("common.source")} defaultValue={sp.source ?? ""}>
           <option value="">{t("common.source")}: {t("common.all")}</option>
           {sources.map((s) => <option key={s.source} value={s.source!}>{s.source}</option>)}
@@ -75,7 +75,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                 {col.map((l) => {
                   const overdue = l.nextContactAt && toISODate(l.nextContactAt) <= today && stage !== "ENROLLED" && stage !== "LOST";
                   return (
-                    <Link key={l.id} href={`/leads/${l.id}`} className="block rounded-lg border border-zinc-200 bg-white p-2.5 text-sm shadow-sm hover:border-accent">
+                    <Link key={l.id} href={`/leads/${l.id}`} className="block rounded-lg border border-zinc-200 bg-white p-2.5 text-sm shadow-xs hover:border-accent">
                       <div className="font-medium text-zinc-900">{l.name}</div>
                       <div className="text-xs text-zinc-500">{formatPhone(l.phone)}</div>
                       {l.course && <div className="mt-1 text-xs text-zinc-600">{l.course.name}</div>}

@@ -54,8 +54,8 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
           </>
         }
       />
-      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
-        <Input name="q" type="search" defaultValue={sp.q} placeholder={`${t("common.search")}…`} aria-label={t("common.search")} className="sm:!w-64" />
+      <form className="mb-4 flex flex-wrap items-center gap-2 *:w-full *:min-w-0 sm:*:w-auto">
+        <Input name="q" type="search" defaultValue={sp.q} placeholder={`${t("common.search")}…`} aria-label={t("common.search")} className="sm:w-64!" />
         <Select name="status" aria-label={t("common.status")} defaultValue={status}>
           <option value="current">{t("group.ACTIVE")} + {t("group.PLANNED")}</option>
           <option value="all">{t("common.all")}</option>

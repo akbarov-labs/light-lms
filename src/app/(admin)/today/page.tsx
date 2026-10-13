@@ -43,7 +43,7 @@ export default async function TodayPage() {
     <>
       <PageHeader title={t("nav.today")} subtitle={formatDate(today)} />
       <OwnerNotices ctx={ctx} />
-      <div className="grid gap-4 xl:grid-cols-2 [&>*]:min-w-0">
+      <div className="grid gap-4 xl:grid-cols-2 *:min-w-0">
         {missing.length > 0 && (
           <Card className="border-amber-200 xl:col-span-2" pad={false} title={<span className="text-amber-800">{`${t("today.missingPast")} (${missing.length})`}</span>}>
             <Table>

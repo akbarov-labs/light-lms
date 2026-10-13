@@ -138,7 +138,7 @@ export function CommandPalette({ pages, labels, children }: { pages: { href: str
             onChange={(e) => setQ(e.target.value)}
             placeholder={mode === "pay" ? labels.payTitle : labels.search}
             aria-label={mode === "pay" ? labels.payTitle : labels.search}
-            className="h-12 w-full bg-transparent text-base outline-none placeholder:text-zinc-500 sm:text-sm"
+            className="h-12 w-full bg-transparent text-base outline-hidden placeholder:text-zinc-500 sm:text-sm"
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") {
                 e.preventDefault();
@@ -195,7 +195,7 @@ export function SearchTrigger({ label }: { label: string }) {
     <button type="button" onClick={() => open("search")} className="flex h-9 w-full max-w-sm items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50/60 px-3 text-sm text-zinc-500 transition-colors hover:border-zinc-300 hover:bg-white">
       <Search className="h-4 w-4 shrink-0" aria-hidden />
       <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-      <kbd className="hidden rounded border border-zinc-200 bg-white px-1.5 font-sans text-[11px] text-zinc-500 sm:inline">⌘K</kbd>
+      <kbd className="hidden rounded-sm border border-zinc-200 bg-white px-1.5 font-sans text-[11px] text-zinc-500 sm:inline">⌘K</kbd>
     </button>
   );
 }

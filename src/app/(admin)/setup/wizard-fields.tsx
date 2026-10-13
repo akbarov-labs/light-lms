@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Plus, X } from "lucide-react";
 
 const input =
-  "block h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 transition-[border-color,box-shadow] hover:border-zinc-300 focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/15 sm:text-sm";
+  "block h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 transition-[border-color,box-shadow] hover:border-zinc-300 focus:border-accent focus:outline-hidden focus:ring-[3px] focus:ring-accent/15 sm:text-sm";
 
 /** Room names: existing rooms can be renamed (not removed here), new rows can be added and removed. */
 export function RoomsEditor({ initial, labels }: { initial: { id: string; name: string }[]; labels: { placeholder: string; add: string; remove: string } }) {

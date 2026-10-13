@@ -281,7 +281,7 @@ async function TeacherStep({ ctx, o }: { ctx: Ctx; o: Onboarding }) {
         </FormGrid>
         {group && group.teacherId === ctx.userId && (
           <label className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-700">
-            <input type="checkbox" name="assignGroupId" value={group.id} defaultChecked className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 accent-[rgb(var(--accent))]" />
+            <input type="checkbox" name="assignGroupId" value={group.id} defaultChecked className="mt-0.5 h-4 w-4 shrink-0 rounded-sm border-zinc-300 accent-[rgb(var(--accent))]" />
             <span>{t("setup.assignGroup", { group: group.name })}</span>
           </label>
         )}

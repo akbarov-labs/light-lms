@@ -60,7 +60,7 @@ export default async function Dashboard() {
         <Stat label={t("reports.active")} value={students.active} hint={t("dash.newLeft", { a: students.newStudents, b: students.left })} href="/students" />
         <Stat label={t("reports.conversion")} value={conv !== null ? `${conv}%` : "—"} hint={`${students.trialsActivated}/${students.trials}`} />
       </div>
-      <div className="mb-4 grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
+      <div className="mb-4 grid gap-4 lg:grid-cols-3 *:min-w-0">
         <Card className="lg:col-span-2" title={t("reports.revenueChart")}>
           <BarChart units={{ mln: t("chart.mln"), k: t("chart.k") }} data={chart.map((c) => ({ label: monthLabel(c.month, ctx.locale).split(" ")[0], value: c.total }))} />
         </Card>
@@ -71,7 +71,7 @@ export default async function Dashboard() {
           </ul>
         </Card>
       </div>
-      <div className="grid gap-4 xl:grid-cols-2 [&>*]:min-w-0">
+      <div className="grid gap-4 xl:grid-cols-2 *:min-w-0">
         <Card pad={false} title={t("reports.byBranch")}>
           <Table>
             <thead><tr><Th>{t("common.branch")}</Th><Th className="text-right">{t("common.groups")}</Th><Th className="text-right">{t("reports.active")}</Th><Th className="text-right">{t("reports.thisMonth")}</Th></tr></thead>

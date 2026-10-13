@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { loginAction, requestCodeAction, resetPasswordAction } from "./actions";
 
 export const inputClass =
-  "block h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base hover:border-zinc-300 focus:border-zinc-900 focus:outline-none focus:ring-[3px] focus:ring-zinc-900/10";
+  "block h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base hover:border-zinc-300 focus:border-zinc-900 focus:outline-hidden focus:ring-[3px] focus:ring-zinc-900/10";
 const buttonClass = "h-11 w-full rounded-lg bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-60";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

@@ -45,7 +45,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <PageHeader title={t("nav.audit")} subtitle={total} actions={ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/audit?${qs}`}>{t("common.export")}</LinkButton>} />
-      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
+      <form className="mb-4 flex flex-wrap items-center gap-2 *:w-full *:min-w-0 sm:*:w-auto">
         <Select name="entity" aria-label={t("audit.entity")} defaultValue={sp.entity ?? ""}>
           <option value="">{t("audit.entity")}: {t("common.all")}</option>
           {ENTITIES.map((e) => <option key={e} value={e}>{e}</option>)}

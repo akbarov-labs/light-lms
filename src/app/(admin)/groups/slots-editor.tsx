@@ -9,7 +9,7 @@ export interface SlotRow {
   endTime: string;
 }
 
-const cls = "rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm shadow-sm";
+const cls = "rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm shadow-xs";
 
 export function SlotsEditor({ initial, days, addLabel, removeLabel = "×", defaultMinutes = 90 }: { initial: SlotRow[]; days: string[]; addLabel: string; removeLabel?: string; defaultMinutes?: number }) {
   const [rows, setRows] = useState<SlotRow[]>(initial.length ? initial : [{ weekday: 1, startTime: "09:00", endTime: "10:30" }]);
@@ -30,7 +30,7 @@ export function SlotsEditor({ initial, days, addLabel, removeLabel = "×", defau
           <span className="text-zinc-500">–</span>
           <input type="time" name="slots.end" value={r.endTime} required className={cls} onChange={(e) => set(i, { endTime: e.target.value })} />
           {rows.length > 1 && (
-            <button type="button" className="rounded p-1 text-zinc-500 hover:text-red-600" onClick={() => setRows((x) => x.filter((_, j) => j !== i))} aria-label={removeLabel}><X className="h-4 w-4" aria-hidden /></button>
+            <button type="button" className="rounded-sm p-1 text-zinc-500 hover:text-red-600" onClick={() => setRows((x) => x.filter((_, j) => j !== i))} aria-label={removeLabel}><X className="h-4 w-4" aria-hidden /></button>
           )}
         </div>
       ))}

@@ -26,7 +26,7 @@ export default async function TeacherWeek() {
             <ul className="space-y-2">
               {list.map((l) => (
                 <li key={l.id}>
-                  <Link href={`/t/lessons/${l.id}`} className="flex items-center justify-between rounded-lg bg-white p-3 text-sm shadow-sm">
+                  <Link href={`/t/lessons/${l.id}`} className="flex items-center justify-between rounded-lg bg-white p-3 text-sm shadow-xs">
                     <span className="font-medium">{l.startTime}–{l.endTime}</span>
                     <span className="truncate px-2">{l.group.name}{l.room ? ` · ${l.room.name}` : ""}</span>
                     {l.status === "CANCELLED" && <Badge>{t("lesson.CANCELLED")}</Badge>}

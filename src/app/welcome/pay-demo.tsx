@@ -64,7 +64,7 @@ export function PayDemo({ c, center }: { c: Copy["pay"]; center: string }) {
                   aria-label={c.amount}
                   value={amount ? String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, " ") : ""}
                   onChange={(e) => setAmount(Math.min(99_999_999, Number(e.target.value.replace(/\D/g, "")) || 0))}
-                  className="tnum min-w-0 flex-1 bg-transparent text-lg font-semibold text-zinc-950 outline-none"
+                  className="tnum min-w-0 flex-1 bg-transparent text-lg font-semibold text-zinc-950 outline-hidden"
                 />
                 <span className="text-sm text-zinc-500">so&apos;m</span>
               </span>

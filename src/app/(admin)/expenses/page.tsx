@@ -53,7 +53,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
           </>
         }
       />
-      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
+      <form className="mb-4 flex flex-wrap items-center gap-2 *:w-full *:min-w-0 sm:*:w-auto">
         <Input type="date" aria-label={t("common.from")} name="from" defaultValue={sp.from ?? m.start} />
         <Input type="date" aria-label={t("common.to")} name="to" defaultValue={sp.to ?? m.end} />
         <Select name="category" aria-label={t("expenses.category")} defaultValue={sp.category ?? ""}>

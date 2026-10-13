@@ -77,7 +77,7 @@ export function Badge({ tone = "gray", children, dot = true }: { tone?: Tone; ch
 export function Table({ children, className }: { children: ReactNode; className?: string }) {
   return (
     // focusable so keyboard users can scroll a table that is wider than a phone
-    <div tabIndex={0} className={cx("overflow-x-auto focus-visible:outline-offset-[-2px]", className)}>
+    <div tabIndex={0} className={cx("overflow-x-auto focus-visible:-outline-offset-2", className)}>
       <table className="w-full min-w-full border-collapse text-sm">{children}</table>
     </div>
   );
@@ -123,7 +123,7 @@ export function Stat({ label, value, hint, tone, href }: { label: ReactNode; val
   const body = (
     <div className={cx("h-full rounded-xl border border-line bg-white px-4 py-3.5", href && "transition-colors hover:border-zinc-300")}>
       <div className="text-[13px] text-zinc-500">{label}</div>
-      <div className={cx("tnum mt-1 truncate text-xl font-semibold leading-tight tracking-[-0.02em] text-zinc-950 2xl:text-[22px]", tone === "red" && "!text-red-600", tone === "green" && "!text-emerald-700", tone === "amber" && "!text-amber-700")}>{value}</div>
+      <div className={cx("tnum mt-1 truncate text-xl font-semibold leading-tight tracking-[-0.02em] text-zinc-950 2xl:text-[22px]", tone === "red" && "text-red-600!", tone === "green" && "text-emerald-700!", tone === "amber" && "text-amber-700!")}>{value}</div>
       {hint && <div className="mt-1 text-xs text-zinc-500">{hint}</div>}
     </div>
   );
@@ -195,5 +195,5 @@ export function KV({ items }: { items: [ReactNode, ReactNode][] }) {
 
 /** Filter bar: wraps instead of overflowing, every control labelled. */
 export function FilterBar({ children }: { children: ReactNode }) {
-  return <form className="mb-4 flex flex-wrap items-end gap-2 [&>*]:min-w-0">{children}</form>;
+  return <form className="mb-4 flex flex-wrap items-end gap-2 *:min-w-0">{children}</form>;
 }

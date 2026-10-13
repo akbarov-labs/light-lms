@@ -29,7 +29,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   return (
     <>
       <PageHeader title={t("nav.reports")} subtitle={`${formatDate(p.from)} – ${formatDate(p.to)}`} />
-      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
+      <form className="mb-4 flex flex-wrap items-center gap-2 *:w-full *:min-w-0 sm:*:w-auto">
         <Input type="date" aria-label={t("common.from")} name="from" defaultValue={p.from} className="w-auto" />
         <Input type="date" aria-label={t("common.to")} name="to" defaultValue={p.to} className="w-auto" />
         <button className="h-9 rounded-lg bg-zinc-900 px-3.5 text-sm font-medium text-white hover:bg-zinc-800">{t("common.filter")}</button>

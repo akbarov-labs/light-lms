@@ -34,7 +34,7 @@ export function Toaster() {
     return () => window.removeEventListener(TOAST_EVENT, onToast);
   }, []);
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex flex-col items-center gap-2 px-4 sm:inset-x-auto sm:right-4 sm:items-end" role="status" aria-live="polite">
+    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-60 flex flex-col items-center gap-2 px-4 sm:inset-x-auto sm:right-4 sm:items-end" role="status" aria-live="polite">
       {items.map((t) => (
         <div key={t.id} className="pointer-events-auto flex max-w-sm animate-toast-in items-start gap-2.5 rounded-xl bg-zinc-900 px-3.5 py-2.5 text-sm text-white shadow-pop">
           {t.tone === "ok" ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" aria-hidden /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" aria-hidden />}
@@ -251,7 +251,7 @@ export function ActionMenu({ items, label }: { items: MenuItem[]; label: string 
         >
           {items.map((it) =>
             it.href ? (
-              <a key={it.key} href={it.href} role="menuitem" className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-sm text-zinc-700 outline-none transition-colors hover:bg-zinc-100 focus:bg-zinc-100">
+              <a key={it.key} href={it.href} role="menuitem" className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-sm text-zinc-700 outline-hidden transition-colors hover:bg-zinc-100 focus:bg-zinc-100">
                 {it.label}
               </a>
             ) : (
@@ -264,7 +264,7 @@ export function ActionMenu({ items, label }: { items: MenuItem[]; label: string 
                 setActive(it);
                 d.show();
               }}
-              className={cx("flex w-full items-center rounded-lg px-2.5 py-2 text-left text-sm outline-none transition-colors focus:bg-zinc-100", it.danger ? "text-red-600 hover:bg-red-50" : "text-zinc-700 hover:bg-zinc-100")}
+              className={cx("flex w-full items-center rounded-lg px-2.5 py-2 text-left text-sm outline-hidden transition-colors focus:bg-zinc-100", it.danger ? "text-red-600 hover:bg-red-50" : "text-zinc-700 hover:bg-zinc-100")}
             >
               {it.label}
             </button>
@@ -300,7 +300,7 @@ export function MoneyInput({ name, defaultValue, required, autoFocus, className,
         placeholder={placeholder}
         onChange={(e) => setVal(fmt(e.target.value))}
         className={cx(
-          "tnum block h-9 w-full rounded-lg border border-zinc-200 bg-white py-1.5 pl-3 pr-14 text-base text-zinc-900 transition-[border-color,box-shadow] hover:border-zinc-300 focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/15 sm:text-sm",
+          "tnum block h-9 w-full rounded-lg border border-zinc-200 bg-white py-1.5 pl-3 pr-14 text-base text-zinc-900 transition-[border-color,box-shadow] hover:border-zinc-300 focus:border-accent focus:outline-hidden focus:ring-[3px] focus:ring-accent/15 sm:text-sm",
           className,
         )}
       />

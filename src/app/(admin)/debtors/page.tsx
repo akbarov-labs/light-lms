@@ -33,7 +33,7 @@ export default async function DebtorsPage({ searchParams }: { searchParams: Prom
         <Stat label={t("debtors.total")} value={formatMoney(total)} tone={total > 0 ? "red" : undefined} />
         <Stat label={t("debtors.count")} value={rows.length} />
       </div>
-      <form className="mb-4 flex flex-wrap items-center gap-2 [&>*]:w-full [&>*]:min-w-0 sm:[&>*]:w-auto">
+      <form className="mb-4 flex flex-wrap items-center gap-2 *:w-full *:min-w-0 sm:*:w-auto">
         <Select name="groupId" aria-label={t("common.group")} defaultValue={sp.groupId ?? ""}>
           <option value="">{t("common.group")}: {t("common.all")}</option>
           {groups.map((g) => <option key={g.id} value={g.id}>{g.name} #{g.code}</option>)}

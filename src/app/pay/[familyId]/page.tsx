@@ -23,7 +23,7 @@ export default async function PayPage({ params, searchParams }: { params: Promis
   }
   return (
     <main style={accentVars(family.center.accentColor) as React.CSSProperties} className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 text-center shadow-sm">
+      <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 text-center shadow-xs">
         <div className="text-lg font-semibold">{family.center.name}</div>
         <div className="text-sm text-zinc-500">{family.students.map((s) => s.firstName).join(", ")}</div>
         <div className="my-5">
