@@ -82,8 +82,8 @@ export default async function CoursesPage() {
                 const history = parsePriceHistory(c.priceHistory);
                 const upcoming = history.find((h) => h.price === c.price && h.from > new Date().toISOString().slice(0, 10));
                 return (
-                  <Tr key={c.id} className={c.archivedAt ? "opacity-50" : ""}>
-                    <Td className="font-medium text-zinc-900">{c.name}{c.level && <span className="ml-1 text-xs text-zinc-500">· {c.level}</span>}</Td>
+                  <Tr key={c.id} muted={!!c.archivedAt}>
+                    <Td className="font-medium text-zinc-900">{c.name}{c.level && <span className="ml-1 text-xs text-zinc-500">· {c.level}</span>}{c.archivedAt && <> <Badge>{t("settings.archived")}</Badge></>}</Td>
                     <Td>
                       <Badge tone={c.pricingType === "SUBSCRIPTION" ? "blue" : "violet"}>{t(`pricing.${c.pricingType}`)}</Badge>
                       <div className="mt-1 text-xs text-zinc-500">

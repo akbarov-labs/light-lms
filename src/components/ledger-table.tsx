@@ -34,17 +34,17 @@ export function LedgerTable({ ctx, rows, showStudent, showBalance = true }: { ct
       </thead>
       <tbody>
         {withBalance.reverse().map((r) => (
-          <Tr key={r.id} className={r.reversedBy ? "opacity-50" : ""}>
+          <Tr key={r.id} muted={!!r.reversedBy}>
             <Td className="whitespace-nowrap text-xs">{formatDate(toISODate(r.date))}</Td>
             <Td>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone={typeTone[r.type]}>{t(`ledger.${r.type}`)}</Badge>
-                <span className="text-sm text-zinc-700">{r.description.replace(/^(To'lov|Qaytarildi) · /, "")}</span>
+                {r.reversedBy && <Badge>{t("common.reversed")}</Badge>}
+                <span className={cx("text-sm", !r.reversedBy && "text-zinc-700")}>{r.description.replace(/^(To'lov|Qaytarildi) · /, "")}</span>
               </div>
-              {r.reversedBy && <span className="ml-1 text-xs text-red-600">({t("pay.reversed")})</span>}
             </Td>
             {showStudent && <Td className="text-xs">{r.student ? `${r.student.lastName} ${r.student.firstName}` : "—"}</Td>}
-            <Td className={cx("tnum whitespace-nowrap text-right font-medium", r.amount < 0 ? "text-zinc-700" : "text-emerald-700")}>{r.amount > 0 ? "+" : ""}{formatMoney(r.amount)}</Td>
+            <Td className={cx("tnum whitespace-nowrap text-right font-medium", r.reversedBy ? "line-through" : r.amount < 0 ? "text-zinc-700" : "text-emerald-700")}>{r.amount > 0 ? "+" : ""}{formatMoney(r.amount)}</Td>
             {showBalance && <Td className={cx("tnum whitespace-nowrap text-right text-xs", r.balance < 0 ? "text-red-600" : "text-zinc-500")}>{formatMoney(r.balance)}</Td>}
             <Td className="whitespace-nowrap text-right">
               {(r.type === "PAYMENT" || r.type === "REFUND") && r.receiptNo && <Link href={`/r/${r.id}`} className="mr-2 text-xs text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{t("pay.receipt")}</Link>}
