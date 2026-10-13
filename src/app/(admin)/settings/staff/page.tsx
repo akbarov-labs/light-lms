@@ -79,7 +79,7 @@ export default async function StaffPage() {
         </thead>
         <tbody>
           {visible.map((u) => (
-            <Tr key={u.id} className={u.archivedAt ? "opacity-50" : ""}>
+            <Tr key={u.id} muted={!!u.archivedAt}>
               <Td className="font-medium text-zinc-900">{u.name}{u.archivedAt && <> <Badge>{t("settings.archived")}</Badge></>}</Td>
               <Td className="whitespace-nowrap">{formatPhone(u.phone)}</Td>
               <Td>

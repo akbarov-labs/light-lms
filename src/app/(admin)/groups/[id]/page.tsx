@@ -151,7 +151,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
               {[...open, ...closed].map((e) => {
                 const debt = allocs.get(e.student.familyId)?.enrollments.get(e.id)?.debt ?? 0;
                 return (
-                  <Tr key={e.id} className={e.endDate ? "opacity-60" : ""}>
+                  <Tr key={e.id} muted={!!e.endDate}>
                     <Td className="whitespace-nowrap"><Link href={`/students/${e.student.id}`} className="font-medium text-zinc-900 hover:underline hover:decoration-zinc-400">{fullName(e.student)}</Link></Td>
                     <Td>
                       <Badge tone={enrollmentTone[e.status]}>{t(`enrollment.${e.status}`)}</Badge>

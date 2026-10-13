@@ -158,7 +158,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                 const eb = alloc.enrollments.get(e.id);
                 const freezes = e.freezes;
                 return (
-                  <Tr key={e.id} className={e.endDate ? "opacity-60" : ""}>
+                  <Tr key={e.id} muted={!!e.endDate}>
                     <Td>
                       <Link href={`/groups/${e.groupId}`} className="font-medium text-zinc-900 hover:underline hover:decoration-zinc-400">{e.group.name} <span className="text-zinc-500">#{e.group.code}</span></Link>
                       <div className="text-xs text-zinc-500">{e.group.course.name} · {e.group.teacher.name}</div>
