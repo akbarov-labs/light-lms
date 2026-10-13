@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, KeyRound, LogOut, Menu, X } from "lucide-react";
-import { logoutAction, setLangAction } from "@/app/actions";
+import { logoutAction } from "@/app/actions";
+import { LanguageOptions } from "./language-menu";
 import { cx } from "./ui";
 
 // Detail pages belong to their list in the nav (a family or lesson page highlights its parent).
@@ -88,16 +89,10 @@ export function UserMenu({ name, role, locale, logoutLabel, languageLabel, accou
             <div className="text-xs text-zinc-500">{role}</div>
           </div>
           <div className="my-1 h-px bg-zinc-100" />
-          <form action={setLangAction} className="px-2.5 py-2">
-            <div className="mb-1.5 text-xs text-zinc-500">{languageLabel}</div>
-            <div className="grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-0.5">
-              {(["uz", "ru"] as const).map((l) => (
-                <button key={l} name="lang" value={l} aria-pressed={l === locale} className={cx("h-8 rounded-md text-[13px] font-medium transition-colors", l === locale ? "bg-white text-zinc-950 shadow-xs" : "text-zinc-600 hover:text-zinc-900")}>
-                  {l === "uz" ? "O'zbekcha" : "Русский"}
-                </button>
-              ))}
-            </div>
-          </form>
+          <div role="group" aria-label={languageLabel}>
+            <div className="px-2.5 pb-1 pt-1.5 text-xs text-zinc-500">{languageLabel}</div>
+            <LanguageOptions current={locale} />
+          </div>
           <div className="my-1 h-px bg-zinc-100" />
           <Link href="/password" role="menuitem" onClick={() => setOpen(false)} className="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-sm text-zinc-700 hover:bg-zinc-100">
             <KeyRound className="h-4 w-4 text-zinc-500" aria-hidden />

@@ -299,11 +299,14 @@ Gently rounded, consistent by tier: 12px on cards, stats and the money block; 8p
 
 ### Navigation
 - **Sidebar:** grouped sections (12px muted group labels), 36px items with a 16px line icon. Idle: zinc-600 text, zinc-400 icon. Hover: zinc-50 fill. Active: zinc-100 fill, ink text, accent icon, `aria-current="page"`.
-- **Top bar:** ⌘K search trigger, "+ To'lov" quick pay (small primary), branch select, avatar menu with language switch and logout.
+- **Top bar:** ⌘K search trigger, "+ To'lov" quick pay (small primary), branch select, avatar menu with language rows and logout.
 - **Teacher bottom tabs:** icon over label; active label goes ink and the icon takes the accent.
 
 ### Payment Flow (signature)
 Two steps in one card. Step one: enrollment select pre-picked to the one with debt, money input with the current debt shown beside the label, date, method as a segmented control. Step two: a tinted summary panel with the amount at 28px, method, student, group and date, and one consequence line ("Qarz qoladi: X" in red, "Ortiqcha" or "Qarz to'liq yopiladi"). Confirming opens the receipt, which prints in Geist Mono and shows "Qolgan qarz" rather than a signed balance.
+
+### Language Menu
+One picker everywhere (`LanguageMenu`, `src/components/language-menu.tsx`). Trigger: ghost, 36px, Lucide `Languages` icon in muted zinc, the current language, a 14px chevron that turns when open; `compact` shows the code (UZ / RU) and drops the chevron on phones. Menu: 176px floating panel, 12px radius, pop shadow, rows of each language written in its own script (O'zbekcha, Русский) with a check on the current one. Pickers at the foot of a page open upward. Announced in both languages ("Til · Язык") so a visitor who cannot read the current one still finds it. Monochrome: the accent never appears here. Inside the account menu the same rows sit under a "Til" label. No flags (a language is not a country).
 
 ### Command Palette
 A 576px dialog with 16px radius and the pop shadow: search input, grouped results (students, groups, pages) with line icons, family debt on the right in red, and a ↵ hint on the active row. In pay mode, picking a student jumps straight to that family's payment form.

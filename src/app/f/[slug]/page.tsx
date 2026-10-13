@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { accentVars } from "@/lib/color";
 import { isLocale, makeT } from "@/lib/i18n";
 import { PublicLeadForm } from "./form";
+import { LanguageMenu } from "@/components/language-menu";
 
 export const dynamic = "force-dynamic";
 
@@ -37,9 +38,8 @@ export default async function PublicLeadPage({ params, searchParams }: { params:
             l={{ name: t("leads.formName"), phone: t("leads.formPhone"), course: t("leads.interestedCourse"), comment: t("leads.formComment"), submit: t("leads.formSubmit"), thanks: t("leads.formThanks") }}
           />
         </div>
-        <div className="mt-3 flex justify-center gap-3 text-sm">
-          <a href={`?${new URLSearchParams({ ...utm, lang: "uz" })}`} className={lang === "uz" ? "font-semibold" : "text-zinc-500"}>O&apos;zbekcha</a>
-          <a href={`?${new URLSearchParams({ ...utm, lang: "ru" })}`} className={lang === "ru" ? "font-semibold" : "text-zinc-500"}>Русский</a>
+        <div className="mt-3 flex justify-center">
+          <LanguageMenu current={lang} side="top" align="center" hrefs={{ uz: `?${new URLSearchParams({ ...utm, lang: "uz" })}`, ru: `?${new URLSearchParams({ ...utm, lang: "ru" })}` }} />
         </div>
       </div>
     </main>

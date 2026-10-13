@@ -4,11 +4,11 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Check, ChevronRight, FileSpreadsheet, Plus, Send } from "lucide-react";
 import { isLocale, LANG_COOKIE, type Locale } from "@/lib/i18n";
-import { setLangAction } from "@/app/actions";
 import { BRAND, demoHref } from "@/config/brand";
 import { PLANS } from "@/lib/plans";
 import { formatPhone } from "@/lib/phone";
 import { cx } from "@/components/ui";
+import { LanguageMenu } from "@/components/language-menu";
 import { COPY, type Copy } from "./copy";
 import { PayDemo } from "./pay-demo";
 
@@ -31,24 +31,6 @@ function Mark({ className }: { className?: string }) {
     <span className={cx("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-sm font-semibold text-white", className)} aria-hidden>
       {BRAND.name.slice(0, 1).toUpperCase()}
     </span>
-  );
-}
-
-function LangSwitch({ current }: { current: Locale }) {
-  return (
-    <form action={setLangAction} className="inline-flex gap-0.5 rounded-lg bg-zinc-100 p-0.5 text-[13px]">
-      {(["uz", "ru"] as const).map((l) => (
-        <button
-          key={l}
-          name="lang"
-          value={l}
-          aria-pressed={l === current}
-          className={cx("h-7 rounded-md px-2.5 transition-colors", l === current ? "bg-white font-medium text-zinc-900 shadow-xs" : "text-zinc-600 hover:text-zinc-900")}
-        >
-          {l === "uz" ? "O'z" : "Ру"}
-        </button>
-      ))}
-    </form>
   );
 }
 
@@ -213,17 +195,17 @@ export default async function WelcomePage() {
         <div className="mx-auto flex h-16 max-w-[1200px] items-center gap-4 px-4 sm:gap-6 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
             <Mark />
-            <span className="hidden text-[15px] font-semibold tracking-[-0.01em] min-[380px]:inline">{BRAND.name}</span>
+            <span className="hidden whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em] min-[420px]:inline">{BRAND.name}</span>
           </Link>
           <nav className="hidden items-center gap-1 text-sm text-zinc-600 md:flex" aria-label={c.nav.features}>
             <a href="#features" className="rounded-md px-2.5 py-1.5 hover:text-zinc-950">{c.nav.features}</a>
             <a href="#pricing" className="rounded-md px-2.5 py-1.5 hover:text-zinc-950">{c.nav.pricing}</a>
             <a href="#faq" className="rounded-md px-2.5 py-1.5 hover:text-zinc-950">{c.nav.faq}</a>
           </nav>
-          <div className="ml-auto flex items-center gap-2">
-            <div className="hidden sm:block"><LangSwitch current={lang} /></div>
-            <Link href="/login" className="inline-flex h-9 items-center rounded-lg px-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950 sm:px-3">{c.nav.login}</Link>
-            <Link href="/signup" className="inline-flex h-9 items-center rounded-lg bg-zinc-900 px-3.5 text-sm font-medium text-white hover:bg-zinc-800">{c.nav.start}</Link>
+          <div className="ml-auto flex items-center gap-1 sm:gap-2">
+            <LanguageMenu current={lang} compact />
+            <Link href="/login" className="inline-flex h-9 items-center whitespace-nowrap rounded-lg px-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950 sm:px-3">{c.nav.login}</Link>
+            <Link href="/signup" className="inline-flex h-9 items-center whitespace-nowrap rounded-lg bg-zinc-900 px-3 text-sm font-medium text-white hover:bg-zinc-800 sm:px-3.5">{c.nav.start}</Link>
           </div>
         </div>
       </header>
@@ -383,7 +365,7 @@ export default async function WelcomePage() {
             {BRAND.contact.phone && <div><a href={`tel:+${BRAND.contact.phone}`} className="hover:text-zinc-950">{formatPhone(BRAND.contact.phone)}</a></div>}
             {tg && <div><a href={`https://t.me/${tg}`} className="hover:text-zinc-950">@{tg}</a></div>}
             {BRAND.contact.email && <div><a href={`mailto:${BRAND.contact.email}`} className="hover:text-zinc-950">{BRAND.contact.email}</a></div>}
-            <div className="pt-2"><LangSwitch current={lang} /></div>
+            <div className="-ml-2.5 pt-1"><LanguageMenu current={lang} side="top" align="start" /></div>
           </div>
         </div>
         <div className="border-t border-line">
