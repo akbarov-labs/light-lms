@@ -118,6 +118,29 @@ test.describe("staff", () => {
     await a11y(page, "group page");
   });
 
+  test("owner: the branch switcher keeps showing the branch it switched to", async ({ page }) => {
+    await login(page, OWNER);
+    await page.goto("/");
+    await settle(page);
+    const select = page.getByRole("combobox", { name: "Filial" });
+    const branchId = await select.locator("option", { hasText: "Yunusobod" }).getAttribute("value");
+    // the dashboard re-renders for the branch; the select must not jump back to the old option
+    const done = page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith("/"));
+    await select.selectOption({ label: "Yunusobod" });
+    await done;
+    await page.waitForLoadState("networkidle");
+    await expect(select).toHaveValue(branchId!);
+    await page.reload();
+    await settle(page);
+    await expect(page.getByRole("combobox", { name: "Filial" })).toHaveValue(branchId!);
+    // and back to all branches
+    const back = page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith("/"));
+    await page.getByRole("combobox", { name: "Filial" }).selectOption({ value: "" });
+    await back;
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByRole("combobox", { name: "Filial" })).toHaveValue("");
+  });
+
   test("owner: ⌘K finds a student and the payment flow ends on a receipt", async ({ page }) => {
     await login(page, OWNER);
     await page.goto("/debtors");

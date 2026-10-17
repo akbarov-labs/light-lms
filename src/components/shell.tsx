@@ -184,6 +184,9 @@ export async function AdminShell({ ctx, children }: { ctx: Ctx; children: ReactN
                   {branches.length > 0 && (
                     <form action={setBranchAction}>
                       <AutoSubmitSelect
+                        // React resets a form after its action; keyed by the branch, the select remounts with the
+                        // new default instead of being reset to the branch it was first rendered with
+                        key={ctx.activeBranchId ?? "all"}
                         name="branchId"
                         defaultValue={ctx.activeBranchId ?? ""}
                         className="h-8 max-w-40 rounded-lg border border-zinc-200 bg-white pl-2.5 pr-7 text-[13px] text-zinc-700 hover:border-zinc-300"
