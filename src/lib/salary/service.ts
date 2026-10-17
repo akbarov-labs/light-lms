@@ -7,6 +7,7 @@ import { loadGroupInputs } from "@/lib/billing/sync";
 import { readSettings } from "@/lib/settings";
 import { allocationsFor } from "@/lib/services/wallet";
 import { UserError } from "@/lib/user-error";
+import { formatMoney } from "@/lib/money";
 import type { Actor } from "@/lib/services/enrollments";
 import { collectLessons, computeSalary, type HeldLesson, type SalaryResult, type SalaryRule } from "./engine";
 
@@ -94,6 +95,8 @@ export async function markPayslipPaid(actor: Actor, teacherId: string, month: st
   await db.$transaction(async (tx) => {
     const p = await tx.payslip.findUnique({ where: { teacherId_month: { teacherId, month } } });
     if (!p) throw new UserError("error.locked");
+    // fines larger than earnings: paying "−200 000" would book a negative expense and inflate profit
+    if (p.total <= 0) throw new UserError("money.payslipNotPositive", { total: formatMoney(p.total) });
     // claim LOCKED → PAID first, so two clicks can never book the expense twice
     const claimed = await tx.payslip.updateMany({ where: { id: p.id, status: "LOCKED" }, data: { status: "PAID", paidAt: new Date(), paidById: actor.userId } });
     if (claimed.count === 0) throw new UserError("error.locked");

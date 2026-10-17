@@ -6,6 +6,8 @@ import { addDays, fromISODate, todayISO, toISODate } from "@/lib/dates";
 import { buildCtx, loadUser, type Ctx } from "@/lib/ctx-core";
 import { generateLessons } from "@/lib/services/lessons";
 import { importStudents, OPENING_PERIOD } from "@/app/(admin)/students/import/import-core";
+import { addAdjustment, liveSalary, lockPayslip, markPayslipPaid } from "@/lib/salary/service";
+import { UserError } from "@/lib/user-error";
 
 const today = todayISO();
 let ctx: Ctx;
@@ -108,5 +110,31 @@ describe("B5/B11 — student import is idempotent and dates the old debt", () =>
     expect(res.errors).toHaveLength(2);
     expect(res.errors[0]).toContain(ctx.t("money.import.futureDebtSince"));
     expect(res.errors[1]).toContain(ctx.t("money.import.badDebtSince"));
+  });
+});
+
+describe("B6/B9 — salary", () => {
+  const actor = () => ({ userId: ctx.userId, centerId });
+
+  it("an archived teacher gets no fixed pay for the months after leaving", async () => {
+    const t = await db.user.create({ data: { centerId, phone: phone(), name: "Gone", passwordHash: "x", role: "TEACHER", isTeacher: true, archivedAt: new Date("2026-09-20T10:00:00Z") } });
+    await db.salaryRule.create({ data: { teacherId: t.id, model: "FIXED", fixedAmount: 3_000_000, validFrom: fromISODate("2026-01-01") } });
+    expect((await liveSalary(centerId, t.id, "2026-09")).result.total).toBe(3_000_000);
+    const oct = (await liveSalary(centerId, t.id, "2026-10")).result;
+    expect(oct.total).toBe(0);
+    expect(oct.warnings).toContain("archived");
+  });
+
+  it("a payslip of zero or less cannot be marked paid (no negative expense)", async () => {
+    const t = await db.user.create({ data: { centerId, phone: phone(), name: "Fined", passwordHash: "x", role: "TEACHER", isTeacher: true } });
+    await db.salaryRule.create({ data: { teacherId: t.id, model: "PER_LESSON", perLesson: 50_000, validFrom: fromISODate("2026-01-01") } });
+    await addAdjustment(actor(), t.id, "2026-09", -200_000, "jarima");
+    await lockPayslip(actor(), t.id, "2026-09");
+    const expenses = await db.expense.count({ where: { centerId } });
+    const err = await markPayslipPaid(actor(), t.id, "2026-09").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UserError);
+    expect((err as UserError).key).toBe("money.payslipNotPositive");
+    expect(await db.expense.count({ where: { centerId } })).toBe(expenses);
+    expect((await db.payslip.findUniqueOrThrow({ where: { teacherId_month: { teacherId: t.id, month: "2026-09" } } })).status).toBe("LOCKED");
   });
 });

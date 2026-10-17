@@ -12,6 +12,7 @@ import { Field, FormGrid, Input, Select } from "@/components/fields";
 import { ActionForm, Modal, ModalForm, SubmitButton } from "@/components/client";
 import { SalaryBreakdown } from "@/components/salary-view";
 import { adjustmentAction, payslipAction, saveRuleAction } from "../actions";
+import { RuleDateField } from "../rule-date-field";
 
 export default async function TeacherSalaryPage({ params, searchParams }: { params: Promise<{ teacherId: string }>; searchParams: Promise<{ month?: string }> }) {
   const { teacherId } = await params;
@@ -85,7 +86,7 @@ export default async function TeacherSalaryPage({ params, searchParams }: { para
                     <Field label={t("salary.percent")}><Input name="percent" type="number" min={0} max={100} defaultValue={rules[0]?.percent ?? 40} /></Field>
                     <Field label={t("salary.fixedAmount")}><Input name="fixedAmount" inputMode="numeric" defaultValue={rules[0]?.fixedAmount ?? ""} /></Field>
                     <Field label={t("salary.perLesson")}><Input name="perLesson" inputMode="numeric" defaultValue={rules[0]?.perLesson ?? ""} /></Field>
-                    <Field label={t("salary.validFrom")}><Input type="date" name="validFrom" defaultValue={monthRange(month).start} required /></Field>
+                    <Field label={t("salary.validFrom")}><RuleDateField defaultValue={monthRange(month).start} warning={t("money.ruleMidMonth", { date: "{date}" })} /></Field>
                   </FormGrid>
                   <SubmitButton>{t("common.save")}</SubmitButton>
                 </ModalForm>
