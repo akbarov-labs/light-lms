@@ -173,12 +173,11 @@ export async function reminders(today: ISODate = todayISO()): Promise<JobResult>
     }
     if (s.notify.debt) {
       const neg = await db.ledgerEntry.groupBy({ by: ["familyId"], where: { centerId: c.id }, _sum: { amount: true }, having: { amount: { _sum: { lt: 0 } } } });
-      // ledgers of the debtor families are loaded in chunks, not one query per family
-      const allocs = new Map<string, Allocation>();
-      for (let i = 0; i < neg.length; i += ALLOC_CHUNK) {
-        for (const [id, a] of await allocationsFor(neg.slice(i, i + ALLOC_CHUNK).map((n) => n.familyId))) allocs.set(id, a);
-      }
-      for (const n of neg) {
+      // ledgers of the debtor families are loaded a chunk at a time, not one query per family
+      let allocs = new Map<string, Allocation>();
+      for (let i = 0; i < neg.length; i++) {
+        if (i % ALLOC_CHUNK === 0) allocs = await allocationsFor(neg.slice(i, i + ALLOC_CHUNK).map((x) => x.familyId));
+        const n = neg[i];
         const alloc = allocs.get(n.familyId);
         if (!alloc?.oldestUnpaidDate) continue;
         const overdue = diffDays(today, alloc.oldestUnpaidDate);
