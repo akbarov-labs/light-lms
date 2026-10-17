@@ -5,6 +5,7 @@ import { branchWhere, requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatDate, toISODate } from "@/lib/dates";
 import { groupTone, slotSummary } from "@/lib/format";
+import { enumParam, GROUP_STATUSES, groupCodeParam, groupStatusWhere, pageParam, strParam } from "@/lib/queries/params";
 import { Badge, Card, EmptyState, LinkButton, PageHeader, Pagination, Table, Td, Th, Tr } from "@/components/ui";
 import { Input, Select } from "@/components/fields";
 
@@ -14,15 +15,17 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const ctx = await requireStaff();
   const { t } = ctx;
-  const page = Math.max(1, Number(sp.page) || 1);
-  const status = sp.status ?? "current";
+  const page = pageParam(sp.page);
+  const status = sp.status === "all" || enumParam(GROUP_STATUSES, sp.status) ? sp.status! : "current";
+  const q = strParam(sp.q);
+  const code = groupCodeParam(q);
   const where: Prisma.GroupWhereInput = {
     centerId: ctx.centerId,
     ...branchWhere(ctx),
-    ...(status === "current" ? { status: { in: ["ACTIVE", "PLANNED"] } } : status !== "all" ? { status: status as "ACTIVE" } : {}),
+    ...groupStatusWhere(status),
     ...(sp.teacherId ? { teacherId: sp.teacherId } : {}),
     ...(sp.courseId ? { courseId: sp.courseId } : {}),
-    ...(sp.q ? { OR: [{ name: { contains: sp.q, mode: "insensitive" } }, ...(/^\d+$/.test(sp.q) ? [{ code: Number(sp.q) }] : [])] } : {}),
+    ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, ...(code !== undefined ? [{ code }] : [])] } : {}),
   };
   const [groups, total, teachers, courses] = await Promise.all([
     db.group.findMany({
