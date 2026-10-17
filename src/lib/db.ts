@@ -11,13 +11,33 @@ if (!process.env.DATABASE_URL) {
   }
 }
 
+export const DEFAULT_POOL_MAX = 20;
+export const DEFAULT_POOL_TIMEOUT_MS = 15_000;
+
+const positiveInt = (v: string | undefined, fallback: number, max: number) => {
+  const n = Number(v?.trim());
+  return v?.trim() && Number.isInteger(n) && n > 0 ? Math.min(n, max) : fallback;
+};
+
 /**
- * A Prisma client on a node-postgres pool (Prisma 7 has no built-in engine). Pool sized like Prisma 6's
- * default (connection_limit = 2×CPU+1 there; pg's 10 here) with Prisma 6's 5 s connect timeout — pg's own
- * default is to wait forever. Nothing connects until the first query (`next build` imports this without a URL).
+ * Pool settings from the environment. DB_POOL_MAX = connections per process (web 20 by default; compose gives
+ * the worker WORKER_DB_POOL_MAX, 10). DB_POOL_TIMEOUT_MS = how long a query waits for a free connection (or a
+ * new one to open) before failing — pg's own default is forever, so a burst would hang requests instead of
+ * erroring. Garbage values fall back to the defaults.
+ */
+export function poolOptions(env: Record<string, string | undefined> = process.env): { max: number; connectionTimeoutMillis: number } {
+  return {
+    max: positiveInt(env.DB_POOL_MAX, DEFAULT_POOL_MAX, 500),
+    connectionTimeoutMillis: positiveInt(env.DB_POOL_TIMEOUT_MS, DEFAULT_POOL_TIMEOUT_MS, 600_000),
+  };
+}
+
+/**
+ * A Prisma client on a node-postgres pool (Prisma 7 has no built-in engine), sized by `poolOptions()`.
+ * Nothing connects until the first query (`next build` imports this without a URL).
  */
 export function createDb(url = process.env.DATABASE_URL) {
-  const adapter = new PrismaPg({ connectionString: url, max: 10, connectionTimeoutMillis: 5_000, idleTimeoutMillis: 300_000 });
+  const adapter = new PrismaPg({ connectionString: url, ...poolOptions(), idleTimeoutMillis: 300_000 });
   return new PrismaClient({ adapter, log: ["warn", "error"] });
 }
 
