@@ -142,3 +142,11 @@
 2026-10-17 — Dates must round-trip (2026-02-31 refused) — they silently rolled over in forms and made report SQL fail.
 2026-10-17 — Salary expense branch = branch where the teacher held most lessons that month; tie → oldest branch — deterministic branch P&L.
 2026-10-17 — Reversals take the same per-family money lock as refunds — a concurrent reversal let a refund pass the cap. A payment reversed after a refund may leave the wallet negative by design: the money did not arrive, so it is debt (wallet:overdraw, aged, reminded).
+2026-10-17 — Login `next` refuses dot segments and encoded `.`/`/`/`\` in the path, and any result starting with `//` or `/\` — "/..//evil.com" normalized to a protocol-relative redirect.
+2026-10-17 — Branch-scoped revenue/profit counts only money attributed to the scoped branches (same rule as the by-branch chart); branch totals + "unknown" = center total — a sibling family was counted fully in every branch it touched.
+2026-10-17 — The Telegram daily report's new/left counts use the recipient's branch scope and Tashkent day boundaries — branch managers saw center-wide numbers.
+2026-10-17 — Reminders, teacher reminders and the daily report are isolated per center / item / recipient; failures are counted (*Failed) and raise the ops alert — the nightly fix (R2) now covers every job.
+2026-10-17 — DB pool: web DB_POOL_MAX 20, worker WORKER_DB_POOL_MAX 10, DB_POOL_TIMEOUT_MS 15 000 (was a fixed 10 with a 5 s wait) — dashboard and salary pages fan out more than 10 queries.
+2026-10-17 — Telegram sends from the queue abort after 15 s and retry with backoff — a hung call blocked the batch.
+2026-10-17 — Payme GetStatement selects and orders by Payme's own time (paymeTime, else createTime); a CreateTransaction that loses the insert race answers like the idempotent path instead of −32400.
+2026-10-17 — "Is a teacher" lives in one place (teacherWhere / isTeacherRow in src/lib/queries/staff.ts).

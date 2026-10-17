@@ -6,6 +6,7 @@ import { makeT, type Locale, type TFn } from "./i18n";
 import { readSettings, type CenterSettings } from "./settings";
 import { UserError } from "./user-error";
 import { isPlatformAdmin } from "./platform";
+import { isTeacherRow } from "./queries/staff";
 
 export interface Ctx {
   userId: string;
@@ -45,7 +46,7 @@ export function buildCtx(user: UserWithCenter, opts: { activeBranchId?: string |
     userId: user.id,
     userName: user.name,
     role,
-    isTeacher: user.isTeacher || role === "TEACHER",
+    isTeacher: isTeacherRow({ isTeacher: user.isTeacher, role }),
     centerId: user.centerId,
     center: {
       id: user.center.id,
@@ -153,7 +154,7 @@ export function staffPermsFor(actor: Pick<Ctx, "role" | "can">, role: RoleName, 
  */
 export async function assertTeacherAccess(ctx: Ctx, teacherId: string): Promise<void> {
   const t = await db.user.findFirst({ where: { id: teacherId, centerId: ctx.centerId }, include: { branches: { select: { branchId: true } } } });
-  if (!t || !(t.isTeacher || t.role === "TEACHER")) throw new UserError("error.notFound");
+  if (!t || !isTeacherRow(t)) throw new UserError("error.notFound");
   if (ctx.branchIds && !t.branches.some((b) => ctx.branchIds!.includes(b.branchId))) throw new UserError("error.notFound");
   if (t.id === ctx.userId && ctx.role !== "OWNER") throw new UserError("error.forbidden");
 }

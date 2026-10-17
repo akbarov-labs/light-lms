@@ -7,6 +7,7 @@ import { monthLabel } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { liveSalary, ruleFor } from "@/lib/salary/service";
 import { Badge, Card, LinkButton, PageHeader, Table, Td, Th, Tr } from "@/components/ui";
+import { teacherWhere } from "@/lib/queries/staff";
 
 export default async function SalaryPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const sp = await searchParams;
@@ -14,7 +15,7 @@ export default async function SalaryPage({ searchParams }: { searchParams: Promi
   const { t } = ctx;
   const month = monthParam(sp.month);
   const teachers = await db.user.findMany({
-    where: { centerId: ctx.centerId, OR: [{ isTeacher: true }, { role: "TEACHER" }], ...(ctx.branchIds ? { branches: { some: { branchId: { in: ctx.branchIds } } } } : {}) },
+    where: { centerId: ctx.centerId, ...teacherWhere, ...(ctx.branchIds ? { branches: { some: { branchId: { in: ctx.branchIds } } } } : {}) },
     orderBy: [{ archivedAt: "asc" }, { name: "asc" }],
   });
   const all = await Promise.all(

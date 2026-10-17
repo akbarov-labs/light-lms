@@ -14,6 +14,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { validSlot, type WeeklySlot } from "@/lib/schedule";
 import { assertNoGroupClash, generateLessons, rebuildFutureLessons, trimLessonsAfter } from "@/lib/services/lessons";
 import { parseGroupPrices, syncGroup } from "@/lib/billing/sync";
+import { teacherWhere } from "@/lib/queries/staff";
 
 const schema = z.object({
   id: zOptId,
@@ -45,7 +46,7 @@ async function validateRefs(ctx: Ctx, f: z.infer<typeof schema>) {
   const [course, branch, teacher, room] = await Promise.all([
     db.course.findFirst({ where: { id: f.courseId, centerId: ctx.centerId } }),
     db.branch.findFirst({ where: { id: f.branchId, centerId: ctx.centerId } }),
-    db.user.findFirst({ where: { id: f.teacherId, centerId: ctx.centerId, OR: [{ isTeacher: true }, { role: "TEACHER" }] } }),
+    db.user.findFirst({ where: { id: f.teacherId, centerId: ctx.centerId, ...teacherWhere } }),
     f.roomId ? db.room.findFirst({ where: { id: f.roomId, branchId: f.branchId } }) : Promise.resolve(null),
   ]);
   if (!course || !branch || !teacher || (f.roomId && !room)) throw new UserError("error.notFound");

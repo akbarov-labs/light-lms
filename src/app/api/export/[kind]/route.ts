@@ -15,6 +15,7 @@ import { liveSalary } from "@/lib/salary/service";
 import { auditWhere } from "@/lib/queries/audit";
 import { attendanceStats, billedByGroup } from "@/lib/queries/reports";
 import { isISODate, monthParam, monthRange } from "@/lib/dates";
+import { teacherWhere } from "@/lib/queries/staff";
 
 export const dynamic = "force-dynamic";
 
@@ -109,7 +110,7 @@ const exporters: Record<string, Exporter> = {
     if (!ctx.can("finance.view")) return null;
     const month = monthParam(sp.month);
     const teachers = await db.user.findMany({
-      where: { centerId: ctx.centerId, OR: [{ isTeacher: true }, { role: "TEACHER" }], ...(ctx.branchIds ? { branches: { some: { branchId: { in: ctx.branchIds } } } } : {}) },
+      where: { centerId: ctx.centerId, ...teacherWhere, ...(ctx.branchIds ? { branches: { some: { branchId: { in: ctx.branchIds } } } } : {}) },
       orderBy: { name: "asc" },
     });
     const { t } = ctx;
