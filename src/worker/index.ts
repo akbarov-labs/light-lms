@@ -5,7 +5,8 @@ import type { Bot } from "grammy";
 import { db } from "@/lib/db";
 import { TZ } from "@/lib/dates";
 import { createBot } from "./bot";
-import { processNotifications, type Sender } from "./notifications";
+import { processNotifications, telegramSender, type Sender } from "./notifications";
+import { errText, sleep } from "./util";
 import { dailyReport, jobProblems, nightly, reminders, teacherReminders, type JobResult } from "./jobs";
 import { lockKeyFor, withJobLock } from "./job-lock";
 import { assertStrongAuthSecret } from "@/lib/auth/startup";
@@ -16,8 +17,6 @@ import { backupCheck } from "./backup-check";
 import { telegramBotToken } from "@/lib/env";
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[worker]", ...a);
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 300);
 
 /** Touched every 30 s while the event loop is alive; the compose healthcheck fails when it is older than 2 min. */
 const HEARTBEAT_FILE = process.env.WORKER_HEARTBEAT_FILE?.trim() || "/tmp/worker-heartbeat";
@@ -49,7 +48,7 @@ async function run(name: string, job: () => Promise<JobResult>, lockKey = lockKe
     if (problem) await alertOps(`job:${name}`, `Worker job "${name}" finished with problems: ${problem}`.slice(0, 400));
   } catch (e) {
     log(`job ${name} FAILED`, e);
-    await alertOps(`job:${name}`, `Worker job "${name}" failed: ${errText(e)}`);
+    await alertOps(`job:${name}`, `Worker job "${name}" failed: ${errText(e, 300)}`);
   }
 }
 
@@ -110,9 +109,7 @@ async function main() {
   if (token) {
     const b = createBot(token);
     bot = b;
-    send = async (chatId, text) => {
-      await b.api.sendMessage(chatId, text, { parse_mode: "HTML", link_preview_options: { is_disabled: true } });
-    };
+    send = telegramSender(b.api);
     b.start({ drop_pending_updates: true, onStart: (me) => log(`bot @${me.username} polling`) }).catch((e) => log("bot stopped", e));
   } else {
     log("TELEGRAM_BOT_TOKEN is empty — bot disabled, notifications stay queued; jobs still run");
@@ -141,13 +138,13 @@ async function main() {
 
 process.on("unhandledRejection", (e) => {
   log("unhandled rejection", e);
-  void alertOps("worker:unhandled", `Worker unhandled error: ${errText(e)}`);
+  void alertOps("worker:unhandled", `Worker unhandled error: ${errText(e, 300)}`);
 });
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
 process.once("SIGINT", () => void shutdown("SIGINT"));
 
 main().catch(async (e) => {
   console.error("[worker] fatal", e);
-  await alertOps("worker:fatal", `Worker crashed on start: ${errText(e)}`);
+  await alertOps("worker:fatal", `Worker crashed on start: ${errText(e, 300)}`);
   process.exit(1);
 });

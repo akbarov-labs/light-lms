@@ -17,6 +17,7 @@ import { debtAging, revenue } from "@/lib/queries/reports";
 import { formatMoney } from "@/lib/money";
 import { purgeOldAttempts } from "@/lib/auth/attempts-db";
 import { purgeOldNotifications } from "./notifications";
+import { errText } from "./util";
 
 export type JobResult = Record<string, number | string>;
 
@@ -31,12 +32,6 @@ export async function forEachLimit<T>(items: readonly T[], limit: number, fn: (i
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
 }
-
-/** Short error text for a job result: the last line of the message (Prisma puts the cause there). */
-const errText = (e: unknown) => {
-  const lines = (e instanceof Error ? e.message : String(e)).split("\n").map((l) => l.trim()).filter(Boolean);
-  return (lines[lines.length - 1] ?? "error").slice(0, 200);
-};
 
 /**
  * 00:30 — lessons ahead, group statuses, freeze statuses, billing for every billable enrollment, housekeeping.

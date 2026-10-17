@@ -4,17 +4,30 @@
 // manual `npm run job:notifications` never pick the same row. A row left in SENDING by a crashed worker is
 // taken back after STALE_LOCK_MIN minutes — the only case where a message can go out twice (sent, then the
 // process died before marking it SENT). That is accepted: losing the message would be worse.
+import type { Api } from "grammy";
 import { db } from "@/lib/db";
+import { sleep } from "./util";
 
 export type Sender = (chatId: string, text: string) => Promise<void>;
+
+/** One Telegram call may take this long; then it is aborted and retried later (transient), so a hung
+ * connection cannot hold the whole batch — and its SENDING rows — until the 10-minute reclaim. */
+export const SEND_TIMEOUT_MS = 15_000;
+
+/** The queue's sender over a grammY Api: HTML, no link previews, aborted after `timeoutMs`. */
+export function telegramSender(api: Pick<Api, "sendMessage">, timeoutMs = SEND_TIMEOUT_MS): Sender {
+  return async (chatId, text) => {
+    // grammY types its signal with the abort-controller shim; it only listens for "abort", so the native one works
+    const signal = AbortSignal.timeout(timeoutMs) as unknown as Parameters<Api["sendMessage"]>[3];
+    await api.sendMessage(chatId, text, { parse_mode: "HTML", link_preview_options: { is_disabled: true } }, signal);
+  };
+}
 
 export const MAX_ATTEMPTS = 5;
 export const STALE_LOCK_MIN = 10;
 const GAP_MS = 40; // 25 msg/s
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 3_600_000;
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Delay before the next try after `attempts` failed tries: 30 s, 1 min, 2 min, … capped at 1 h. */
 export function backoffMs(attempts: number): number {
