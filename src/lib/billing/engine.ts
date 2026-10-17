@@ -447,6 +447,22 @@ export function lessonValue(input: BillingInput, lessonId: string, payTrial: boo
   // only when its installment and every earlier one of the package are fully paid.
   let j = 1;
   while (j < inst && addMonthsAnchored(start, j) <= lesson.date) j++;
-  const keys = Array.from({ length: j }, (_, x) => `pkg:${e.id}:${pkgIndex}:${x + 1}`);
-  return { value: price / info.size, key: keys[j - 1], keys, trial: false };
+  const all = Array.from({ length: j }, (_, x) => `pkg:${e.id}:${pkgIndex}:${x + 1}`);
+  // An installment that owes nothing (a leaver's later installments are credited to 0) has nothing
+  // to collect: it must not block the lessons it covers, so they are keyed to the charged ones.
+  const owed = expectedAmounts(input);
+  const keys = all.filter((k) => owed.get(k) !== 0);
+  return { value: price / info.size, key: keys[keys.length - 1] ?? all[j - 1], keys, trial: false };
+}
+
+const expectedCache = new WeakMap<BillingInput, Map<string, number>>();
+
+/** Expected amount per billing key (cached per input: salary asks for every lesson of a group). */
+function expectedAmounts(input: BillingInput): Map<string, number> {
+  let m = expectedCache.get(input);
+  if (!m) {
+    m = new Map(computeExpected(input).map((u) => [u.key, u.amount]));
+    expectedCache.set(input, m);
+  }
+  return m;
 }
