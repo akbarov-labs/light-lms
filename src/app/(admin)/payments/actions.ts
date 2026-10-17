@@ -45,7 +45,10 @@ export async function reverseAction(_: ActionState, fd: FormData): Promise<Actio
 
 export async function refundAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction("payments.refund", async (ctx) => {
-    const f = z.object({ familyId: zId, amount: zMoney, method: METHODS, date: zDate, reason: zOptStr }).parse(formObject(fd));
+    const raw = formObject(fd);
+    if (parseMoney(raw.amount) === null) throw new UserError("money.badAmount");
+    // force = "refund more than the balance" checkbox; the service caps the refund otherwise
+    const f = z.object({ familyId: zId, amount: zMoney, method: METHODS, date: zDate, reason: zOptStr, force: zBool }).parse(raw);
     await assertFamilyAccess(ctx, f.familyId);
     await refund({ userId: ctx.userId, centerId: ctx.centerId }, { ...f, reason: f.reason ?? null });
     revalidatePath(`/families/${f.familyId}`);

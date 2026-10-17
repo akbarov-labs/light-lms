@@ -8,6 +8,8 @@ import { generateLessons } from "@/lib/services/lessons";
 import { importStudents, OPENING_PERIOD } from "@/app/(admin)/students/import/import-core";
 import { addAdjustment, liveSalary, lockPayslip, markPayslipPaid } from "@/lib/salary/service";
 import { UserError } from "@/lib/user-error";
+import { refund, takePayment } from "@/lib/services/payments";
+import { familyAllocation, familyBalance } from "@/lib/services/wallet";
 
 const today = todayISO();
 let ctx: Ctx;
@@ -110,6 +112,29 @@ describe("B5/B11 — student import is idempotent and dates the old debt", () =>
     expect(res.errors).toHaveLength(2);
     expect(res.errors[0]).toContain(ctx.t("money.import.futureDebtSince"));
     expect(res.errors[1]).toContain(ctx.t("money.import.badDebtSince"));
+  });
+});
+
+describe("B7 — refunds are capped at the family's credit", () => {
+  it("refuses more than the credit; force + reason refunds it and the gap shows as debt", async () => {
+    const fam = await db.family.create({ data: { centerId, name: "Refund oilasi" } });
+    const actor = { userId: ctx.userId, centerId };
+    await takePayment(actor, { familyId: fam.id, amount: 600_000, method: "CASH" });
+    await db.ledgerEntry.create({ data: { centerId, familyId: fam.id, type: "CHARGE", amount: -200_000, method: "SYSTEM", description: "test", date: fromISODate(today) } });
+    const over = await refund(actor, { familyId: fam.id, amount: 500_000, method: "CASH", reason: null }).catch((e: unknown) => e);
+    expect((over as UserError).key).toBe("money.refundOverBalance");
+    const noReason = await refund(actor, { familyId: fam.id, amount: 500_000, method: "CASH", reason: " ", force: true }).catch((e: unknown) => e);
+    expect((noReason as UserError).key).toBe("money.refundForceReason");
+    // within the credit: fine
+    await refund(actor, { familyId: fam.id, amount: 400_000, method: "CASH", reason: null });
+    expect(await familyBalance(fam.id)).toBe(0);
+    // forced: allowed, audited, and the family now owes it
+    await refund(actor, { familyId: fam.id, amount: 100_000, method: "CASH", reason: "xato to'lov", force: true });
+    const a = await familyAllocation(fam.id);
+    expect(a.balance).toBe(-100_000);
+    expect(a.totalDebt).toBe(100_000);
+    expect(a.oldestUnpaidDate).toBe(today);
+    expect(await db.auditLog.count({ where: { centerId, action: "refund.overBalance" } })).toBe(1);
   });
 });
 
