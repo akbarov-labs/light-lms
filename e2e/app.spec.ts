@@ -16,8 +16,18 @@ async function login(page: Page, phone: string) {
   await page.waitForURL((u) => !u.pathname.startsWith("/login"));
 }
 
+/**
+ * Wait until a streamed page is complete: loading.tsx boundaries stream the page in after the first
+ * paint, and <title> arrives with it. Scans and keyboard shortcuts must not run on the skeleton.
+ */
+async function settle(page: Page) {
+  await page.waitForLoadState("load");
+  await page.waitForFunction(() => document.title !== "" && !document.querySelector('[hidden][id^="S:"]'));
+}
+
 /** Serious and critical WCAG 2.1 A/AA violations fail the test; the list is printed so it can be fixed. */
 async function a11y(page: Page, label: string) {
+  await settle(page);
   // @axe-core/playwright types against its own playwright-core copy; the runtime object is the same page
   const r = await new AxeBuilder({ page: page as unknown as ConstructorParameters<typeof AxeBuilder>[0]["page"] }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   const bad = r.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
@@ -97,10 +107,12 @@ test.describe("staff", () => {
       await a11y(page, path);
     }
     await page.goto("/students");
+    await settle(page);
     await page.locator("main table tbody a").first().click();
     await page.waitForURL("**/students/**");
     await a11y(page, "student page");
     await page.goto("/groups");
+    await settle(page);
     await page.locator("main table tbody a").first().click();
     await page.waitForURL("**/groups/**");
     await a11y(page, "group page");
@@ -123,6 +135,7 @@ test.describe("staff", () => {
     await a11y(page, "receipt");
 
     await page.goto("/");
+    await settle(page);
     await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
@@ -130,6 +143,21 @@ test.describe("staff", () => {
     await expect(dialog.getByRole("option").first()).toBeVisible();
     await page.keyboard.press("Enter");
     await page.waitForURL("**/students/**");
+  });
+
+  test("a decimal comma is so'm and tiyin, never a 100× payment (audit B1)", async ({ page }) => {
+    await login(page, OWNER);
+    await page.goto("/debtors");
+    await settle(page);
+    const href = await page.locator('main a[href^="/families/"]').first().getAttribute("href");
+    await page.goto(`${href}?pay=1`);
+    await settle(page);
+    const amount = page.locator('input[name="amount"]');
+    await amount.fill("150 000,00");
+    await page.getByRole("button", { name: "Davom etish" }).click();
+    await expect(page.getByText("Tasdiqlang")).toBeVisible();
+    await expect(page.getByText("150 000 so'm").first()).toBeVisible();
+    await expect(page.getByText("15 000 000")).toHaveCount(0);
   });
 
   test("cashier: can take payments but cannot open reports or settings", async ({ page }) => {

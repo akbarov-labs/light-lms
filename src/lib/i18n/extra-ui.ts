@@ -10,7 +10,6 @@ export const uiUz = {
   "fallback.code": "Xato kodi",
   "fallback.notFoundTitle": "Sahifa topilmadi",
   "fallback.notFoundBody": "Havola eskirgan yoki manzil noto'g'ri yozilgan.",
-  "fallback.loading": "Yuklanmoqda…",
 } as const;
 
 export const uiRu: Record<keyof typeof uiUz, string> = {
@@ -23,5 +22,4 @@ export const uiRu: Record<keyof typeof uiUz, string> = {
   "fallback.code": "Код ошибки",
   "fallback.notFoundTitle": "Страница не найдена",
   "fallback.notFoundBody": "Ссылка устарела или адрес набран с ошибкой.",
-  "fallback.loading": "Загрузка…",
 };
