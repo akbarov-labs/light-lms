@@ -2,6 +2,9 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { familyScope, type Ctx } from "@/lib/ctx-core";
 import { fromISODate, monthRange, todayISO, isISODate } from "@/lib/dates";
+import { enumParam, strParam } from "./params";
+
+export const PAYMENT_METHODS = ["CASH", "CARD", "TRANSFER", "PAYME", "CLICK", "UZUM", "SYSTEM"] as const;
 
 export interface PaymentFilters {
   from?: string;
@@ -25,14 +28,18 @@ export function paymentWhere(ctx: Ctx, f: PaymentFilters): Prisma.LedgerEntryWhe
   ];
   // reversals of charges/credits never appear here — only money movements
   if (types.includes("REVERSAL")) and.push({ OR: [{ type: { not: "REVERSAL" } }, { reverses: { type: { in: ["PAYMENT", "REFUND"] } } }] });
-  if (f.method) and.push({ method: f.method as "CASH" });
-  if (f.cashier) and.push({ createdById: f.cashier });
-  if (f.q)
+  // query-string values: an unknown method is ignored (it used to reach Prisma and 500, audit B14)
+  const method = enumParam(PAYMENT_METHODS, f.method);
+  const cashier = strParam(f.cashier);
+  const q = strParam(f.q);
+  if (method) and.push({ method });
+  if (cashier) and.push({ createdById: cashier });
+  if (q)
     and.push({
       family: {
         OR: [
-          { name: { contains: f.q, mode: "insensitive" } },
-          { students: { some: { OR: [{ firstName: { contains: f.q, mode: "insensitive" } }, { lastName: { contains: f.q, mode: "insensitive" } }] } } },
+          { name: { contains: q, mode: "insensitive" } },
+          { students: { some: { OR: [{ firstName: { contains: q, mode: "insensitive" } }, { lastName: { contains: q, mode: "insensitive" } }] } } },
         ],
       },
     });
