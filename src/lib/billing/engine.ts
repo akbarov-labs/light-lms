@@ -181,17 +181,37 @@ interface PackageInfo {
  */
 export function courseLessonsFrom(input: BillingInput, from: ISODate): number {
   const g = input.group;
-  if (!g.endDate) {
-    const perWeek = input.course.lessonsPerWeek ?? g.slotWeekdays.length;
-    // fixed estimate: the count must not drift as lessons get generated ahead
-    const estimate = Math.max(1, Math.round((input.course.durationMonths ?? 1) * perWeek * 4.33));
-    const before = input.lessons.filter((l) => l.date >= g.startDate && l.date < from).length;
-    return Math.max(1, estimate - before);
-  }
+  if (!g.endDate) return Math.max(1, estimatedLessonsLeft(input, from));
   const generated = input.lessons.filter((l) => l.date >= from && l.date <= g.endDate!).length;
   const last = input.lessons.reduce((m, l) => (l.date > m ? l.date : m), "");
   const tailFrom = last && last >= from ? nextDay(last) : from;
   return Math.max(1, generated + countSlotDates(g.slotWeekdays, tailFrom, g.endDate, input.holidays));
+}
+
+/**
+ * Group without an end date: lessons of the course estimate (duration × lessons per week × 4.33)
+ * left from `from`. Can be ≤ 0 once the estimate is used up.
+ */
+function estimatedLessonsLeft(input: BillingInput, from: ISODate): number {
+  const g = input.group;
+  const perWeek = input.course.lessonsPerWeek ?? g.slotWeekdays.length;
+  // fixed estimate: the count must not drift as lessons get generated ahead
+  const estimate = Math.max(1, Math.round((input.course.durationMonths ?? 1) * perWeek * 4.33));
+  const before = input.lessons.filter((l) => l.date >= g.startDate && l.date < from).length;
+  return estimate - before;
+}
+
+/**
+ * A late joiner to a whole-course package of a group without an end date, after the estimated
+ * lessons are used up: there is nothing left to sell (the engine would charge "1 dars" for the
+ * rest of the course). Enrolling/activating such a student is refused (DECISIONS.md).
+ */
+export function wholeCourseExhausted(input: BillingInput): boolean {
+  const c = input.course;
+  if (c.pricingType !== "PACKAGE" || (c.packageLessons ?? 0) > 0 || input.group.endDate) return false;
+  const activated = input.enrollment.activatedAt;
+  if (!activated || activated <= input.group.startDate) return false;
+  return estimatedLessonsLeft(input, activated) <= 0;
 }
 
 /** Number of lessons in the whole course. */

@@ -4,7 +4,8 @@ import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { addDays, fromISODate, toISODate, todayISO, type ISODate } from "@/lib/dates";
 import type { Prisma } from "@prisma/client";
-import { parseTermsHistory, syncEnrollment } from "@/lib/billing/sync";
+import { loadBillingInput, parseTermsHistory, syncEnrollment } from "@/lib/billing/sync";
+import { wholeCourseExhausted } from "@/lib/billing/engine";
 import { transferTerms } from "@/lib/billing/terms";
 import { UserError } from "@/lib/user-error";
 import { enqueue, familyChats } from "@/lib/notify";
@@ -37,6 +38,12 @@ export async function nextLessonDate(tx: Tx, groupId: string, from: ISODate): Pr
     select: { date: true },
   });
   return l ? toISODate(l.date) : null;
+}
+
+/** Refuse to start billing a late joiner when the open-ended whole course has no lessons left to sell. */
+async function assertBillable(tx: Tx, enrollmentId: string): Promise<void> {
+  const { input } = await loadBillingInput(tx, enrollmentId, todayISO());
+  if (wholeCourseExhausted(input)) throw new UserError("money.wholeCourseFull");
 }
 
 async function openCount(tx: Tx, groupId: string): Promise<number> {
@@ -82,6 +89,7 @@ export async function enrollStudent(actor: Actor, input: EnrollInput, branchChec
         discountReason: input.discountReason ?? null,
       },
     });
+    if (!input.trial) await assertBillable(tx, e.id);
     await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "Enrollment", entityId: e.id, action: input.trial ? "enroll.trial" : "enroll.active", after: e });
     await advanceLeadsForStudent(tx, actor.centerId, student.id, input.trial ? "TRIAL_BOOKED" : "ENROLLED", actor.userId);
     if (input.trial) {
@@ -117,6 +125,7 @@ export async function activateEnrollment(actor: Actor, enrollmentId: string, dat
     const picked = date ?? (await nextLessonDate(tx, e.groupId, todayISO())) ?? todayISO();
     const when = picked < toISODate(e.startDate) ? toISODate(e.startDate) : picked;
     const updated = await tx.enrollment.update({ where: { id: e.id }, data: { status: "ACTIVE", activatedAt: fromISODate(when) } });
+    await assertBillable(tx, e.id);
     await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "Enrollment", entityId: e.id, action: "activate", before: { status: e.status }, after: { status: updated.status, activatedAt: when } });
     await advanceLeadsForStudent(tx, actor.centerId, e.studentId, "ENROLLED", actor.userId);
     await syncEnrollment(e.id, { tx, userId: actor.userId });
@@ -160,6 +169,7 @@ export async function transferEnrollment(actor: Actor, enrollmentId: string, toG
         ...(terms.history.length > 0 ? { termsHistory: terms.history as unknown as Prisma.InputJsonValue } : {}),
       },
     });
+    if (!asTrial) await assertBillable(tx, created.id);
     await tx.enrollment.update({
       where: { id: e.id },
       data: { endDate: fromISODate(addDays(moveDate, -1)), status: "TRANSFERRED", transferredToId: created.id },

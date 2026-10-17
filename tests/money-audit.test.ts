@@ -2,7 +2,7 @@
 // Builds its own small center (no demo seed), so it does not depend on the order of test files.
 import { beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
-import { addDays, fromISODate, todayISO, toISODate } from "@/lib/dates";
+import { addDays, fromISODate, monthRange, shiftMonth, todayISO, toISODate } from "@/lib/dates";
 import { buildCtx, loadUser, type Ctx } from "@/lib/ctx-core";
 import { generateLessons } from "@/lib/services/lessons";
 import { importStudents, OPENING_PERIOD } from "@/app/(admin)/students/import/import-core";
@@ -10,6 +10,9 @@ import { addAdjustment, liveSalary, lockPayslip, markPayslipPaid } from "@/lib/s
 import { UserError } from "@/lib/user-error";
 import { refund, takePayment } from "@/lib/services/payments";
 import { familyAllocation, familyBalance } from "@/lib/services/wallet";
+import { activateEnrollment, enrollStudent, setEnrollmentTerms, transferEnrollment } from "@/lib/services/enrollments";
+import { loadBillingInput, parseTermsHistory } from "@/lib/billing/sync";
+import { computeExpected } from "@/lib/billing/engine";
 
 const today = todayISO();
 let ctx: Ctx;
@@ -135,6 +138,53 @@ describe("B7 — refunds are capped at the family's credit", () => {
     expect(a.totalDebt).toBe(100_000);
     expect(a.oldestUnpaidDate).toBe(today);
     expect(await db.auditLog.count({ where: { centerId, action: "refund.overBalance" } })).toBe(1);
+  });
+});
+
+async function newStudent(name: string) {
+  const fam = await db.family.create({ data: { centerId, name: `${name} oilasi` } });
+  return db.student.create({ data: { centerId, familyId: fam.id, branchId, firstName: name, lastName: "Test" } });
+}
+
+describe("B4/B8 — enrollments", () => {
+  const actor = () => ({ userId: ctx.userId, centerId });
+
+  it("transfer keeps a discount scheduled from next month out of this month in the new group", async () => {
+    const a = await makeGroup({ name: "Transfer A", price: 600_000 });
+    const b = await makeGroup({ name: "Transfer B", price: 800_000 });
+    const s = await newStudent("Transfer");
+    const id = await enrollStudent(actor(), { studentId: s.id, groupId: a.group.id, startDate: addDays(today, -10), trial: false });
+    const nextMonth = monthRange(shiftMonth(today.slice(0, 7), 1)).start;
+    await setEnrollmentTerms(actor(), id, { priceOverride: 550_000, discountPercent: 50, discountAmount: null, discountUntil: null, discountReason: "aka-uka" }, nextMonth);
+    const newId = await transferEnrollment(actor(), id, b.group.id, today);
+    const created = await db.enrollment.findUniqueOrThrow({ where: { id: newId } });
+    const history = parseTermsHistory(created.termsHistory);
+    expect(history.map((h) => [h.from, h.priceOverride, h.discountPercent])).toEqual([
+      ["2000-01-01", null, null],
+      [nextMonth, null, 50],
+    ]);
+    const { input } = await loadBillingInput(db, newId, today);
+    const plain = computeExpected({ ...input, enrollment: { ...input.enrollment, terms: [], discountPercent: null } });
+    const [thisMonth] = computeExpected(input);
+    expect(thisMonth.amount).toBe(plain[0].amount);
+    expect(thisMonth.amount).toBeGreaterThan(0);
+    // and the posted ledger matches
+    const posted = await db.ledgerEntry.aggregate({ where: { enrollmentId: newId, type: { in: ["CHARGE", "CREDIT"] } }, _sum: { amount: true } });
+    expect(-(posted._sum.amount ?? 0)).toBe(thisMonth.amount);
+  });
+
+  it("refuses a late joiner once an open-ended whole course has used up its estimated lessons", async () => {
+    // 1 month × 3/week ≈ 13 lessons, the group has been running for 60 days
+    const g = await makeGroup({ name: "PY open", pricingType: "PACKAGE", price: 2_400_000, durationMonths: 1, startDate: addDays(today, -60) });
+    const s = await newStudent("Late");
+    const err = await enrollStudent(actor(), { studentId: s.id, groupId: g.group.id, startDate: today, trial: false }).catch((e: unknown) => e);
+    expect((err as UserError).key).toBe("money.wholeCourseFull");
+    expect(await db.enrollment.count({ where: { studentId: s.id } })).toBe(0);
+    // a trial is free and allowed; activating it is refused the same way
+    const trialId = await enrollStudent(actor(), { studentId: s.id, groupId: g.group.id, startDate: today, trial: true });
+    const err2 = await activateEnrollment(actor(), trialId, today).catch((e: unknown) => e);
+    expect((err2 as UserError).key).toBe("money.wholeCourseFull");
+    expect((await db.enrollment.findUniqueOrThrow({ where: { id: trialId } })).status).toBe("TRIAL");
   });
 });
 

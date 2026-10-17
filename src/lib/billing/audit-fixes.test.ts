@@ -1,7 +1,7 @@
 // Regression tests for the money findings of docs/AUDIT-2026-10-17.md (B3, B4, B8) and the
 // billing edge cases the audit listed as untested.
 import { describe, expect, it } from "vitest";
-import { computeExpected, deltaDate, planSync, round100 } from "./engine";
+import { computeExpected, deltaDate, planSync, round100, wholeCourseExhausted } from "./engine";
 import { transferTerms } from "./terms";
 import { FakeLedger, TTS, scenario } from "./testkit";
 
@@ -74,6 +74,31 @@ describe("B3 — enrollment activated months ahead", () => {
     expect(first).toEqual([{ billingKey: "sub:e1:2027-01-01", type: "CHARGE", amount: -round100((600_000 * 9) / 13) }]);
     expect(ledger.sync(at("2026-11-20", "2027-01-19"))).toEqual([]);
     expect(ledger.sync(at("2026-12-31", "2027-03-01"))).toEqual([]);
+  });
+});
+
+describe("B8 — open-ended whole-course package, estimate used up", () => {
+  // 1 month × 3 lessons/week × 4.33 → 13 lessons; September 2026 MWF has exactly 13
+  const c = { pricingType: "PACKAGE" as const, price: 2_400_000, packageLessons: null, durationMonths: 1 };
+  const join = (on: string) => scenario({ asOf: on, course: c, groupStart: "2026-09-01", enrollment: { startDate: on, activatedAt: on } });
+
+  it("a late joiner after the estimate is exhausted is flagged (nothing left to sell)", () => {
+    expect(wholeCourseExhausted(join("2026-10-01"))).toBe(true);
+    expect(wholeCourseExhausted(join("2026-11-15"))).toBe(true);
+  });
+
+  it("a late joiner with lessons left pays their share, and is not flagged", () => {
+    // 11 of 13 held before the 28th → 2 left
+    const input = join("2026-09-28");
+    expect(wholeCourseExhausted(input)).toBe(false);
+    expect(computeExpected(input)[0].amount).toBe(Math.round((2_400_000 * 2) / 13));
+  });
+
+  it("never flags a group with an end date, a fixed-size package, a trial or a joiner from day one", () => {
+    expect(wholeCourseExhausted(scenario({ asOf: "2026-10-01", course: c, groupStart: "2026-09-01", groupEnd: "2026-12-31", enrollment: { startDate: "2026-10-01", activatedAt: "2026-10-01" } }))).toBe(false);
+    expect(wholeCourseExhausted(scenario({ asOf: "2026-10-01", course: { ...c, packageLessons: 12 }, groupStart: "2026-09-01", enrollment: { startDate: "2026-10-01", activatedAt: "2026-10-01" } }))).toBe(false);
+    expect(wholeCourseExhausted(scenario({ asOf: "2026-10-01", course: c, groupStart: "2026-09-01", enrollment: { status: "TRIAL", startDate: "2026-10-01", activatedAt: null } }))).toBe(false);
+    expect(wholeCourseExhausted(scenario({ asOf: "2026-10-01", course: c, groupStart: "2026-09-01", enrollment: { startDate: "2026-09-01", activatedAt: "2026-09-01" } }))).toBe(false);
   });
 });
 
