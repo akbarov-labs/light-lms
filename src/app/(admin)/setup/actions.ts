@@ -13,6 +13,7 @@ import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { formList, formObject, zDate, zMoney, zOptInt, zOptStr, zPhone, zStr, zTime } from "@/lib/forms";
 import { UserError } from "@/lib/user-error";
+import { assertNotDemo } from "@/lib/demo-guard";
 import { fromISODate, todayISO } from "@/lib/dates";
 import { validSlot, type WeeklySlot } from "@/lib/schedule";
 import { assertNoGroupClash, generateLessons } from "@/lib/services/lessons";
@@ -160,6 +161,8 @@ const teacherSchema = z.object({ name: zStr, phone: zPhone, password: z.string()
 
 export async function setupTeacherAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return step(async (ctx) => {
+    // public demo: visitors must not create staff logins (same rule as Settings → Staff)
+    assertNotDemo();
     if (!ctx.can("staff.manage")) throw new UserError("error.forbidden");
     const parsed = teacherSchema.safeParse(formObject(fd));
     if (!parsed.success) {
