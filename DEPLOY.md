@@ -107,6 +107,13 @@ Bot ota-onalarga balans va eslatmalar yuboradi, o'qituvchilarga davomat, xodimla
   ```bash
   docker compose -f docker-compose.prod.yml run --rm migrate npx tsx scripts/reset-password.ts 901234567
   ```
+- **Platforma admini** (`/platform`: barcha markazlar, tarif, markazni o'chirish) faqat server operatori tomonidan beriladi — telefon raqami bilan emas, bazadagi belgi bilan (audit jurnaliga yoziladi):
+  ```bash
+  docker compose -f docker-compose.prod.yml run --rm migrate npx tsx scripts/platform-admin.ts grant 901234567
+  docker compose -f docker-compose.prod.yml run --rm migrate npx tsx scripts/platform-admin.ts revoke 901234567
+  ```
+- `AUTH_SECRET` namunadagi/dev qiymatda bo'lsa, `APP_URL` `localhost` bo'lmagan har qanday serverda (http bo'lsa ham) ilova ishga tushmaydi.
+- `X-Forwarded-For` faqat `TRUST_PROXY=true` bo'lsa ishoniladi (prod compose'da Caddy orqasida yoqilgan). Ilovani proksisiz ochiq portda ishlatsangiz — `false` qoldiring, aks holda IP bo'yicha cheklovlarni chetlab o'tish mumkin.
 
 ## 9. Zaxira nusxalar (backup)
 
@@ -250,6 +257,10 @@ Put the @BotFather token in `TELEGRAM_BOT_TOKEN`, then `docker compose -f docker
 - HTTPS, HSTS, nonce-based CSP, `frame-ancestors 'none'`, `Secure`/`HttpOnly` cookies.
 - Last resort (the only owner lost the password, no Telegram link):
   `docker compose -f docker-compose.prod.yml run --rm migrate npx tsx scripts/reset-password.ts 901234567`
+- **Platform admin** (`/platform`: every center, plans, disabling a center) is a database flag granted only by the server operator — never by phone number; every change is audited:
+  `docker compose -f docker-compose.prod.yml run --rm migrate npx tsx scripts/platform-admin.ts grant 901234567` (`revoke` to take it away).
+- With the example/dev `AUTH_SECRET` the app refuses to start on any host other than `localhost`, even over plain http.
+- `X-Forwarded-For` is trusted only when `TRUST_PROXY=true` (set in the prod compose, behind Caddy). Running the app on an open port without a proxy? Leave it `false`, otherwise anyone can dodge the per-IP limits.
 
 ## 9. Backups
 

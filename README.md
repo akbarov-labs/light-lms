@@ -86,7 +86,7 @@ Ota-onaga yuboriladigan havola: `<APP_URL>/pay/<familyId>` → Payme checkout.
 
 - Yangi markaz: http://localhost:3000/signup → markaz, egasi va filial yaratiladi, keyin sozlash ustasi `/setup` ochiladi (istalgan qadamni o'tkazib yuborish mumkin).
 - Tarif limiti faol o'quvchilarga qo'yiladi (sinovdagilar hisobga olinmaydi). Limit to'lsa yangi o'quvchini faollashtirib bo'lmaydi; mavjudlari ishlayveradi. To'lov tizimi hali ulanmagan — tarifni platforma admini qo'lda o'zgartiradi.
-- Platforma admini: `.env` da `PLATFORM_ADMIN_PHONES=998901234567` (vergul bilan bir nechta). Shu raqam bilan kirgan xodimda menyuda "Platforma" (`/platform`) paydo bo'ladi.
+- Platforma admini (`/platform`): `npx tsx scripts/platform-admin.ts grant 901234567` (Docker'da: `docker compose run --rm migrate npx tsx scripts/platform-admin.ts grant 901234567`). Bu bazadagi belgi — telefon raqami bilan avtomatik berilmaydi; `revoke` bilan olib tashlanadi.
 
 ## Ishlab chiqish / Development
 
