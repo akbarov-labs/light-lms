@@ -5,7 +5,74 @@ import { computeExpected, deltaDate, planSync, round100, wholeCourseExhausted } 
 import { transferTerms } from "./terms";
 import { FakeLedger, TTS, scenario } from "./testkit";
 
+// October 2026 on Mon/Wed/Fri: 2 5 7 9 12 14 16 19 21 23 26 28 30 = 13 lessons.
 // December 2026 on Mon/Wed/Fri: 2 4 7 9 11 14 16 18 21 23 25 28 30 = 13 lessons; from the 10th: 9.
+
+describe("edge cases the audit listed as untested", () => {
+  it("group-start anchor (15th): joining mid-period pays the lessons left, the next period in full", () => {
+    // period 15.10–14.11: Oct 16 19 21 23 26 28 30, Nov 2 4 6 9 11 13 = 13; from Oct 26: 9
+    const input = (asOf: string) =>
+      scenario({ asOf, groupStart: "2026-09-15", course: { renewal: "GROUP_START" }, enrollment: { startDate: "2026-10-26", activatedAt: "2026-10-26" } });
+    const ledger = new FakeLedger();
+    expect(ledger.sync(input("2026-10-26"))).toEqual([{ billingKey: "sub:e1:2026-10-15", type: "CHARGE", amount: -415_400 }]);
+    expect(computeExpected(input("2026-10-26"))[0].description).toBe("15.10–14.11.2026 · GE-A1 Morning (#12) · 9/13 dars");
+    expect(ledger.sync(input("2026-11-14"))).toEqual([]);
+    expect(ledger.sync(input("2026-11-15"))).toEqual([{ billingKey: "sub:e1:2026-11-15", type: "CHARGE", amount: -600_000 }]);
+  });
+
+  it("installments + rollover: the next package's first installment comes with the 12th lesson", () => {
+    const c = { pricingType: "PACKAGE" as const, price: 1_200_000, packageLessons: 12, installments: 2 };
+    const at = (asOf: string) => computeExpected(scenario({ asOf, course: c })).map((u) => [u.key, u.amount]);
+    expect(at("2026-10-27")).toEqual([["pkg:e1:1:1", 600_000]]);
+    // the 12th lesson is Oct 28: package 2 starts that day, its installment 1 is due at once
+    expect(at("2026-10-28")).toEqual([["pkg:e1:1:1", 600_000], ["pkg:e1:2:1", 600_000]]);
+    // package 1's second installment a month after its start
+    expect(at("2026-11-01")).toEqual([["pkg:e1:1:1", 600_000], ["pkg:e1:1:2", 600_000], ["pkg:e1:2:1", 600_000]]);
+  });
+
+  it("installments + leave: only the lessons used are owed, credited from the last installments", () => {
+    const c = { pricingType: "PACKAGE" as const, price: 1_200_000, packageLessons: 12, installments: 2 };
+    // leaves after 5 lessons, before installment 2 was due
+    const early = new FakeLedger();
+    early.sync(scenario({ asOf: "2026-10-01", course: c }));
+    early.sync(scenario({ asOf: "2026-10-20", course: c, enrollment: { endDate: "2026-10-12", status: "LEFT" } }));
+    expect(early.owed).toBe(500_000);
+    expect(early.owedFor("pkg:e1:1:1")).toBe(500_000);
+    expect(Math.abs(early.owedFor("pkg:e1:1:2"))).toBe(0); // never charged
+    // with package 2 started: 15 lessons used → 15 × 100 000
+    const late = new FakeLedger();
+    late.sync(scenario({ asOf: "2026-11-02", course: c }));
+    expect(late.owed).toBe(1_800_000);
+    late.sync(scenario({ asOf: "2026-11-10", course: c, enrollment: { endDate: "2026-11-04", status: "LEFT" } }));
+    expect(late.owed).toBe(1_500_000);
+    expect(late.owedFor("pkg:e1:2:")).toBe(300_000);
+  });
+
+  it("transfer of a package course: the old group keeps only the lessons used, the new one is prepaid", () => {
+    const c = { pricingType: "PACKAGE" as const, price: 1_200_000, packageLessons: 12 };
+    const old = new FakeLedger();
+    old.sync(scenario({ asOf: "2026-10-01", course: c }));
+    // moved on Oct 19: Oct 2 5 7 9 12 14 16 used in A
+    old.sync(scenario({ asOf: "2026-10-19", course: c, enrollment: { endDate: "2026-10-18", status: "TRANSFERRED" } }));
+    expect(old.owed).toBe(700_000);
+    const next = new FakeLedger();
+    next.sync(scenario({ slots: TTS, asOf: "2026-10-19", course: { ...c, price: 1_440_000 }, enrollment: { id: "e2", startDate: "2026-10-19", activatedAt: "2026-10-19" } }));
+    expect(next.entries).toEqual([{ billingKey: "pkg:e2:1", type: "CHARGE", amount: -1_440_000 }]);
+  });
+
+  it("freeze + leave in the same period: both are credited, once each", () => {
+    const ledger = new FakeLedger();
+    ledger.sync(scenario({ asOf: "2026-10-01" }));
+    const freezes = [{ from: "2026-10-12", to: "2026-10-16" }]; // 12 14 16
+    ledger.sync(scenario({ asOf: "2026-10-10", enrollment: { freezes } }));
+    expect(ledger.owed).toBe(round100((600_000 * 10) / 13));
+    // leaves after Oct 23: 26 28 30 credited too → 7 of 13
+    ledger.sync(scenario({ asOf: "2026-10-24", enrollment: { freezes, endDate: "2026-10-23", status: "LEFT" } }));
+    expect(ledger.owed).toBe(323_100);
+    expect(ledger.owed).toBe(round100((600_000 * 7) / 13));
+    expect(ledger.sync(scenario({ asOf: "2026-11-02", enrollment: { freezes, endDate: "2026-10-23", status: "LEFT" } }))).toEqual([]);
+  });
+});
 
 describe("B3 — enrollment activated months ahead", () => {
   const base = { asOf: "2026-10-17", groupStart: "2026-09-01", enrollment: { startDate: "2026-12-10", activatedAt: "2026-12-10" } };
