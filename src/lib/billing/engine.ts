@@ -5,7 +5,7 @@
 // returning only the difference. Re-running it posts nothing new (idempotent, self-healing).
 
 import { addDays, addMonthsAnchored, parts, type ISODate } from "@/lib/dates";
-import { countSlotDates, isChargeable, isFrozenOn, enrollmentCovers } from "./lessons";
+import { countSlotDates, isChargeable, isFrozenOn, enrollmentCovers, slotDates } from "./lessons";
 import { nextPeriod, periodContaining, periodLabel, type Period } from "./periods";
 import type { BillingInput, BillingLesson, EnrollmentTerms, ExpectedUnit, LedgerDelta, PostedEntry } from "./types";
 
@@ -88,7 +88,7 @@ function lessonsIn(lessons: BillingLesson[], p: Period): BillingLesson[] {
  * is pro-rated instead of charging a full month for half a month (DECISIONS.md).
  */
 export function scheduledInPeriod(input: BillingInput, p: Period): number {
-  let n = lessonsIn(input.lessons, p).length;
+  let n = lessonsIn(input.lessons, p).length + notGeneratedIn(input, p).length;
   const { startDate, endDate, slotWeekdays } = input.group;
   if (p.start < startDate) {
     const to = p.end < startDate ? p.end : prevDay(startDate);
@@ -99,6 +99,31 @@ export function scheduledInPeriod(input: BillingInput, p: Period): number {
     n += countSlotDates(slotWeekdays, from, p.end, input.holidays);
   }
   return n;
+}
+
+/**
+ * Slot dates of the period that are not generated yet: inside the group's own start/end, after
+ * the last generated lesson and after `asOf` (a past day without a lesson really had none).
+ * Lessons are generated ~60 days ahead, so this only matters for a period that starts later —
+ * an enrollment or activation dated months ahead. Counting them in both the numerator and the
+ * denominator makes the first charge final instead of growing as lessons get generated.
+ */
+function notGeneratedIn(input: BillingInput, p: Period): ISODate[] {
+  const g = input.group;
+  if (g.generating === false) return [];
+  const last = input.lessons.reduce((m, l) => (l.date > m ? l.date : m), "");
+  let from = p.start > g.startDate ? p.start : g.startDate;
+  const after = last > input.asOf ? last : input.asOf;
+  if (from <= after) from = nextDay(after);
+  const to = g.endDate && g.endDate < p.end ? g.endDate : p.end;
+  return slotDates(g.slotWeekdays, from, to, input.holidays);
+}
+
+/** A not-yet-generated slot date the enrollment would pay for (same rules as a real lesson). */
+function chargeableDate(e: BillingInput["enrollment"], date: ISODate): boolean {
+  if (date < e.startDate || !e.activatedAt || date < e.activatedAt) return false;
+  if (e.endDate && date > e.endDate) return false;
+  return !isFrozenOn(e, date);
 }
 
 const prevDay = (d: ISODate) => addDays(d, -1);
@@ -119,9 +144,9 @@ function subscriptionUnits(input: BillingInput): ExpectedUnit[] {
     p = nextPeriod(p, anchor)
   ) {
     const scheduled = scheduledInPeriod(input, p);
-    const chargeable = lessonsIn(input.lessons, p).filter((l) =>
-      isChargeable(l, e, input.settings, input.excusedLessonIds),
-    ).length;
+    const chargeable =
+      lessonsIn(input.lessons, p).filter((l) => isChargeable(l, e, input.settings, input.excusedLessonIds)).length +
+      notGeneratedIn(input, p).filter((d) => chargeableDate(e, d)).length;
     const price = unitPrice(input, p.start);
     let amount = 0;
     if (scheduled > 0) amount = chargeable >= scheduled ? price : round100((price * chargeable) / scheduled);
@@ -130,6 +155,8 @@ function subscriptionUnits(input: BillingInput): ExpectedUnit[] {
       enrollmentId: e.id,
       amount,
       start: p.start,
+      // prepaid on the period's first day, or on the activation day when that is later
+      due: e.activatedAt > p.start ? e.activatedAt : p.start,
       period: p.start.slice(0, 7),
       description: `${periodLabel(p)} · ${groupLabel(input)} · ${chargeable}/${scheduled} dars`,
     });
@@ -240,11 +267,13 @@ function packageUnits(input: BillingInput): ExpectedUnit[] {
         amount = amounts[j - 1];
       }
       if (!due && !closed) continue;
+      const unitStart = j === 1 ? start : addMonthsAnchored(start, j - 1);
       out.push({
         key,
         enrollmentId: e.id,
         amount,
-        start: j === 1 ? start : addMonthsAnchored(start, j - 1),
+        start: unitStart,
+        due: unitStart,
         period: null,
         description: `${what} · ${groupLabel(input)} · ${N} dars${inst > 1 ? ` · to'lov ${j}/${inst}` : ""}`,
       });
@@ -283,15 +312,21 @@ export function planSync(expected: ExpectedUnit[], posted: PostedEntry[]): Ledge
       key: u.key,
       type: diff > 0 ? "CHARGE" : "CREDIT",
       amount: -diff,
+      due: u.due,
       period: u.period,
       description: isFirst ? u.description : `Qayta hisob · ${u.description}`,
     });
   }
   for (const [key, owed] of postedOwed) {
     if (seen.has(key) || owed === 0) continue;
-    deltas.push({ key, type: owed > 0 ? "CREDIT" : "CHARGE", amount: owed, period: null, description: "Qayta hisob · bekor qilindi" });
+    deltas.push({ key, type: owed > 0 ? "CREDIT" : "CHARGE", amount: owed, due: null, period: null, description: "Qayta hisob · bekor qilindi" });
   }
   return deltas;
+}
+
+/** Ledger date of a delta: today, or the unit's due date when that is later (prepaid on the due day). */
+export function deltaDate(delta: Pick<LedgerDelta, "due">, asOf: ISODate): ISODate {
+  return delta.due && delta.due > asOf ? delta.due : asOf;
 }
 
 export interface LessonValue {
