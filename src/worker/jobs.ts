@@ -5,12 +5,12 @@ import { generateAllLessons } from "@/lib/services/lessons";
 import { refreshFreezeStatuses } from "@/lib/services/enrollments";
 import { loadBillingInput, syncEnrollment } from "@/lib/billing/sync";
 import { computeExpected } from "@/lib/billing/engine";
-import type { Allocation } from "@/lib/billing/allocation";
 import { nextPeriodStart, periodContaining } from "@/lib/billing/periods";
 import { readSettings } from "@/lib/settings";
 import { enqueue, familyChats, staffChat } from "@/lib/notify";
 import { msg, esc } from "@/lib/messages";
-import { allocationsFor, balancesFor } from "@/lib/services/wallet";
+import { balancesFor } from "@/lib/services/wallet";
+import { freshBalances, refreshAllBalances } from "@/lib/billing/balance-cache";
 import { payLinkForFamily } from "@/lib/payments/links";
 import { branchWhere, buildCtx, loadUser, studentScope } from "@/lib/ctx-core";
 import { debtAging, revenue } from "@/lib/queries/reports";
@@ -66,6 +66,8 @@ export async function nightly(today: ISODate = todayISO()): Promise<JobResult> {
     return { freezeStatus: r.changed, freezeFailed: r.failed };
   });
   await step("billing", () => billingSync(today));
+  // billing touched many families: fill the balance cache now, not on the first page view
+  await step("balances", () => refreshAllBalances());
   await step("loginAttempts", async () => {
     const p = await purgeOldAttempts();
     return { loginAttemptsPurged: p.attempts, resetCodesPurged: p.resets };
@@ -133,8 +135,6 @@ export async function billingSync(today: ISODate = todayISO()): Promise<JobResul
   return { enrollments: enrollments.length, ledgerEntries: entries, syncFailed: failed, debtNotices, billingMs: Date.now() - t0 };
 }
 
-const ALLOC_CHUNK = 500;
-
 /**
  * Run one item of a job (a center, an enrollment, a recipient): a throw is logged and counted, the
  * other items still run. The counts end in "Failed", so jobProblems() raises the ops alert.
@@ -190,21 +190,18 @@ export async function reminders(today: ISODate = todayISO()): Promise<JobResult>
         }
       }
       if (s.notify.debt) {
-        const neg = await db.ledgerEntry.groupBy({ by: ["familyId"], where: { centerId: c.id }, _sum: { amount: true }, having: { amount: { _sum: { lt: 0 } } } });
-        // ledgers of the debtor families are loaded a chunk at a time, not one query per family
-        let allocs = new Map<string, Allocation>();
-        for (let i = 0; i < neg.length; i++) {
-          if (i % ALLOC_CHUNK === 0) allocs = await allocationsFor(neg.slice(i, i + ALLOC_CHUNK).map((x) => x.familyId));
-          const n = neg[i];
+        // debtor families and their oldest unpaid date come from the balance cache, not their ledgers
+        await freshBalances(c.id);
+        const neg = await db.familyBalance.findMany({ where: { centerId: c.id, balance: { lt: 0 } }, select: { familyId: true, balance: true, oldestUnpaidDate: true } });
+        for (const n of neg) {
           await isolated(`reminders debt family ${n.familyId}`, async () => {
-            const alloc = allocs.get(n.familyId);
-            if (!alloc?.oldestUnpaidDate) return;
-            const overdue = diffDays(today, alloc.oldestUnpaidDate);
+            if (!n.oldestUnpaidDate) return;
+            const overdue = diffDays(today, toISODate(n.oldestUnpaidDate));
             if (![3, 7, 14, 30].includes(overdue)) return;
             const payUrl = await payLinkForFamily(n.familyId);
             debts += await db.$transaction(async (tx) => {
               const chats = await familyChats(tx, n.familyId);
-              return enqueue(tx, c.id, chats, (l) => msg.debt(l, { center: c.name, debt: -(n._sum.amount ?? 0), payUrl }), `debt-overdue:${n.familyId}:${today}`);
+              return enqueue(tx, c.id, chats, (l) => msg.debt(l, { center: c.name, debt: -Number(n.balance), payUrl }), `debt-overdue:${n.familyId}:${today}`);
             });
           }, failItem);
         }

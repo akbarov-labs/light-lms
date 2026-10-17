@@ -371,8 +371,38 @@ model Family {
   students   Student[]
   ledger     LedgerEntry[]
   paymeTxs   PaymeTransaction[]
+  balance    FamilyBalance?
 
   @@index([centerId, createdAt])
+}
+
+/// The family's FIFO allocation reduced to what debt lists and aging need (src/lib/billing/balance-cache.ts).
+/// Written only by the cache refresher; a trigger on LedgerEntry queues the family in FamilyBalanceDirty
+/// whenever its ledger changes, and readers refresh queued families before they read.
+model FamilyBalance {
+  familyId         String    @id
+  family           Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  centerId         String
+  /// SUM(ledger); negative = debt
+  balance          BigInt
+  totalDebt        BigInt
+  oldestUnpaidDate DateTime? @db.Date
+  /// unpaid money by the date it became due: [{ "d": "2026-09-01", "a": 150000 }]
+  dues             Json      @default("[]")
+  updatedAt        DateTime  @default(now())
+
+  @@index([centerId, balance])
+}
+
+/// Families whose ledger changed since their FamilyBalance was computed. Insert-only from the trigger;
+/// the refresher deletes exactly the rows it has seen.
+model FamilyBalanceDirty {
+  id        BigInt   @id @default(autoincrement())
+  centerId  String
+  familyId  String
+  createdAt DateTime @default(now())
+
+  @@index([centerId, familyId])
 }
 
 model Guardian {

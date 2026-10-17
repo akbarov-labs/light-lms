@@ -7,6 +7,7 @@ import { processNotifications, telegramSender } from "./notifications";
 import { resetDemo } from "./demo-reset";
 import { lockKeyFor, withJobLock } from "./job-lock";
 import { todayISO } from "@/lib/dates";
+import { refreshAllBalances } from "@/lib/billing/balance-cache";
 import { telegramBotToken } from "@/lib/env";
 
 const [name, date] = process.argv.slice(2);
@@ -16,6 +17,7 @@ const jobs: Record<string, () => Promise<unknown>> = {
   nightly: () => nightly(today),
   lessons: () => generateAllLessons(today),
   billing: () => billingSync(today),
+  balances: () => refreshAllBalances(),
   reminders: () => reminders(today),
   "teacher-reminders": () => teacherReminders(today),
   "daily-report": () => dailyReport(today),

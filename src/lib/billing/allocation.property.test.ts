@@ -1,8 +1,8 @@
 // B7: refunds above the credit must never vanish from the per-unit debt.
 // Seeded-random property test over many ledgers + the audit's concrete scenarios.
 import { describe, expect, it } from "vitest";
-import { addDays } from "@/lib/dates";
-import { allocate, OVERDRAW_KEY, type AllocEntry } from "./allocation";
+import { addDays, diffDays } from "@/lib/dates";
+import { agingBuckets, allocate, debtSummary, OVERDRAW_KEY, type AllocEntry } from "./allocation";
 
 /** Small deterministic PRNG (mulberry32) so a failure is reproducible from its seed. */
 function rng(seed: number) {
@@ -81,6 +81,26 @@ describe("allocation invariant (seeded random ledgers)", () => {
     }
     // the generator really exercises refunds beyond the credit
     expect(overdrawn).toBeGreaterThan(1000);
+  });
+});
+
+describe("balance cache summary (seeded random ledgers)", () => {
+  it("keeps balance, debt and oldest date, and ages exactly like the per-unit allocation", () => {
+    for (let seed = 1; seed <= 5_000; seed++) {
+      const a = allocate(randomLedger(seed));
+      const s = debtSummary(a);
+      const ctx = `seed ${seed}`;
+      expect(s, ctx).toMatchObject({ balance: a.balance, totalDebt: a.totalDebt, oldestUnpaidDate: a.oldestUnpaidDate });
+      expect(s.dues.reduce((x, d) => x + d.amount, 0), ctx).toBe(a.totalDebt);
+      expect(s.dues[0]?.date ?? null, ctx).toBe(a.oldestUnpaidDate);
+      expect(s.dues.every((d, i) => d.amount > 0 && (i === 0 || s.dues[i - 1].date < d.date)), ctx).toBe(true);
+      // the old aging: every unpaid unit bucketed by its own age
+      for (const today of ["2026-01-01", "2026-03-15", "2026-12-31"]) {
+        const ref = [0, 0, 0];
+        for (const u of a.units) if (u.due > 0) ref[diffDays(today, u.firstDate) <= 30 ? 0 : diffDays(today, u.firstDate) <= 60 ? 1 : 2] += u.due;
+        expect(agingBuckets(s.dues, today), `${ctx} ${today}`).toEqual(ref);
+      }
+    }
   });
 });
 

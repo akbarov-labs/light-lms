@@ -22,6 +22,7 @@
     "job:lessons": "tsx src/worker/run-job.ts lessons",
     "job:nightly": "tsx src/worker/run-job.ts nightly",
     "job:billing": "tsx src/worker/run-job.ts billing",
+    "job:balances": "tsx src/worker/run-job.ts balances",
     "job:reminders": "tsx src/worker/run-job.ts reminders",
     "job:teacher-reminders": "tsx src/worker/run-job.ts teacher-reminders",
     "job:daily-report": "tsx src/worker/run-job.ts daily-report",

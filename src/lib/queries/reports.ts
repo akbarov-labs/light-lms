@@ -3,9 +3,11 @@
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { scopeBranchIds, studentScope, type Ctx } from "@/lib/ctx-core";
-import { diffDays, fromISODate, monthRange, shiftMonth, toISODate, todayISO } from "@/lib/dates";
+import { fromISODate, monthRange, shiftMonth, toISODate, todayISO } from "@/lib/dates";
 import { expenseWhere } from "./expenses";
-import { ALLOC_BATCH, allocateFamilies, debtorFamilies } from "./debtors";
+import { debtorFamilies } from "./debtors";
+import { agingBuckets } from "@/lib/billing/allocation";
+import { parseDues } from "@/lib/billing/balance-cache";
 import { familyScopeSql } from "./scope-sql";
 import { periodOrThisMonth, zonedRange } from "./period";
 
@@ -156,22 +158,13 @@ export async function billedByGroup(ctx: Ctx, p: Period) {
  * Total debt and aging buckets by the date each unpaid charge was posted (FIFO allocation, HANDOFF §7).
  * Which families owe is decided in SQL; only their ledgers are read, ALLOC_BATCH families at a time.
  */
+/** Debt by age (0–30, 31–60, 60+ days) from the family balance cache: no ledger reads. */
 export async function debtAging(ctx: Ctx) {
-  const ids = (await debtorFamilies(ctx)).map((d) => d.familyId);
+  const debtors = await debtorFamilies(ctx);
   const today = todayISO();
   const buckets = [0, 0, 0];
-  let total = 0;
-  for (let i = 0; i < ids.length; i += ALLOC_BATCH) {
-    for (const a of (await allocateFamilies(ids.slice(i, i + ALLOC_BATCH))).values()) {
-      for (const u of a.units) {
-        if (u.due <= 0) continue;
-        const age = diffDays(today, u.firstDate);
-        buckets[age <= 30 ? 0 : age <= 60 ? 1 : 2] += u.due;
-        total += u.due;
-      }
-    }
-  }
-  return { total, buckets, families: ids.length };
+  for (const d of debtors) agingBuckets(parseDues(d.dues), today).forEach((x, i) => (buckets[i] += x));
+  return { total: debtors.reduce((s, d) => s + d.debt, 0), buckets, families: debtors.length };
 }
 
 export async function studentStats(ctx: Ctx, p: Period) {

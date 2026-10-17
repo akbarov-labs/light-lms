@@ -1,11 +1,11 @@
-// Debtors (HANDOFF §7 "Debtors list"), audit P1: which families owe and how much is decided in SQL
-// (SUM(ledger) per family, scoped and filtered, sorted, paginated); the FIFO allocation that gives
-// "days overdue" runs only for the families being shown, in bounded batches.
+// Debtors (HANDOFF §7 "Debtors list"): read from the family balance cache (billing/balance-cache), which
+// holds each family's SUM(ledger) and the oldest unpaid date of its FIFO allocation. Scope, filters,
+// sorting and paging are SQL; nothing here reads the ledger except the last payment date.
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import type { Ctx } from "@/lib/ctx-core";
 import { diffDays, toISODate, todayISO } from "@/lib/dates";
-import { allocate, type AllocEntry, type Allocation } from "@/lib/billing/allocation";
+import { freshBalances } from "@/lib/billing/balance-cache";
 import { parseMoney } from "@/lib/money";
 import { familyScopeSql } from "./scope-sql";
 
@@ -38,8 +38,8 @@ export interface DebtorPage {
 }
 
 export const DEBTORS_PAGE_SIZE = 50;
-/** Families allocated per ledger read (export, aging) — bounds memory on big centers. */
-export const ALLOC_BATCH = 500;
+/** Families whose display details are loaded per query (CSV export). */
+const ROW_BATCH = 500;
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
@@ -52,7 +52,7 @@ export function debtMinimum(raw: unknown): number {
   return n !== null && n > 0 ? n : 0;
 }
 
-/** Debtor families (balance < 0) of the center in the user's branch scope, with optional filters. */
+/** Debtor families (balance < 0) of the center in the user's branch scope, with optional filters. Call freshBalances first. */
 function debtorBaseSql(ctx: Ctx, f: DebtorFilters = {}): Prisma.Sql {
   const min = debtMinimum(f.min);
   const groupId = str(f.groupId);
@@ -68,27 +68,36 @@ function debtorBaseSql(ctx: Ctx, f: DebtorFilters = {}): Prisma.Sql {
             ${teacherId ? Prisma.sql`AND gg."teacherId" = ${teacherId}` : Prisma.empty})`
       : Prisma.empty;
   return Prisma.sql`
-    SELECT b."familyId", (-b.bal)::bigint AS debt
-    FROM (
-      SELECT le."familyId", SUM(le.amount) AS bal
-      FROM "LedgerEntry" le
-      WHERE le."centerId" = ${ctx.centerId}
-      GROUP BY le."familyId"
-      HAVING SUM(le.amount) < 0 ${min > 0 ? Prisma.sql`AND -SUM(le.amount) >= ${min}` : Prisma.empty}
-    ) b
+    SELECT b."familyId", (-b.balance)::bigint AS debt, to_char(b."oldestUnpaidDate", 'YYYY-MM-DD') AS oldest, b.dues
+    FROM "FamilyBalance" b
     JOIN "Family" f ON f.id = b."familyId" AND f."centerId" = ${ctx.centerId}
-    WHERE ${familyScopeSql(ctx, "f.id")} ${groupTeacher}`;
+    WHERE b."centerId" = ${ctx.centerId} AND b.balance < 0 ${min > 0 ? Prisma.sql`AND -b.balance >= ${min}` : Prisma.empty}
+      AND ${familyScopeSql(ctx, "f.id")} ${groupTeacher}`;
 }
 
-/** Every debtor family id in scope, biggest debt first (no allocation). */
-export async function debtorFamilies(ctx: Ctx, f: DebtorFilters = {}): Promise<{ familyId: string; debt: number }[]> {
-  const rows = await db.$queryRaw<{ familyId: string; debt: bigint }[]>`${debtorBaseSql(ctx, f)} ORDER BY debt DESC, b."familyId" ASC`;
-  return rows.map((r) => ({ familyId: r.familyId, debt: Number(r.debt) }));
+export interface DebtorFamily {
+  familyId: string;
+  debt: number;
+  /** Oldest unpaid due date of the family's FIFO allocation. */
+  oldest: string | null;
+  /** Raw cached dues (billing/balance-cache parseDues). */
+  dues: unknown;
+}
+
+type DebtorSqlRow = { familyId: string; debt: bigint; oldest: string | null; dues: unknown };
+const toFamily = (r: DebtorSqlRow): DebtorFamily => ({ familyId: r.familyId, debt: Number(r.debt), oldest: r.oldest, dues: r.dues });
+
+/** Every debtor family in scope, biggest debt first. */
+export async function debtorFamilies(ctx: Ctx, f: DebtorFilters = {}): Promise<DebtorFamily[]> {
+  await freshBalances(ctx.centerId);
+  const rows = await db.$queryRaw<DebtorSqlRow[]>`${debtorBaseSql(ctx, f)} ORDER BY debt DESC, b."familyId" ASC`;
+  return rows.map(toFamily);
 }
 
 /** One page of the debtors list (biggest debt first) plus totals over every page. */
 export async function listDebtors(ctx: Ctx, f: DebtorFilters, opts: { page?: number; pageSize?: number } = {}): Promise<DebtorPage> {
   const size = Math.max(1, Math.min(500, opts.pageSize ?? DEBTORS_PAGE_SIZE));
+  await freshBalances(ctx.centerId);
   const base = debtorBaseSql(ctx, f);
   const [agg] = await db.$queryRaw<{ n: number; s: bigint | null }[]>`SELECT COUNT(*)::int AS n, SUM(x.debt)::bigint AS s FROM (${base}) x`;
   const total = agg?.n ?? 0;
@@ -97,61 +106,36 @@ export async function listDebtors(ctx: Ctx, f: DebtorFilters, opts: { page?: num
   const slice =
     total === 0
       ? []
-      : await db.$queryRaw<{ familyId: string; debt: bigint }[]>`${base} ORDER BY debt DESC, b."familyId" ASC LIMIT ${size} OFFSET ${(page - 1) * size}`;
-  const rows = await debtorRows(slice.map((r) => ({ familyId: r.familyId, debt: Number(r.debt) })));
+      : await db.$queryRaw<DebtorSqlRow[]>`${base} ORDER BY debt DESC, b."familyId" ASC LIMIT ${size} OFFSET ${(page - 1) * size}`;
+  const rows = await debtorRows(slice.map(toFamily));
   return { rows, total, totalDebt: Number(agg?.s ?? 0), page, pages };
 }
 
-/** Every debtor row (CSV export): ids from SQL, details and allocation in batches. */
+/** Every debtor row (CSV export): families from the cache, display details in batches. */
 export async function listAllDebtors(ctx: Ctx, f: DebtorFilters): Promise<DebtorRow[]> {
   const all = await debtorFamilies(ctx, f);
   const out: DebtorRow[] = [];
-  for (let i = 0; i < all.length; i += ALLOC_BATCH) out.push(...(await debtorRows(all.slice(i, i + ALLOC_BATCH))));
-  return out;
-}
-
-/** Allocation (FIFO, HANDOFF §7) for a batch of families — one ledger read, linear grouping. */
-export async function allocateFamilies(familyIds: string[]): Promise<Map<string, Allocation>> {
-  const out = new Map<string, Allocation>();
-  if (familyIds.length === 0) return out;
-  // same rows and order as services/wallet familyAllocation; unit descriptions are not shown here
-  const entries = await db.$queryRaw<(AllocEntry & { familyId: string })[]>`
-    SELECT le.id, le."familyId", le.type::text AS type, le.amount, to_char(le.date, 'YYYY-MM-DD') AS date,
-           le."enrollmentId", le."billingKey", le."reversesId"
-    FROM "LedgerEntry" le
-    WHERE le."familyId" IN (${Prisma.join(familyIds)})
-    ORDER BY le.date ASC, le."createdAt" ASC`;
-  const by = new Map<string, AllocEntry[]>();
-  for (const e of entries) {
-    let list = by.get(e.familyId);
-    if (!list) by.set(e.familyId, (list = []));
-    list.push(e);
-  }
-  for (const id of familyIds) out.set(id, allocate(by.get(id) ?? []));
+  for (let i = 0; i < all.length; i += ROW_BATCH) out.push(...(await debtorRows(all.slice(i, i + ROW_BATCH))));
   return out;
 }
 
 /** Display rows for families already known to owe, in the given order. */
-async function debtorRows(list: { familyId: string; debt: number }[]): Promise<DebtorRow[]> {
+async function debtorRows(list: DebtorFamily[]): Promise<DebtorRow[]> {
   if (list.length === 0) return [];
   const ids = list.map((x) => x.familyId);
-  const [families, allocs] = await Promise.all([
-    db.family.findMany({
-      where: { id: { in: ids } },
-      include: {
-        guardians: { orderBy: { isPrimary: "desc" } },
-        students: { include: { enrollments: { where: { endDate: null }, include: { group: { select: { id: true, name: true, code: true } } } } } },
-        ledger: { where: { type: "PAYMENT" }, orderBy: { date: "desc" }, take: 1, select: { date: true } },
-      },
-    }),
-    allocateFamilies(ids),
-  ]);
+  const families = await db.family.findMany({
+    where: { id: { in: ids } },
+    include: {
+      guardians: { orderBy: { isPrimary: "desc" } },
+      students: { include: { enrollments: { where: { endDate: null }, include: { group: { select: { id: true, name: true, code: true } } } } } },
+      ledger: { where: { type: "PAYMENT" }, orderBy: { date: "desc" }, take: 1, select: { date: true } },
+    },
+  });
   const byId = new Map(families.map((x) => [x.id, x]));
   const today = todayISO();
-  return list.flatMap(({ familyId, debt }) => {
+  return list.flatMap(({ familyId, debt, oldest }) => {
     const fam = byId.get(familyId);
     if (!fam) return [];
-    const a = allocs.get(familyId)!;
     const g = fam.guardians[0];
     return [
       {
@@ -160,7 +144,7 @@ async function debtorRows(list: { familyId: string; debt: number }[]): Promise<D
         students: fam.students.map((s) => ({ id: s.id, name: `${s.lastName} ${s.firstName}` })),
         groups: fam.students.flatMap((s) => s.enrollments.map((e) => ({ id: e.group.id, name: `${e.group.name} #${e.group.code}` }))),
         debt,
-        daysOverdue: a.oldestUnpaidDate ? Math.max(0, diffDays(today, a.oldestUnpaidDate)) : 0,
+        daysOverdue: oldest ? Math.max(0, diffDays(today, oldest)) : 0,
         lastPayment: fam.ledger[0] ? toISODate(fam.ledger[0].date) : null,
         phone: g?.phone ?? fam.students.find((s) => s.phone)?.phone ?? null,
         telegram: fam.guardians.some((x) => x.telegramChatId) || fam.students.some((s) => s.telegramChatId),

@@ -10,6 +10,7 @@ import { errText, sleep } from "./util";
 import { dailyReport, jobProblems, nightly, reminders, teacherReminders, type JobResult } from "./jobs";
 import { lockKeyFor, withJobLock } from "./job-lock";
 import { assertStrongAuthSecret } from "@/lib/auth/startup";
+import { refreshAllBalances } from "@/lib/billing/balance-cache";
 import { demoMode } from "@/config/brand";
 import { resetDemo } from "./demo-reset";
 import { alertOps, opsAlertsEnabled } from "@/lib/ops-alert";
@@ -32,18 +33,21 @@ const timers: NodeJS.Timeout[] = [];
 const queueAbort = new AbortController();
 let queueRun: Promise<void> | null = null;
 
-/** Run a job under its advisory lock; skip when another worker or a manual run already has it. */
-async function run(name: string, job: () => Promise<JobResult>, lockKey = lockKeyFor(name)) {
+/**
+ * Run a job under its advisory lock; skip when another worker or a manual run already has it.
+ * `idle(result)` true = nothing happened: a frequent job logs only runs that did something.
+ */
+async function run(name: string, job: () => Promise<JobResult>, lockKey = lockKeyFor(name), idle?: (r: JobResult) => boolean) {
   if (stopping) return;
   const t0 = Date.now();
-  log(`job ${name} start`);
+  if (!idle) log(`job ${name} start`);
   try {
     const r = await withJobLock(lockKey, job);
     if (!r.ran) {
       log(`job ${name} skipped: "${lockKey}" is already running (another worker or a manual run)`);
       return;
     }
-    log(`job ${name} done in ${Date.now() - t0}ms`, JSON.stringify(r.result));
+    if (!idle?.(r.result)) log(`job ${name} done in ${Date.now() - t0}ms`, JSON.stringify(r.result));
     const problem = jobProblems(r.result);
     if (problem) await alertOps(`job:${name}`, `Worker job "${name}" finished with problems: ${problem}`.slice(0, 400));
   } catch (e) {
@@ -52,9 +56,9 @@ async function run(name: string, job: () => Promise<JobResult>, lockKey = lockKe
   }
 }
 
-function schedule(expr: string, name: string, job: () => Promise<JobResult>) {
+function schedule(expr: string, name: string, job: () => Promise<JobResult>, idle?: (r: JobResult) => boolean) {
   // noOverlap: a run still going when the next one is due is not started twice in this process
-  tasks.push(cron.schedule(expr, () => run(name, job), { timezone: TZ, name, noOverlap: true }));
+  tasks.push(cron.schedule(expr, () => run(name, job, lockKeyFor(name), idle), { timezone: TZ, name, noOverlap: true }));
 }
 
 function beat() {
@@ -119,6 +123,8 @@ async function main() {
   schedule("0 10 * * *", "reminders", () => reminders());
   schedule("0 20 * * *", "teacher-reminders", () => teacherReminders());
   schedule("0 21 * * *", "daily-report", () => dailyReport());
+  // family balance cache: pages refresh it themselves, this keeps that work off page views
+  schedule("*/5 * * * *", "balances", () => refreshAllBalances(), (r) => !r.balancesRefreshed);
   // prod: the backups folder is mounted read-only at BACKUP_CHECK_DIR; alert if last night's dump is missing
   const backupDir = process.env.BACKUP_CHECK_DIR?.trim();
   if (backupDir) schedule("0 9 * * *", "backup-check", () => backupCheck(backupDir, alertOps));

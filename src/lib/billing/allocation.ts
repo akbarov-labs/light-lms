@@ -203,3 +203,31 @@ export function allocate(entries: AllocEntry[]): Allocation {
 
   return { balance, unallocated: Math.max(0, pool), units: list, enrollments, oldestUnpaidDate, totalDebt };
 }
+
+export interface DebtSummary {
+  balance: number;
+  totalDebt: number;
+  oldestUnpaidDate: ISODate | null;
+  /** Unpaid money by the date it became due, oldest first (aging needs only the date). */
+  dues: { date: ISODate; amount: number }[];
+}
+
+/** What the family balance cache stores: the allocation reduced to due money per day. */
+export function debtSummary(a: Allocation): DebtSummary {
+  const byDay = new Map<ISODate, number>();
+  for (const u of a.units) if (u.due > 0) byDay.set(u.firstDate, (byDay.get(u.firstDate) ?? 0) + u.due);
+  const dues = [...byDay].sort(([x], [y]) => x.localeCompare(y)).map(([date, amount]) => ({ date, amount }));
+  return { balance: a.balance, totalDebt: a.totalDebt, oldestUnpaidDate: a.oldestUnpaidDate, dues };
+}
+
+export type AgingBuckets = [number, number, number];
+
+/** Debt by age: up to 30 days, 31–60, over 60 (a due date in the future counts as current). */
+export function agingBuckets(dues: DebtSummary["dues"], today: ISODate): AgingBuckets {
+  const b: AgingBuckets = [0, 0, 0];
+  for (const d of dues) {
+    const age = Math.round((Date.parse(today) - Date.parse(d.date)) / 86_400_000);
+    b[age <= 30 ? 0 : age <= 60 ? 1 : 2] += d.amount;
+  }
+  return b;
+}

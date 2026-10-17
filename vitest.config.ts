@@ -8,12 +8,12 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     environment: "node",
-    // `npm run test:coverage`: the money code only. Its database adapters (billing sync, salary
+    // `npm run test:coverage`: the money code only. Its database adapters (billing sync, balance cache, salary
     // service, Payme repo/links/provider) are exercised by the integration suite, not unit tests.
     coverage: {
       provider: "v8",
       include: money,
-      exclude: ["**/*.test.ts", "src/lib/billing/testkit.ts", "src/lib/billing/sync.ts", "src/lib/salary/service.ts", "src/lib/payments/payme-repo.ts", "src/lib/payments/links.ts", "src/lib/payments/provider.ts"],
+      exclude: ["**/*.test.ts", "src/lib/billing/testkit.ts", "src/lib/billing/sync.ts", "src/lib/billing/balance-cache.ts", "src/lib/salary/service.ts", "src/lib/payments/payme-repo.ts", "src/lib/payments/links.ts", "src/lib/payments/provider.ts"],
       reporter: ["text-summary", "text"],
       thresholds: Object.fromEntries(money.map((g) => [g, { lines: 90, statements: 90, functions: 90, branches: 80 }])),
     },
