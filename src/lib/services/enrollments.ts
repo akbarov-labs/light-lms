@@ -273,19 +273,25 @@ export async function setEnrollmentTerms(actor: Actor, enrollmentId: string, ter
 }
 
 /** Nightly: FROZEN ⇄ ACTIVE by freeze dates. */
-export async function refreshFreezeStatuses(today = todayISO()): Promise<number> {
+/** Nightly: ACTIVE ↔ FROZEN by freeze dates. One enrollment that fails is logged and counted; the rest still run. */
+export async function refreshFreezeStatuses(today = todayISO()): Promise<{ changed: number; failed: number }> {
   const open = await db.enrollment.findMany({
     where: { endDate: null, status: { in: ["ACTIVE", "FROZEN"] } },
     include: { freezes: true },
   });
-  let n = 0;
+  let changed = 0;
+  let failed = 0;
   for (const e of open) {
     const frozen = e.freezes.some((f) => toISODate(f.fromDate) <= today && today <= toISODate(f.toDate));
     const want = frozen ? "FROZEN" : "ACTIVE";
-    if (e.status !== want) {
+    if (e.status === want) continue;
+    try {
       await db.enrollment.update({ where: { id: e.id }, data: { status: want } });
-      n++;
+      changed++;
+    } catch (err) {
+      failed++;
+      console.error(`[freezes] enrollment ${e.id}:`, err);
     }
   }
-  return n;
+  return { changed, failed };
 }

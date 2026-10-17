@@ -14,16 +14,23 @@ x-app-env: &app-env
   APP_URL: ${APP_URL:-https://${DOMAIN:?set DOMAIN in .env}}
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
   SEED_DEMO: ${SEED_DEMO:-false}
-  PLATFORM_ADMIN_PHONES: ${PLATFORM_ADMIN_PHONES:-}
   DEMO_MODE: ${DEMO_MODE:-false}
   DEMO_URL: ${DEMO_URL:-}
   MAIN_SITE_URL: ${MAIN_SITE_URL:-}
   OPS_TELEGRAM_CHAT_ID: ${OPS_TELEGRAM_CHAT_ID:-}
   TZ: Asia/Tashkent
 
+# worker liveness: the process touches this file every 30 s; older than 2 min = unhealthy
+x-worker-healthcheck: &worker-healthcheck
+  test: ["CMD", "node", "-e", "process.exit(Date.now() - require('fs').statSync('/tmp/worker-heartbeat').mtimeMs < 120000 ? 0 : 1)"]
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 60s
+
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:16.14-alpine
     environment:
       POSTGRES_USER: lms
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -57,7 +64,11 @@ services:
     build:
       context: .
       target: web
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # Caddy is the only way in and sets X-Forwarded-For, so the app may trust it (login limiting per IP)
+      TRUST_PROXY: "true"
+    init: true
     # not published: Caddy is the only way in (it also sets X-Forwarded-For for login limiting)
     expose:
       - "3000"
@@ -75,14 +86,17 @@ services:
   worker:
     build:
       context: .
-      target: tools
+      target: worker
     environment:
       <<: *app-env
       BACKUP_CHECK_DIR: /backups
     # read-only view of the backups, so the worker can alert when last night's dump is missing
     volumes:
       - ${BACKUP_DIR:-./backups}:/backups:ro
-    command: ["npx", "tsx", "src/worker/index.ts"]
+    init: true
+    # SIGTERM: finish the message in flight, stop the bot, up to 10 s
+    stop_grace_period: 20s
+    healthcheck: *worker-healthcheck
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -108,7 +122,7 @@ services:
     logging: *logging
 
   backup:
-    image: postgres:16-alpine
+    image: postgres:16.14-alpine
     environment:
       PGHOST: db
       PGUSER: lms
