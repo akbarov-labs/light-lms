@@ -63,11 +63,20 @@ export async function trimLessonsAfter(groupId: string, endDate: ISODate, tx: Tx
   });
 }
 
-export async function generateAllLessons(today = todayISO()): Promise<number> {
+/** Nightly: lessons for every ACTIVE/PLANNED group. A group that fails is logged and counted; the rest still run. */
+export async function generateAllLessons(today = todayISO()): Promise<{ created: number; failed: number }> {
   const groups = await db.group.findMany({ where: { status: { in: ["ACTIVE", "PLANNED"] } }, select: { id: true } });
-  let n = 0;
-  for (const g of groups) n += await generateLessons(g.id, { today });
-  return n;
+  let created = 0;
+  let failed = 0;
+  for (const g of groups) {
+    try {
+      created += await generateLessons(g.id, { today });
+    } catch (e) {
+      failed++;
+      console.error(`[lessons] group ${g.id}:`, e);
+    }
+  }
+  return { created, failed };
 }
 
 /** Throw a readable error when the room or the teacher is already busy in that weekly slot. */

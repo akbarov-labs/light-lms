@@ -3,13 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { runAction, type ActionState } from "@/lib/action";
-import { formObject, zDate, zId, zOptInt, zOptMoney, zStr } from "@/lib/forms";
+import { formObject, zDate, zId, zMonth, zOptInt, zOptMoney, zStr } from "@/lib/forms";
 import { UserError } from "@/lib/user-error";
 import { parseMoney } from "@/lib/money";
 import { addAdjustment, lockPayslip, markPayslipPaid, setSalaryRule, unlockPayslip } from "@/lib/salary/service";
 import { assertTeacherAccess, type Ctx } from "@/lib/ctx";
 
-const zMonth = z.string().regex(/^\d{4}-\d{2}$/);
 const actor = (ctx: Ctx) => ({ userId: ctx.userId, centerId: ctx.centerId });
 
 export async function saveRuleAction(_: ActionState, fd: FormData): Promise<ActionState> {

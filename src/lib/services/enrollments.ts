@@ -3,8 +3,10 @@
 import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { addDays, fromISODate, toISODate, todayISO, type ISODate } from "@/lib/dates";
-import type { Prisma } from "@prisma/client";
-import { parseTermsHistory, syncEnrollment } from "@/lib/billing/sync";
+import type { Prisma } from "@/generated/prisma/client";
+import { loadBillingInput, parseTermsHistory, syncEnrollment } from "@/lib/billing/sync";
+import { wholeCourseExhausted } from "@/lib/billing/engine";
+import { transferTerms } from "@/lib/billing/terms";
 import { UserError } from "@/lib/user-error";
 import { enqueue, familyChats } from "@/lib/notify";
 import { msg } from "@/lib/messages";
@@ -36,6 +38,12 @@ export async function nextLessonDate(tx: Tx, groupId: string, from: ISODate): Pr
     select: { date: true },
   });
   return l ? toISODate(l.date) : null;
+}
+
+/** Refuse to start billing a late joiner when the open-ended whole course has no lessons left to sell. */
+export async function assertBillable(tx: Tx, enrollmentId: string): Promise<void> {
+  const { input } = await loadBillingInput(tx, enrollmentId, todayISO());
+  if (wholeCourseExhausted(input)) throw new UserError("money.wholeCourseFull");
 }
 
 async function openCount(tx: Tx, groupId: string): Promise<number> {
@@ -81,6 +89,7 @@ export async function enrollStudent(actor: Actor, input: EnrollInput, branchChec
         discountReason: input.discountReason ?? null,
       },
     });
+    if (!input.trial) await assertBillable(tx, e.id);
     await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "Enrollment", entityId: e.id, action: input.trial ? "enroll.trial" : "enroll.active", after: e });
     await advanceLeadsForStudent(tx, actor.centerId, student.id, input.trial ? "TRIAL_BOOKED" : "ENROLLED", actor.userId);
     if (input.trial) {
@@ -116,6 +125,7 @@ export async function activateEnrollment(actor: Actor, enrollmentId: string, dat
     const picked = date ?? (await nextLessonDate(tx, e.groupId, todayISO())) ?? todayISO();
     const when = picked < toISODate(e.startDate) ? toISODate(e.startDate) : picked;
     const updated = await tx.enrollment.update({ where: { id: e.id }, data: { status: "ACTIVE", activatedAt: fromISODate(when) } });
+    await assertBillable(tx, e.id);
     await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "Enrollment", entityId: e.id, action: "activate", before: { status: e.status }, after: { status: updated.status, activatedAt: when } });
     await advanceLeadsForStudent(tx, actor.centerId, e.studentId, "ENROLLED", actor.userId);
     await syncEnrollment(e.id, { tx, userId: actor.userId });
@@ -137,6 +147,14 @@ export async function transferEnrollment(actor: Actor, enrollmentId: string, toG
     if (target.capacity && (await openCount(tx, target.id)) >= target.capacity) throw new UserError("error.groupFull", { capacity: target.capacity });
 
     const asTrial = e.status === "TRIAL" || readSettings(target.center.settings).transferAsTrial;
+    // the price override belonged to the old group; the discount moves along with its history,
+    // so a discount scheduled from a later date keeps that date in the new group
+    const terms = transferTerms(parseTermsHistory(e.termsHistory), {
+      priceOverride: e.priceOverride,
+      discountPercent: e.discountPercent,
+      discountAmount: e.discountAmount,
+      discountUntil: e.discountUntil ? toISODate(e.discountUntil) : null,
+    });
     const created = await tx.enrollment.create({
       data: {
         studentId: e.studentId,
@@ -144,13 +162,14 @@ export async function transferEnrollment(actor: Actor, enrollmentId: string, toG
         startDate: fromISODate(moveDate),
         status: asTrial ? "TRIAL" : "ACTIVE",
         activatedAt: asTrial ? null : fromISODate(moveDate),
-        discountPercent: e.discountPercent,
-        discountAmount: e.discountAmount,
+        discountPercent: terms.current.discountPercent,
+        discountAmount: terms.current.discountAmount,
         discountUntil: e.discountUntil,
         discountReason: e.discountReason,
-        // the price override belonged to the old group; only the discount moves along
+        ...(terms.history.length > 0 ? { termsHistory: terms.history as unknown as Prisma.InputJsonValue } : {}),
       },
     });
+    if (!asTrial) await assertBillable(tx, created.id);
     await tx.enrollment.update({
       where: { id: e.id },
       data: { endDate: fromISODate(addDays(moveDate, -1)), status: "TRANSFERRED", transferredToId: created.id },
@@ -254,19 +273,25 @@ export async function setEnrollmentTerms(actor: Actor, enrollmentId: string, ter
 }
 
 /** Nightly: FROZEN ⇄ ACTIVE by freeze dates. */
-export async function refreshFreezeStatuses(today = todayISO()): Promise<number> {
+/** Nightly: ACTIVE ↔ FROZEN by freeze dates. One enrollment that fails is logged and counted; the rest still run. */
+export async function refreshFreezeStatuses(today = todayISO()): Promise<{ changed: number; failed: number }> {
   const open = await db.enrollment.findMany({
     where: { endDate: null, status: { in: ["ACTIVE", "FROZEN"] } },
     include: { freezes: true },
   });
-  let n = 0;
+  let changed = 0;
+  let failed = 0;
   for (const e of open) {
     const frozen = e.freezes.some((f) => toISODate(f.fromDate) <= today && today <= toISODate(f.toDate));
     const want = frozen ? "FROZEN" : "ACTIVE";
-    if (e.status !== want) {
+    if (e.status === want) continue;
+    try {
       await db.enrollment.update({ where: { id: e.id }, data: { status: want } });
-      n++;
+      changed++;
+    } catch (err) {
+      failed++;
+      console.error(`[freezes] enrollment ${e.id}:`, err);
     }
   }
-  return n;
+  return { changed, failed };
 }

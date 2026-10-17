@@ -1,5 +1,5 @@
 // Payments, reversals, refunds — HANDOFF §7. Ledger rows are never edited or deleted.
-import type { PaymentMethod } from "@prisma/client";
+import type { PaymentMethod } from "@/generated/prisma/client";
 import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { fromISODate, todayISO, type ISODate } from "@/lib/dates";
@@ -7,6 +7,7 @@ import { UserError } from "@/lib/user-error";
 import { enqueue, familyChats } from "@/lib/notify";
 import { msg } from "@/lib/messages";
 import { readSettings } from "@/lib/settings";
+import { formatMoney } from "@/lib/money";
 import { familyBalance } from "./wallet";
 import type { Actor } from "./enrollments";
 
@@ -88,10 +89,22 @@ export async function takePayment(actor: Actor, p: PaymentInput) {
   return db.$transaction((tx) => postPayment(tx, actor, p), { timeout: 30_000 });
 }
 
+/**
+ * Per-family money-out lock (transaction-scoped): refunds and reversals of one family run one at a
+ * time, so a reversal can't pull a payment away while a refund is checking the balance it covers.
+ */
+export async function lockFamilyMoney(tx: Tx, familyId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`refund:${familyId}`}))`;
+}
+
 /** Cancel a payment or refund with an opposite REVERSAL entry. Caller checks `payments.refund`. */
 export async function reverseEntry(tx: Tx, actor: Actor, entryId: string, reason: string | null) {
+  const found = await tx.ledgerEntry.findUnique({ where: { id: entryId }, select: { centerId: true, familyId: true } });
+  if (!found || found.centerId !== actor.centerId) throw new UserError("error.notFound");
+  await lockFamilyMoney(tx, found.familyId);
+  // read again under the lock: a concurrent reversal of the same entry has committed by now
   const entry = await tx.ledgerEntry.findUnique({ where: { id: entryId }, include: { reversedBy: true } });
-  if (!entry || entry.centerId !== actor.centerId) throw new UserError("error.notFound");
+  if (!entry) throw new UserError("error.notFound");
   if (entry.type !== "PAYMENT" && entry.type !== "REFUND") throw new UserError("error.notFound");
   if (entry.reversedBy) throw new UserError("error.reversed");
   const rev = await tx.ledgerEntry.create({
@@ -117,12 +130,22 @@ export async function reversePayment(actor: Actor, entryId: string, reason: stri
   return db.$transaction((tx) => reverseEntry(tx, actor, entryId, reason), { timeout: 30_000 });
 }
 
-/** Cash given back to a parent. Not an expense: revenue = payments − refunds. */
-export async function refund(actor: Actor, p: { familyId: string; amount: number; method: PaymentMethod; date?: ISODate; reason: string | null; studentId?: string | null }) {
+/**
+ * Cash given back to a parent. Not an expense: revenue = payments − refunds.
+ * Capped at the family's credit (positive balance); refunding more needs `force` and a reason
+ * (the caller checks `payments.refund`) and leaves the family in debt.
+ */
+export async function refund(actor: Actor, p: { familyId: string; amount: number; method: PaymentMethod; date?: ISODate; reason: string | null; studentId?: string | null; force?: boolean }) {
   if (!Number.isInteger(p.amount) || p.amount <= 0) throw new UserError("error.amount");
   return db.$transaction(async (tx) => {
     const family = await tx.family.findUnique({ where: { id: p.familyId } });
     if (!family || family.centerId !== actor.centerId) throw new UserError("error.notFound");
+    // one refund/reversal at a time per family, so two clicks (or a refund + a reversal) can't both pass the cap
+    await lockFamilyMoney(tx, family.id);
+    const available = Math.max(0, await familyBalance(family.id, tx));
+    const over = p.amount > available;
+    if (over && !p.force) throw new UserError("money.refundOverBalance", { available: formatMoney(available) });
+    if (over && !p.reason?.trim()) throw new UserError("money.refundForceReason");
     const receiptNo = await nextReceiptNo(tx, actor.centerId);
     const entry = await tx.ledgerEntry.create({
       data: {
@@ -138,7 +161,7 @@ export async function refund(actor: Actor, p: { familyId: string; amount: number
         createdById: actor.userId,
       },
     });
-    await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "LedgerEntry", entityId: entry.id, action: "refund", after: entry });
+    await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "LedgerEntry", entityId: entry.id, action: over ? "refund.overBalance" : "refund", before: { available }, after: entry });
     return entry;
   });
 }

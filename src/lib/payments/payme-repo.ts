@@ -1,10 +1,15 @@
 // Prisma-backed PaymeRepo. Perform and cancel post ledger rows in the same DB transaction.
-import type { PaymeTransaction } from "@prisma/client";
+import type { PaymeTransaction } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { postPayment, reverseEntry } from "@/lib/services/payments";
 import { todayISO } from "@/lib/dates";
-import type { PaymeRepo, PaymeTx } from "./payme";
+import { readSettings } from "@/lib/settings";
+import { isUniqueViolation } from "@/lib/db-errors";
+import { DuplicatePaymeTx, type PaymeRepo, type PaymeTx } from "./payme";
+
+/** Fiscal receipt line title (receipts are printed in Uzbek). */
+export const FISCAL_TITLE = "O'quv kurslari uchun to'lov";
 
 const toTx = (r: PaymeTransaction): PaymeTx => ({
   id: r.id,
@@ -22,7 +27,10 @@ const toTx = (r: PaymeTransaction): PaymeTx => ({
 
 export const prismaPaymeRepo: PaymeRepo = {
   async centerByKey(key) {
-    return db.center.findFirst({ where: { paymeKey: key, paymeMerchantId: { not: null } }, select: { id: true } });
+    const c = await db.center.findFirst({ where: { paymeKey: key, paymeMerchantId: { not: null } }, select: { id: true, settings: true } });
+    if (!c) return null;
+    const f = readSettings(c.settings).paymeFiscal;
+    return { id: c.id, fiscal: f ? { title: FISCAL_TITLE, ikpu: f.ikpu, packageCode: f.packageCode, vatPercent: f.vatPercent } : null };
   },
   async family(id) {
     return db.family.findUnique({ where: { id }, select: { id: true, centerId: true } });
@@ -31,22 +39,24 @@ export const prismaPaymeRepo: PaymeRepo = {
     const r = await db.paymeTransaction.findUnique({ where: { paymeId } });
     return r ? toTx(r) : null;
   },
-  async activeTxForFamily(familyId) {
-    const r = await db.paymeTransaction.findFirst({ where: { familyId, state: 1 }, orderBy: { createTime: "desc" } });
-    return r ? toTx(r) : null;
-  },
   async createTx(tx) {
-    const r = await db.paymeTransaction.create({
-      data: {
-        paymeId: tx.paymeId,
-        centerId: tx.centerId,
-        familyId: tx.familyId,
-        amountTiyin: BigInt(tx.amountTiyin),
-        state: tx.state,
-        createTime: BigInt(tx.createTime),
-        paymeTime: tx.paymeTime === null || tx.paymeTime === undefined ? null : BigInt(tx.paymeTime),
-      },
-    });
+    let r: PaymeTransaction;
+    try {
+      r = await db.paymeTransaction.create({
+        data: {
+          paymeId: tx.paymeId,
+          centerId: tx.centerId,
+          familyId: tx.familyId,
+          amountTiyin: BigInt(tx.amountTiyin),
+          state: tx.state,
+          createTime: BigInt(tx.createTime),
+          paymeTime: tx.paymeTime === null || tx.paymeTime === undefined ? null : BigInt(tx.paymeTime),
+        },
+      });
+    } catch (e) {
+      if (isUniqueViolation(e, "paymeId")) throw new DuplicatePaymeTx(tx.paymeId);
+      throw e;
+    }
     await db.auditLog.create({ data: { centerId: tx.centerId, entity: "PaymeTransaction", entityId: r.id, action: "create", after: { paymeId: tx.paymeId, amountTiyin: tx.amountTiyin } } });
     return toTx(r);
   },
@@ -85,8 +95,13 @@ export const prismaPaymeRepo: PaymeRepo = {
       return toTx(r);
     }, { timeout: 30_000 });
   },
+  // GetStatement is about Payme's clock: the "time" it sent in CreateTransaction (older rows without it
+  // fall back to our create time), selected and ordered by that
   async statement(centerId, from, to) {
-    const rows = await db.paymeTransaction.findMany({ where: { centerId, createTime: { gte: BigInt(from), lte: BigInt(to) } }, orderBy: { createTime: "asc" } });
+    const rows = await db.$queryRaw<PaymeTransaction[]>`
+      SELECT * FROM "PaymeTransaction"
+      WHERE "centerId" = ${centerId} AND COALESCE("paymeTime", "createTime") BETWEEN ${BigInt(from)} AND ${BigInt(to)}
+      ORDER BY COALESCE("paymeTime", "createTime") ASC, "createTime" ASC, id ASC`;
     return rows.map(toTx);
   },
 };

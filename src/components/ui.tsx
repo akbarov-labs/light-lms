@@ -154,6 +154,15 @@ export function buttonClass(variant: ButtonVariant = "primary", size: "sm" | "md
 }
 
 export function LinkButton({ href, children, variant = "primary", size = "md", ...rest }: { href: string; children: ReactNode; variant?: ButtonVariant; size?: "sm" | "md" } & Omit<ComponentProps<typeof Link>, "href" | "className">) {
+  // API routes (CSV exports) are downloads, not pages: a <Link> would prefetch them as RSC, and that
+  // never-settling prefetch stalled every later client navigation on the page.
+  if (href.startsWith("/api/")) {
+    return (
+      <a href={href} className={buttonClass(variant, size)} {...(rest as ComponentProps<"a">)}>
+        {children}
+      </a>
+    );
+  }
   return (
     <Link href={href} className={buttonClass(variant, size)} {...rest}>
       {children}

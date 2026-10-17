@@ -11,6 +11,7 @@ import { formObject, zBool, zId, zOptDate, zOptId, zOptPhone, zOptStr, zPhone, z
 import { UserError } from "@/lib/user-error";
 import { fromISODate, todayISO } from "@/lib/dates";
 import { enrollStudent } from "@/lib/services/enrollments";
+import { unlinkIfPhoneChanged } from "@/lib/telegram-links";
 
 const studentFields = {
   firstName: zStr,
@@ -115,7 +116,9 @@ export async function updateStudentAction(_: ActionState, fd: FormData): Promise
           branchId: f.branchId ?? before.branchId,
         },
       });
-      await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Student", entityId: f.id, action: "update", before, after });
+      // the chat that proved the old phone stops getting this student's data (S3)
+      const unlinked = await unlinkIfPhoneChanged(tx, "STUDENT", f.id, before.phone, after.phone);
+      await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Student", entityId: f.id, action: "update", before, after: { ...after, telegramUnlinked: unlinked || undefined } });
     });
   });
   if (res?.ok && id) redirect(`/students/${id}`);
@@ -148,7 +151,9 @@ export async function saveGuardianAction(_: ActionState, fd: FormData): Promise<
         const g = await tx.guardian.findFirst({ where: { id: f.id, familyId: f.familyId } });
         if (!g) throw new UserError("error.notFound");
         const after = await tx.guardian.update({ where: { id: g.id }, data: { name: f.name, phone: f.phone, relation: f.relation ?? null, isPrimary: f.isPrimary } });
-        await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Guardian", entityId: g.id, action: "update", before: g, after });
+        // the old phone's chat stops getting the family's balance and attendance (S3)
+        const unlinked = await unlinkIfPhoneChanged(tx, "GUARDIAN", g.id, g.phone, after.phone);
+        await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Guardian", entityId: g.id, action: "update", before: g, after: { ...after, telegramUnlinked: unlinked || undefined } });
       } else {
         const g = await tx.guardian.create({ data: { familyId: f.familyId, name: f.name, phone: f.phone, relation: f.relation ?? null, isPrimary: f.isPrimary } });
         await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Guardian", entityId: g.id, action: "create", after: g });

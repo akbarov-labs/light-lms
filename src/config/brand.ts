@@ -1,6 +1,7 @@
 // Product identity, contacts and legal details — the one file to edit when the name or company changes.
 // Empty strings are hidden on public pages (never shown as placeholders); legal pages show a "draft" note
 // until `legal.entity` is filled in.
+import { demoUrl, isDemoMode, mainSiteUrl } from "@/lib/env";
 
 export const BRAND = {
   /** Product name shown in titles, the landing page, receipts' footer and legal texts. */
@@ -31,18 +32,18 @@ export const BRAND = {
 
 /** Runtime switches that differ per server (see .env.example). */
 export function demoMode(): boolean {
-  return process.env.DEMO_MODE === "true";
+  return isDemoMode();
 }
 
 /** Where the landing page's "See the demo" button goes: DEMO_URL, else /demo on a demo server, else nowhere. */
 export function demoHref(): string | null {
-  const url = process.env.DEMO_URL?.trim();
+  const url = demoUrl();
   if (url) return url;
   return demoMode() ? "/demo" : null;
 }
 
 /** Where "create your own center" points from a demo server (the real site's /signup). */
 export function signupHref(): string {
-  const site = process.env.MAIN_SITE_URL?.trim().replace(/\/$/, "");
+  const site = mainSiteUrl();
   return site ? `${site}/signup` : "/signup";
 }

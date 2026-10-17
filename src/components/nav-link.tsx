@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, KeyRound, LogOut, Menu, X } from "lucide-react";
+import { ChevronDown, KeyRound, Loader2, LogOut, Menu, X } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { LanguageOptions } from "./language-menu";
 import { cx } from "./ui";
@@ -31,8 +31,19 @@ export function NavLink({ href, children }: { href: string; children: ReactNode 
       )}
     >
       {children}
+      <Pending />
     </Link>
   );
+}
+
+/**
+ * Navigation feedback while the next page loads (audit O3). A link-level indicator instead of
+ * loading.tsx: route-level loading boundaries stream every first load and delay hydration, so an
+ * early click on a server-action form became a plain POST that did not move the setup wizard on.
+ */
+function Pending() {
+  const { pending } = useLinkStatus();
+  return pending ? <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 text-zinc-400 motion-safe:animate-spin" aria-hidden /> : null;
 }
 
 /** Off-canvas nav for phones and tablets. */

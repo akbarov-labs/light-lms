@@ -9,28 +9,88 @@ import { nextPeriodStart, periodContaining } from "@/lib/billing/periods";
 import { readSettings } from "@/lib/settings";
 import { enqueue, familyChats, staffChat } from "@/lib/notify";
 import { msg, esc } from "@/lib/messages";
-import { familyAllocation, familyBalance } from "@/lib/services/wallet";
+import { balancesFor } from "@/lib/services/wallet";
+import { freshBalances, refreshAllBalances } from "@/lib/billing/balance-cache";
 import { payLinkForFamily } from "@/lib/payments/links";
-import { buildCtx, loadUser } from "@/lib/ctx-core";
+import { branchWhere, buildCtx, loadUser, studentScope } from "@/lib/ctx-core";
 import { debtAging, revenue } from "@/lib/queries/reports";
+import { zonedRange } from "@/lib/queries/period";
 import { formatMoney } from "@/lib/money";
 import { purgeOldAttempts } from "@/lib/auth/attempts-db";
+import { purgeOldNotifications } from "./notifications";
+import { errText } from "./util";
 
 export type JobResult = Record<string, number | string>;
 
-/** 00:30 — lessons ahead, group statuses, freeze statuses, billing for every billable enrollment. */
+/** Parallel syncs in the nightly billing run. Small on purpose: each one holds a pool connection. */
+export const BILLING_CONCURRENCY = 4;
+
+/** Run `fn` over `items` with at most `limit` in flight (no dependency needed for a simple pool). */
+export async function forEachLimit<T>(items: readonly T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const lane = async () => {
+    while (next < items.length) await fn(items[next++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+}
+
+/**
+ * 00:30 — lessons ahead, group statuses, freeze statuses, billing for every billable enrollment, housekeeping.
+ * Every step runs on its own: one that throws is logged and listed in `failedSteps`, the next ones still run
+ * (billing must not be skipped because one group has a broken schedule).
+ */
 export async function nightly(today: ISODate = todayISO()): Promise<JobResult> {
-  const activated = await db.group.updateMany({ where: { status: "PLANNED", startDate: { lte: fromISODate(today) } }, data: { status: "ACTIVE" } });
-  const lessons = await generateAllLessons(today);
-  const finished = await db.group.updateMany({ where: { status: "ACTIVE", endDate: { lt: fromISODate(today) } }, data: { status: "FINISHED" } });
-  const freezes = await refreshFreezeStatuses(today);
-  const billing = await billingSync(today);
-  const purged = await purgeOldAttempts();
-  return { groupsActivated: activated.count, lessons, groupsFinished: finished.count, freezeStatus: freezes, ...billing, loginAttemptsPurged: purged.attempts, resetCodesPurged: purged.resets };
+  const out: JobResult = {};
+  const failed: string[] = [];
+  const step = async (name: string, fn: () => Promise<JobResult>) => {
+    try {
+      Object.assign(out, await fn());
+    } catch (e) {
+      failed.push(name);
+      out[`${name}Error`] = errText(e);
+      console.error(`[nightly] step ${name} failed:`, e);
+    }
+  };
+  await step("activateGroups", async () => ({
+    groupsActivated: (await db.group.updateMany({ where: { status: "PLANNED", startDate: { lte: fromISODate(today) } }, data: { status: "ACTIVE" } })).count,
+  }));
+  await step("lessons", async () => {
+    const r = await generateAllLessons(today);
+    return { lessons: r.created, lessonsFailed: r.failed };
+  });
+  await step("finishGroups", async () => ({
+    groupsFinished: (await db.group.updateMany({ where: { status: "ACTIVE", endDate: { lt: fromISODate(today) } }, data: { status: "FINISHED" } })).count,
+  }));
+  await step("freezes", async () => {
+    const r = await refreshFreezeStatuses(today);
+    return { freezeStatus: r.changed, freezeFailed: r.failed };
+  });
+  await step("billing", () => billingSync(today));
+  // billing touched many families: fill the balance cache now, not on the first page view
+  await step("balances", () => refreshAllBalances());
+  await step("loginAttempts", async () => {
+    const p = await purgeOldAttempts();
+    return { loginAttemptsPurged: p.attempts, resetCodesPurged: p.resets };
+  });
+  await step("notificationRetention", async () => {
+    const p = await purgeOldNotifications();
+    return { sentNotificationsPurged: p.sent, failedNotificationsPurged: p.failed };
+  });
+  if (failed.length) out.failedSteps = failed.join(",");
+  return out;
+}
+
+/** What in a job result deserves an ops alert: failed steps or items that could not be processed. */
+export function jobProblems(res: JobResult): string | null {
+  const parts: string[] = [];
+  if (res.failedSteps) parts.push(`failed steps: ${res.failedSteps}`);
+  for (const [k, v] of Object.entries(res)) if (/Failed$/.test(k) && typeof v === "number" && v > 0) parts.push(`${k}=${v}`);
+  return parts.length ? parts.join("; ") : null;
 }
 
 /** Sync every open enrollment (and ones closed in the last 60 days); notify families that fell into debt. */
 export async function billingSync(today: ISODate = todayISO()): Promise<JobResult> {
+  const t0 = Date.now();
   const enrollments = await db.enrollment.findMany({
     where: { OR: [{ endDate: null }, { endDate: { gte: fromISODate(addDays(today, -60)) } }] },
     select: { id: true, student: { select: { familyId: true, centerId: true } } },
@@ -38,7 +98,8 @@ export async function billingSync(today: ISODate = todayISO()): Promise<JobResul
   let entries = 0;
   let failed = 0;
   const charged = new Map<string, string>();
-  for (const e of enrollments) {
+  // each sync is its own transaction with a per-enrollment lock, so running a few at once is safe
+  await forEachLimit(enrollments, BILLING_CONCURRENCY, async (e) => {
     try {
       const deltas = await syncEnrollment(e.id, { asOf: today });
       entries += deltas.length;
@@ -47,12 +108,22 @@ export async function billingSync(today: ISODate = todayISO()): Promise<JobResul
       failed++;
       console.error(`[billing] enrollment ${e.id}:`, err);
     }
-  }
+  });
+  const syncMs = Date.now() - t0;
   let debtNotices = 0;
+  const centers = new Map<string, { name: string; notifyDebt: boolean } | null>();
+  const centerOf = async (id: string) => {
+    if (!centers.has(id)) {
+      const c = await db.center.findUnique({ where: { id }, select: { name: true, settings: true } });
+      centers.set(id, c ? { name: c.name, notifyDebt: readSettings(c.settings).notify.debt } : null);
+    }
+    return centers.get(id)!;
+  };
+  const balances = await balancesFor([...charged.keys()]);
   for (const [familyId, centerId] of charged) {
-    const center = await db.center.findUnique({ where: { id: centerId }, select: { name: true, settings: true } });
-    if (!center || !readSettings(center.settings).notify.debt) continue;
-    const balance = await familyBalance(familyId);
+    const center = await centerOf(centerId);
+    if (!center?.notifyDebt) continue;
+    const balance = balances.get(familyId) ?? 0;
     if (balance >= 0) continue;
     const payUrl = await payLinkForFamily(familyId);
     debtNotices += await db.$transaction(async (tx) => {
@@ -60,57 +131,84 @@ export async function billingSync(today: ISODate = todayISO()): Promise<JobResul
       return enqueue(tx, centerId, chats, (l) => msg.debt(l, { center: center.name, debt: -balance, payUrl }), `debt:${familyId}:${today}`);
     });
   }
-  return { enrollments: enrollments.length, ledgerEntries: entries, syncFailed: failed, debtNotices };
+  console.log(`[billing] ${enrollments.length} enrollment(s) synced in ${syncMs}ms (${failed} failed), ${debtNotices} debt notice(s)`);
+  return { enrollments: enrollments.length, ledgerEntries: entries, syncFailed: failed, debtNotices, billingMs: Date.now() - t0 };
 }
 
-/** 10:00 — "new period starts in N days" reminders and escalating debt reminders. */
+/**
+ * Run one item of a job (a center, an enrollment, a recipient): a throw is logged and counted, the
+ * other items still run. The counts end in "Failed", so jobProblems() raises the ops alert.
+ */
+async function isolated(label: string, fn: () => Promise<void>, onFail: () => void): Promise<void> {
+  try {
+    await fn();
+  } catch (e) {
+    onFail();
+    console.error(`[${label}] failed:`, e);
+  }
+}
+
+/**
+ * 10:00 — "new period starts in N days" reminders and escalating debt reminders. Each center and each
+ * reminder runs on its own: one broken enrollment or center does not stop the rest.
+ */
 export async function reminders(today: ISODate = todayISO()): Promise<JobResult> {
   const centers = await db.center.findMany({ select: { id: true, name: true, settings: true } });
   let upcoming = 0;
   let debts = 0;
+  let centersFailed = 0;
+  let remindersFailed = 0;
+  const failItem = () => remindersFailed++;
   for (const c of centers) {
-    const s = readSettings(c.settings);
-    if (s.notify.reminder && s.reminderDaysBefore > 0) {
-      const enrollments = await db.enrollment.findMany({
-        where: { endDate: null, status: { in: ["ACTIVE", "FROZEN"] }, group: { centerId: c.id, course: { pricingType: "SUBSCRIPTION" } } },
-        include: { group: { include: { course: true } }, student: { select: { id: true, firstName: true, lastName: true, familyId: true } } },
-      });
-      for (const e of enrollments) {
-        const anchor = e.group.course.renewal === "CALENDAR" ? 1 : e.group.course.renewal === "GROUP_START" ? parts(toISODate(e.group.startDate)).d : parts(toISODate(e.activatedAt ?? e.startDate)).d;
-        const next = nextPeriodStart(periodContaining(today, anchor).start, anchor);
-        if (diffDays(next, today) !== s.reminderDaysBefore) continue;
-        const { input } = await loadBillingInput(db, e.id, next);
-        const unit = computeExpected(input).find((u) => u.start === next);
-        if (!unit || unit.amount <= 0) continue;
-        const payUrl = await payLinkForFamily(e.student.familyId);
-        upcoming += await db.$transaction(async (tx) => {
-          const chats = await familyChats(tx, e.student.familyId, e.student.id);
-          return enqueue(
-            tx,
-            c.id,
-            chats,
-            (l) => msg.reminder(l, { center: c.name, student: `${e.student.firstName} ${e.student.lastName}`, group: e.group.name, amount: unit.amount, date: next, payUrl }),
-            `remind:${e.id}:${next}`,
-          );
+    await isolated(`reminders center ${c.id}`, async () => {
+      const s = readSettings(c.settings);
+      if (s.notify.reminder && s.reminderDaysBefore > 0) {
+        const enrollments = await db.enrollment.findMany({
+          where: { endDate: null, status: { in: ["ACTIVE", "FROZEN"] }, group: { centerId: c.id, course: { pricingType: "SUBSCRIPTION" } } },
+          include: { group: { include: { course: true } }, student: { select: { id: true, firstName: true, lastName: true, familyId: true } } },
         });
+        for (const e of enrollments) {
+          await isolated(`reminders enrollment ${e.id}`, async () => {
+            const anchor = e.group.course.renewal === "CALENDAR" ? 1 : e.group.course.renewal === "GROUP_START" ? parts(toISODate(e.group.startDate)).d : parts(toISODate(e.activatedAt ?? e.startDate)).d;
+            const next = nextPeriodStart(periodContaining(today, anchor).start, anchor);
+            if (diffDays(next, today) !== s.reminderDaysBefore) return;
+            const { input } = await loadBillingInput(db, e.id, next);
+            const unit = computeExpected(input).find((u) => u.start === next);
+            if (!unit || unit.amount <= 0) return;
+            const payUrl = await payLinkForFamily(e.student.familyId);
+            upcoming += await db.$transaction(async (tx) => {
+              const chats = await familyChats(tx, e.student.familyId, e.student.id);
+              return enqueue(
+                tx,
+                c.id,
+                chats,
+                (l) => msg.reminder(l, { center: c.name, student: `${e.student.firstName} ${e.student.lastName}`, group: e.group.name, amount: unit.amount, date: next, payUrl }),
+                `remind:${e.id}:${next}`,
+              );
+            });
+          }, failItem);
+        }
       }
-    }
-    if (s.notify.debt) {
-      const neg = await db.ledgerEntry.groupBy({ by: ["familyId"], where: { centerId: c.id }, _sum: { amount: true }, having: { amount: { _sum: { lt: 0 } } } });
-      for (const n of neg) {
-        const alloc = await familyAllocation(n.familyId);
-        if (!alloc.oldestUnpaidDate) continue;
-        const overdue = diffDays(today, alloc.oldestUnpaidDate);
-        if (![3, 7, 14, 30].includes(overdue)) continue;
-        const payUrl = await payLinkForFamily(n.familyId);
-        debts += await db.$transaction(async (tx) => {
-          const chats = await familyChats(tx, n.familyId);
-          return enqueue(tx, c.id, chats, (l) => msg.debt(l, { center: c.name, debt: -(n._sum.amount ?? 0), payUrl }), `debt-overdue:${n.familyId}:${today}`);
-        });
+      if (s.notify.debt) {
+        // debtor families and their oldest unpaid date come from the balance cache, not their ledgers
+        await freshBalances(c.id);
+        const neg = await db.familyBalance.findMany({ where: { centerId: c.id, balance: { lt: 0 } }, select: { familyId: true, balance: true, oldestUnpaidDate: true } });
+        for (const n of neg) {
+          await isolated(`reminders debt family ${n.familyId}`, async () => {
+            if (!n.oldestUnpaidDate) return;
+            const overdue = diffDays(today, toISODate(n.oldestUnpaidDate));
+            if (![3, 7, 14, 30].includes(overdue)) return;
+            const payUrl = await payLinkForFamily(n.familyId);
+            debts += await db.$transaction(async (tx) => {
+              const chats = await familyChats(tx, n.familyId);
+              return enqueue(tx, c.id, chats, (l) => msg.debt(l, { center: c.name, debt: -Number(n.balance), payUrl }), `debt-overdue:${n.familyId}:${today}`);
+            });
+          }, failItem);
+        }
       }
-    }
+    }, () => centersFailed++);
   }
-  return { upcoming, debts };
+  return { upcoming, debts, centersFailed, remindersFailed };
 }
 
 /** 20:00 — teachers whose lessons today still have no attendance. */
@@ -123,17 +221,22 @@ export async function teacherReminders(today: ISODate = todayISO()): Promise<Job
   const byTeacher = new Map<string, typeof lessons>();
   for (const l of lessons) {
     if (!readSettings(l.group.center.settings).notify.teacherReminder || !l.teacher.telegramChatId) continue;
-    byTeacher.set(l.teacherId, [...(byTeacher.get(l.teacherId) ?? []), l]);
+    const list = byTeacher.get(l.teacherId);
+    if (list) list.push(l);
+    else byTeacher.set(l.teacherId, [l]);
   }
   let sent = 0;
+  let teachersFailed = 0;
   for (const [teacherId, list] of byTeacher) {
-    sent += await db.$transaction(async (tx) => {
-      const chat = await staffChat(tx, teacherId);
-      if (!chat) return 0;
-      return enqueue(tx, list[0].group.center.id, [chat], (l) => msg.teacherReminder(l, { lessons: list.map((x) => `${x.startTime} ${x.group.name} #${x.group.code}`) }), `teacher:${teacherId}:${today}`);
-    });
+    await isolated(`teacher-reminders ${teacherId}`, async () => {
+      sent += await db.$transaction(async (tx) => {
+        const chat = await staffChat(tx, teacherId);
+        if (!chat) return 0;
+        return enqueue(tx, list[0].group.center.id, [chat], (l) => msg.teacherReminder(l, { lessons: list.map((x) => `${x.startTime} ${x.group.name} #${x.group.code}`) }), `teacher:${teacherId}:${today}`);
+      });
+    }, () => teachersFailed++);
   }
-  return { teachers: byTeacher.size, sent };
+  return { teachers: byTeacher.size, sent, teachersFailed };
 }
 
 /** Owner / manager report text (also used by the bot's 📊 button). */
@@ -148,9 +251,10 @@ export async function ownerReport(userId: string, today: ISODate = todayISO()): 
     revenue(ctx, { from: today, to: today }),
     revenue(ctx, { from: m.start, to: m.end }),
     debtAging(ctx),
-    db.student.count({ where: { centerId: ctx.centerId, createdAt: { gte: fromISODate(today), lt: fromISODate(addDays(today, 1)) } } }),
-    db.enrollment.count({ where: { status: "LEFT", endDate: fromISODate(today), group: { centerId: ctx.centerId } } }),
-    db.lesson.count({ where: { date: fromISODate(today), status: "SCHEDULED", group: { centerId: ctx.centerId, ...(ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) } } }),
+    // same scope as revenue/debt: a branch-limited manager sees only their branches (as studentStats does)
+    db.student.count({ where: { centerId: ctx.centerId, createdAt: zonedRange(today, today), ...studentScope(ctx) } }),
+    db.enrollment.count({ where: { status: "LEFT", endDate: fromISODate(today), group: { centerId: ctx.centerId, ...branchWhere(ctx) } } }),
+    db.lesson.count({ where: { date: fromISODate(today), status: "SCHEDULED", group: { centerId: ctx.centerId, ...branchWhere(ctx) } } }),
   ]);
   const money = (n: number) => formatMoney(n, ctx.locale === "ru" ? "сум" : "so'm");
   return [
@@ -167,14 +271,17 @@ export async function ownerReport(userId: string, today: ISODate = todayISO()): 
 export async function dailyReport(today: ISODate = todayISO()): Promise<JobResult> {
   const users = await db.user.findMany({ where: { archivedAt: null, telegramChatId: { not: null }, role: { in: ["OWNER", "MANAGER"] } }, include: { center: { select: { settings: true } } } });
   let sent = 0;
+  let reportsFailed = 0;
   for (const u of users) {
-    if (!readSettings(u.center.settings).notify.dailyReport) continue;
-    const text = await ownerReport(u.id, today);
-    if (!text) continue;
-    sent += await db.$transaction(async (tx) => {
-      const chat = await staffChat(tx, u.id);
-      return chat ? enqueue(tx, u.centerId, [chat], () => text, `report:${u.id}:${today}`) : 0;
-    });
+    await isolated(`daily-report ${u.id}`, async () => {
+      if (!readSettings(u.center.settings).notify.dailyReport) return;
+      const text = await ownerReport(u.id, today);
+      if (!text) return;
+      sent += await db.$transaction(async (tx) => {
+        const chat = await staffChat(tx, u.id);
+        return chat ? enqueue(tx, u.centerId, [chat], () => text, `report:${u.id}:${today}`) : 0;
+      });
+    }, () => reportsFailed++);
   }
-  return { recipients: users.length, sent };
+  return { recipients: users.length, sent, reportsFailed };
 }

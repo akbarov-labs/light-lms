@@ -1,7 +1,8 @@
 import { Check, MessageSquare, Plus } from "lucide-react";
 import Link from "next/link";
-import type { LeadStage } from "@prisma/client";
+import type { LeadStage, Prisma } from "@/generated/prisma/client";
 import { requireStaff } from "@/lib/ctx";
+import { pageParam, strParam } from "@/lib/queries/params";
 import { db } from "@/lib/db";
 import { formatDate, toISODate, todayISO } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
@@ -10,33 +11,49 @@ import { Badge, LinkButton, PageHeader, cx } from "@/components/ui";
 import { Input, Select } from "@/components/fields";
 import { Modal } from "@/components/client";
 import { LeadForm } from "./lead-form";
+import { appUrl as envAppUrl } from "@/lib/env";
 
 const STAGES: LeadStage[] = ["NEW", "CONTACTED", "TRIAL_BOOKED", "TRIAL_DONE", "ENROLLED", "LOST"];
+const LEADS_PER_COLUMN = 100;
 
 export default async function LeadsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const ctx = await requireStaff("leads");
   const { t } = ctx;
   const ids = ctx.activeBranchId ? [ctx.activeBranchId] : ctx.branchIds;
-  const leads = await db.lead.findMany({
-    where: {
-      centerId: ctx.centerId,
-      archivedAt: sp.archived ? { not: null } : null,
-      ...(ids ? { OR: [{ branchId: { in: ids } }, { branchId: null }] } : {}),
-      ...(sp.source ? { source: sp.source } : {}),
-      ...(sp.assigned ? { assignedToId: sp.assigned } : {}),
-      ...(sp.q ? { AND: [{ OR: [{ name: { contains: sp.q, mode: "insensitive" } }, { phone: { contains: sp.q.replace(/\D/g, "") || sp.q } }] }] } : {}),
-    },
-    include: { course: { select: { name: true } }, assignedTo: { select: { name: true } }, _count: { select: { notes: true } } },
-    orderBy: [{ nextContactAt: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
-    take: 600,
-  });
+  const q = strParam(sp.q);
+  const source = strParam(sp.source);
+  const assigned = strParam(sp.assigned);
+  const where: Prisma.LeadWhereInput = {
+    centerId: ctx.centerId,
+    archivedAt: sp.archived ? { not: null } : null,
+    ...(ids ? { OR: [{ branchId: { in: ids } }, { branchId: null }] } : {}),
+    ...(source ? { source } : {}),
+    ...(assigned ? { assignedToId: assigned } : {}),
+    ...(q ? { AND: [{ OR: [{ name: { contains: q, mode: "insensitive" } }, { phone: { contains: q.replace(/\D/g, "") || q } }] }] } : {}),
+  };
+  // every column shows its true count; cards come LEADS_PER_COLUMN at a time ("show more"), never silently cut
+  const shown = Object.fromEntries(STAGES.map((s) => [s, LEADS_PER_COLUMN * Math.min(50, pageParam(sp[`more_${s}`]))])) as Record<LeadStage, number>;
+  const [counts, ...columns] = await Promise.all([
+    db.lead.groupBy({ by: ["stage"], where, _count: true }),
+    ...STAGES.map((stage) =>
+      db.lead.findMany({
+        where: { ...where, stage },
+        include: { course: { select: { name: true } }, assignedTo: { select: { name: true } }, _count: { select: { notes: true } } },
+        orderBy: [{ nextContactAt: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }, { id: "asc" }],
+        take: shown[stage],
+      }),
+    ),
+  ]);
+  const countOf = new Map(counts.map((c) => [c.stage, c._count]));
+  const filterParams = Object.fromEntries(Object.entries(sp).filter(([, v]) => typeof v === "string" && v)) as Record<string, string>;
+  const moreHref = (stage: LeadStage) => `/leads?${new URLSearchParams({ ...filterParams, [`more_${stage}`]: String(shown[stage] / LEADS_PER_COLUMN + 1) }).toString()}`;
   const [sources, admins] = await Promise.all([
     db.lead.findMany({ where: { centerId: ctx.centerId, source: { not: null } }, distinct: ["source"], select: { source: true } }),
     db.user.findMany({ where: { centerId: ctx.centerId, role: { not: "TEACHER" } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   const today = todayISO();
-  const appUrl = (process.env.APP_URL ?? "").replace(/\/$/, "");
+  const appUrl = envAppUrl();
   return (
     <>
       <PageHeader
@@ -63,13 +80,14 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         <button className="h-9 rounded-lg bg-zinc-900 px-3.5 text-sm font-medium text-white hover:bg-zinc-800">{t("common.filter")}</button>
       </form>
       <div className="flex gap-3 overflow-x-auto pb-4">
-        {STAGES.map((stage) => {
-          const col = leads.filter((l) => l.stage === stage);
+        {STAGES.map((stage, i) => {
+          const col = columns[i];
+          const count = countOf.get(stage) ?? 0;
           return (
             <section key={stage} className="w-64 shrink-0 rounded-xl bg-zinc-100/70 p-2">
               <header className="mb-2 flex items-center justify-between px-1">
                 <Badge tone={leadTone[stage]}>{t(`lead.${stage}`)}</Badge>
-                <span className="text-xs text-zinc-500">{col.length}</span>
+                <span className="tnum text-xs text-zinc-500">{count}</span>
               </header>
               <div className="space-y-2">
                 {col.map((l) => {
@@ -89,6 +107,11 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                     </Link>
                   );
                 })}
+                {count > col.length && (
+                  <Link href={moreHref(stage)} scroll={false} className="block rounded-lg px-2 py-1.5 text-center text-xs font-medium text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900">
+                    {t("leads.showMore", { n: count - col.length })}
+                  </Link>
+                )}
               </div>
             </section>
           );

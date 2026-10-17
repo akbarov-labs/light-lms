@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
-import { formatDate, formatDateTime, monthRange, shiftMonth, toISODate, todayISO } from "@/lib/dates";
+import { formatDate, formatDateTime, monthParam, monthRange, shiftMonth, toISODate } from "@/lib/dates";
 import { monthLabel } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { liveSalary } from "@/lib/salary/service";
@@ -12,13 +12,14 @@ import { Field, FormGrid, Input, Select } from "@/components/fields";
 import { ActionForm, Modal, ModalForm, SubmitButton } from "@/components/client";
 import { SalaryBreakdown } from "@/components/salary-view";
 import { adjustmentAction, payslipAction, saveRuleAction } from "../actions";
+import { RuleDateField } from "../rule-date-field";
 
 export default async function TeacherSalaryPage({ params, searchParams }: { params: Promise<{ teacherId: string }>; searchParams: Promise<{ month?: string }> }) {
   const { teacherId } = await params;
   const sp = await searchParams;
   const ctx = await requireStaff("finance.view");
   const { t } = ctx;
-  const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : todayISO().slice(0, 7);
+  const month = monthParam(sp.month);
   const teacher = await db.user.findFirst({ where: { id: teacherId, centerId: ctx.centerId }, include: { branches: true } });
   if (!teacher || (ctx.branchIds && !teacher.branches.some((b) => ctx.branchIds!.includes(b.branchId)))) notFound();
   const [{ result, lessons }, rules, slip] = await Promise.all([
@@ -85,7 +86,7 @@ export default async function TeacherSalaryPage({ params, searchParams }: { para
                     <Field label={t("salary.percent")}><Input name="percent" type="number" min={0} max={100} defaultValue={rules[0]?.percent ?? 40} /></Field>
                     <Field label={t("salary.fixedAmount")}><Input name="fixedAmount" inputMode="numeric" defaultValue={rules[0]?.fixedAmount ?? ""} /></Field>
                     <Field label={t("salary.perLesson")}><Input name="perLesson" inputMode="numeric" defaultValue={rules[0]?.perLesson ?? ""} /></Field>
-                    <Field label={t("salary.validFrom")}><Input type="date" name="validFrom" defaultValue={monthRange(month).start} required /></Field>
+                    <Field label={t("salary.validFrom")}><RuleDateField defaultValue={monthRange(month).start} warning={t("money.ruleMidMonth", { date: "{date}" })} /></Field>
                   </FormGrid>
                   <SubmitButton>{t("common.save")}</SubmitButton>
                 </ModalForm>

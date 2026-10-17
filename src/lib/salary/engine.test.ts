@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { scenario, withStatus } from "@/lib/billing/testkit";
+import { FakeLedger, scenario, withStatus } from "@/lib/billing/testkit";
+import { allocate, type AllocEntry } from "@/lib/billing/allocation";
+import { computeExpected } from "@/lib/billing/engine";
 import type { BillingInput } from "@/lib/billing/types";
-import { collectLessons, computeSalary, type LessonRow, type SalaryRule } from "./engine";
+import { collectLessons, computeSalary, pickExpenseBranch, type LessonRow, type SalaryRule } from "./engine";
 
 // One group, Mon/Wed/Fri, October 2026 = 13 lessons; two students at 600 000/month (46 153.8 per lesson each).
 function setup(opts: { trialSecond?: boolean; asOf?: string } = {}) {
@@ -73,6 +75,105 @@ describe("salary", () => {
     expect(off.lines[0].studentLessons).toBe(6);
     expect(on.lines[0].studentLessons).toBe(3);
     expect(on.total).toBe(Math.round(per * 3 * 0.5));
+  });
+
+  it("pay from collected with installments: a lesson counts only when its installment and every earlier one are paid", () => {
+    // Python Foundation: 2 400 000 whole course (Sep–Dec, Mon/Wed/Fri) in 4 monthly installments of 600 000
+    let input = scenario({
+      asOf: "2026-12-31",
+      groupStart: "2026-09-01",
+      groupEnd: "2026-12-31",
+      course: { pricingType: "PACKAGE", price: 2_400_000, packageLessons: null, installments: 4 },
+      enrollment: { startDate: "2026-09-01", activatedAt: "2026-09-01" },
+    });
+    for (const l of input.lessons) input = withStatus(input, l.date, "HELD");
+    const lessons: LessonRow[] = input.lessons.map((l) => ({ id: l.id, date: l.date, status: l.status, teacherId: "T", groupId: "g1", groupName: "PY" }));
+    const enrollmentsByGroup = new Map([["g1", [{ input, studentName: "A" }]]]);
+    const total = input.lessons.length;
+    const run = (month: string, paid: string[]) => {
+      const held = collectLessons({ teacherId: "T", month, lessons, enrollmentsByGroup, payTrial: false, paidKeys: new Set(paid) });
+      return computeSalary({ rule: rule({ percent: 10 }), lessons: held, adjustments: [], payFromCollected: true }).lines[0];
+    };
+    const sep = input.lessons.filter((l) => l.date.startsWith("2026-09")).length;
+    const oct = input.lessons.filter((l) => l.date.startsWith("2026-10")).length;
+    // only installment 1 paid → only the lessons of month 1 count
+    expect(run("2026-09", ["pkg:e1:1:1"])).toMatchObject({ studentLessons: sep, amount: Math.round(((2_400_000 / total) * sep) / 10) });
+    expect(run("2026-10", ["pkg:e1:1:1"]).studentLessons).toBe(0);
+    expect(run("2026-12", ["pkg:e1:1:1"]).studentLessons).toBe(0);
+    // installment 2 paid but not 1 → October still does not count
+    expect(run("2026-10", ["pkg:e1:1:2"]).studentLessons).toBe(0);
+    expect(run("2026-10", ["pkg:e1:1:1", "pkg:e1:1:2"]).studentLessons).toBe(oct);
+    expect(run("2026-11", ["pkg:e1:1:1", "pkg:e1:1:2"]).studentLessons).toBe(0);
+  });
+
+  it("pay from collected, leaver: an installment credited to 0 does not block the lessons it covers (N2)", () => {
+    // 24 lessons for 1 200 000 in 2 installments, Tue/Thu from Thu Oct 1; leaves Nov 5 after 11 lessons
+    const TT = [{ weekday: 2, startTime: "14:00", endTime: "15:30" }, { weekday: 4, startTime: "14:00", endTime: "15:30" }];
+    const c = { pricingType: "PACKAGE" as const, price: 1_200_000, packageLessons: 24, installments: 2 };
+    const at = (asOf: string, left: boolean) =>
+      scenario({ slots: TT, asOf, course: c, groupStart: "2026-10-01", enrollment: left ? { endDate: "2026-11-05", status: "LEFT" } : {} });
+    const ledger = new FakeLedger();
+    const entries: AllocEntry[] = [];
+    const post = (date: string, added: { billingKey: string | null; type: AllocEntry["type"]; amount: number }[]) =>
+      added.forEach((x) => entries.push({ id: `x${entries.length}`, type: x.type, amount: x.amount, date, enrollmentId: "e1", billingKey: x.billingKey, reversesId: null }));
+    post("2026-10-01", ledger.sync(at("2026-10-01", false)));
+    post("2026-11-01", ledger.sync(at("2026-11-01", false)));
+    // the family pays both installments in full, then the student leaves
+    entries.push({ id: "pay", type: "PAYMENT", amount: 1_200_000, date: "2026-11-02", enrollmentId: null, billingKey: null, reversesId: null });
+    post("2026-11-06", ledger.sync(at("2026-11-06", true)));
+    expect(computeExpected(at("2026-11-06", true)).map((u) => [u.key, u.amount])).toEqual([["pkg:e1:1:1", 550_000], ["pkg:e1:1:2", 0]]);
+    const alloc = allocate(entries);
+    expect(alloc.totalDebt).toBe(0);
+    const paidKeys = new Set(alloc.units.filter((u) => u.due === 0 && u.charged > 0).map((u) => u.key));
+    expect(paidKeys).toEqual(new Set(["pkg:e1:1:1"]));
+
+    let input = at("2026-11-30", true);
+    for (const l of input.lessons) if (l.date <= "2026-11-05") input = withStatus(input, l.date, "HELD");
+    const lessons: LessonRow[] = input.lessons.map((l) => ({ id: l.id, date: l.date, status: l.status, teacherId: "T", groupId: "g1", groupName: "PKG" }));
+    const enrollmentsByGroup = new Map([["g1", [{ input, studentName: "A" }]]]);
+    const held = collectLessons({ teacherId: "T", month: "2026-11", lessons, enrollmentsByGroup, payTrial: false, paidKeys });
+    // November 3 and 5 count, keyed to the installment that was actually charged
+    expect(held.map((l) => [l.date, l.students[0]?.paid, l.students[0]?.key])).toEqual([
+      ["2026-11-03", true, "pkg:e1:1:1"],
+      ["2026-11-05", true, "pkg:e1:1:1"],
+    ]);
+    const r = computeSalary({ rule: rule({ percent: 10 }), lessons: held, adjustments: [], payFromCollected: true });
+    expect(r.lines[0]).toMatchObject({ studentLessons: 2, amount: Math.round((1_200_000 / 24) * 2 * 0.1) });
+    // an open enrollment still needs installment 2 paid for its November lessons
+    let open = at("2026-11-30", false);
+    for (const l of open.lessons) if (l.date <= "2026-11-05") open = withStatus(open, l.date, "HELD");
+    const openHeld = collectLessons({ teacherId: "T", month: "2026-11", lessons, enrollmentsByGroup: new Map([["g1", [{ input: open, studentName: "A" }]]]), payTrial: false, paidKeys });
+    expect(openHeld[0].students[0].paid).toBe(false);
+  });
+
+  it("archived teacher: no fixed/base pay for months after leaving; held lessons still paid", () => {
+    const { lessons, enrollmentsByGroup } = setup();
+    const held = collectLessons({ teacherId: "T", month: "2026-10", lessons, enrollmentsByGroup, payTrial: false, paidKeys: new Set() });
+    const fixed = rule({ model: "FIXED", fixedAmount: 3_000_000 });
+    // archived in September → nothing fixed for October
+    const after = computeSalary({ rule: fixed, lessons: [], adjustments: [], payFromCollected: false, month: "2026-10", archivedOn: "2026-09-20" });
+    expect(after).toMatchObject({ base: 0, total: 0 });
+    expect(after.warnings).toContain("archived");
+    // the month they leave in is still paid in full
+    expect(computeSalary({ rule: fixed, lessons: [], adjustments: [], payFromCollected: false, month: "2026-09", archivedOn: "2026-09-20" }).total).toBe(3_000_000);
+    // base + %: the percent of lessons actually held stays
+    const bp = computeSalary({ rule: rule({ model: "BASE_PLUS_PERCENT", fixedAmount: 1_000_000, percent: 20 }), lessons: held, adjustments: [], payFromCollected: false, month: "2026-10", archivedOn: "2026-09-30" });
+    expect(bp.total).toBe(Math.round(per * 6 * 0.2));
+    // archived on the 1st of the month: that month still counts
+    expect(computeSalary({ rule: fixed, lessons: [], adjustments: [], payFromCollected: false, month: "2026-10", archivedOn: "2026-10-01" }).total).toBe(3_000_000);
+  });
+
+  it("salary expense branch: most lessons that month, tie → oldest branch, none → oldest home branch (L6)", () => {
+    const A = { id: "bA", createdAt: "2026-01-01T00:00:00Z" };
+    const B = { id: "bB", createdAt: "2025-06-01T00:00:00Z" };
+    const C = { id: "bC", createdAt: "2025-06-01T00:00:00Z" };
+    expect(pickExpenseBranch([{ ...A, lessons: 9 }, { ...B, lessons: 4 }], [B, A])).toBe("bA");
+    expect(pickExpenseBranch([{ ...A, lessons: 4 }, { ...B, lessons: 4 }], [A, B])).toBe("bB");
+    // same age: lowest id, whatever the input order
+    expect(pickExpenseBranch([{ ...C, lessons: 2 }, { ...B, lessons: 2 }], [])).toBe("bB");
+    expect(pickExpenseBranch([], [A, B])).toBe("bB");
+    expect(pickExpenseBranch([{ ...A, lessons: 0 }], [A, C, B])).toBe("bB");
+    expect(pickExpenseBranch([], [])).toBeNull();
   });
 
   it("bonuses and fines are added", () => {

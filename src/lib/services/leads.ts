@@ -1,4 +1,4 @@
-import type { LeadStage } from "@prisma/client";
+import type { LeadStage } from "@/generated/prisma/client";
 import type { Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 

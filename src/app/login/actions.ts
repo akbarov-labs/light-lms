@@ -11,6 +11,7 @@ import { dbAttemptStore } from "@/lib/auth/attempts-db";
 import { attemptKey, checkAttempts, recordAttempt, retryMinutes, RULES } from "@/lib/auth/ratelimit";
 import { clientIp, passwordProblem } from "@/lib/auth/security";
 import { issueSession } from "@/lib/auth/session-cookie";
+import { safeNextPath } from "@/lib/auth/redirect";
 import { requestResetCode, resetWithCode } from "@/lib/auth/password";
 
 export type LoginState = { error?: string; message?: string; phone?: string; at?: number } | null;
@@ -56,10 +57,8 @@ export async function loginAction(_: LoginState, fd: FormData): Promise<LoginSta
   const jar = await cookies();
   if (user.locale && isLocale(user.locale)) jar.set(LANG_COOKIE, user.locale, { path: "/", sameSite: "lax", maxAge: 31536000 });
   if (user.mustChangePassword) redirect("/password");
-  const next = String(fd.get("next") ?? "");
-  // only same-site paths: "/x", never "//host" or "/\host"
-  const safeNext = /^\/(?![\/\\])/.test(next) && !/[\r\n\\]/.test(next) ? next : null;
-  redirect(safeNext ?? (user.role === "TEACHER" ? "/t" : "/"));
+  // only same-site paths: never "//host", "/\host" or "/<tab>/host"
+  redirect(safeNextPath(fd.get("next")) ?? (user.role === "TEACHER" ? "/t" : "/"));
 }
 
 /** Step 1 of "forgot password": send a code to the linked Telegram chat. Same answer whether or not the phone exists. */

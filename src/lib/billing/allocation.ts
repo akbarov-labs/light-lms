@@ -47,7 +47,26 @@ export interface Allocation {
   totalDebt: number;
 }
 
-export function allocate(entries: AllocEntry[]): Allocation {
+/** Debt unit for money paid out beyond the family's credit (see allocate). */
+export const OVERDRAW_KEY = "wallet:overdraw";
+
+interface Run {
+  balance: number;
+  /** Money left after paying every charge it can; negative = more paid out than came in. */
+  pool: number;
+  /** Units sorted by date, with paid/due filled in. */
+  list: UnitStatus[];
+  /** Last money-out day (else the last entry day): fallback date of an overdraw. */
+  lastDate: ISODate | null;
+}
+
+const byDate = (a: UnitStatus, b: UnitStatus) => (a.firstDate === b.firstDate ? a.key.localeCompare(b.key) : a.firstDate.localeCompare(b.firstDate));
+
+/** Money in/out of the wallet (not an engine unit): PAYMENT, REFUND, a CREDIT without a billing key. */
+const isMoney = (e: AllocEntry) => e.type === "PAYMENT" || e.type === "REFUND" || (e.type === "CREDIT" && !e.billingKey);
+
+/** FIFO allocation of the entries, before an overdraw is turned into a debt unit. */
+function run(entries: AllocEntry[]): Run {
   const byId = new Map(entries.map((e) => [e.id, e]));
   const units = new Map<string, UnitStatus>();
   const directed = new Map<string, number>();
@@ -72,8 +91,12 @@ export function allocate(entries: AllocEntry[]): Allocation {
     else pool += amount;
   };
 
+  // last day money left the wallet (refund, reversed payment): fallback date of an overdraw
+  let lastOut: ISODate | null = null;
+  let lastDate: ISODate | null = null;
   for (const e of entries) {
     balance += e.amount;
+    if (!lastDate || e.date > lastDate) lastDate = e.date;
     // A reversal behaves like the entry it reverses, with the opposite sign.
     const kind = e.type === "REVERSAL" ? (e.reversesId ? byId.get(e.reversesId) : undefined) : e;
     const kindType = kind?.type ?? "PAYMENT";
@@ -86,12 +109,11 @@ export function allocate(entries: AllocEntry[]): Allocation {
     } else {
       // PAYMENT, REFUND, keyless CREDIT, or their reversals: money in/out of the wallet
       addMoney(kindType === "CREDIT" ? null : enrollmentId, e.amount);
+      if (e.amount < 0 && (!lastOut || e.date > lastOut)) lastOut = e.date;
     }
   }
 
-  const list = [...units.values()].sort((a, b) =>
-    a.firstDate === b.firstDate ? a.key.localeCompare(b.key) : a.firstDate.localeCompare(b.firstDate),
-  );
+  const list = [...units.values()].sort(byDate);
   for (const u of list) {
     if (u.charged <= 0) {
       pool += -u.charged;
@@ -115,6 +137,55 @@ export function allocate(entries: AllocEntry[]): Allocation {
     pool += left;
   }
   for (const u of list) pool = pay(u, pool);
+  return { balance, pool, list, lastDate: lastOut ?? lastDate };
+}
+
+/**
+ * First day of the current overdraw episode: the wallet has been overdrawn at the end of every
+ * day since. A reversed money entry and its reversal are left out (that payment never happened),
+ * so "paid on Mar 1, reversed on Mar 5" keeps the debt aging from the original overdraw day.
+ * Called only when the family is overdrawn now; one allocation per ledger day.
+ */
+function overdrawSince(entries: AllocEntry[]): ISODate | null {
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  const voided = new Set<string>();
+  for (const e of entries) {
+    const orig = e.type === "REVERSAL" && e.reversesId ? byId.get(e.reversesId) : undefined;
+    if (orig && isMoney(orig)) {
+      voided.add(orig.id);
+      voided.add(e.id);
+    }
+  }
+  const kept = entries.filter((e) => !voided.has(e.id)).sort((a, b) => a.date.localeCompare(b.date));
+  let since: ISODate | null = null;
+  let i = 0;
+  while (i < kept.length) {
+    const day = kept[i].date;
+    while (i < kept.length && kept[i].date === day) i++;
+    if (run(kept.slice(0, i)).pool < 0) since ??= day;
+    else since = null;
+  }
+  return since;
+}
+
+/**
+ * Invariant (property-tested): unallocated − totalDebt = balance, and never both > 0 —
+ * balance ≥ 0 ⇒ totalDebt = 0 and unallocated = balance; balance < 0 ⇒ totalDebt = −balance.
+ */
+export function allocate(entries: AllocEntry[]): Allocation {
+  const r = run(entries);
+  const { balance, list } = r;
+  let pool = r.pool;
+
+  // More money went out than came in (a refund above the credit): that gap is debt too, so
+  // totalDebt = −balance whenever the balance is negative and the family gets reminders. It ages
+  // from the day the wallet went negative in this overdraw episode, not from the latest money out.
+  if (pool < 0) {
+    const firstDate = overdrawSince(entries) ?? r.lastDate ?? "1970-01-01";
+    list.push({ key: OVERDRAW_KEY, enrollmentId: null, charged: -pool, paid: 0, due: -pool, firstDate, description: "Balansdan ortiq qaytarildi" });
+    list.sort(byDate);
+    pool = 0;
+  }
 
   const enrollments = new Map<string, EnrollmentBalance>();
   let totalDebt = 0;
@@ -131,4 +202,32 @@ export function allocate(entries: AllocEntry[]): Allocation {
   }
 
   return { balance, unallocated: Math.max(0, pool), units: list, enrollments, oldestUnpaidDate, totalDebt };
+}
+
+export interface DebtSummary {
+  balance: number;
+  totalDebt: number;
+  oldestUnpaidDate: ISODate | null;
+  /** Unpaid money by the date it became due, oldest first (aging needs only the date). */
+  dues: { date: ISODate; amount: number }[];
+}
+
+/** What the family balance cache stores: the allocation reduced to due money per day. */
+export function debtSummary(a: Allocation): DebtSummary {
+  const byDay = new Map<ISODate, number>();
+  for (const u of a.units) if (u.due > 0) byDay.set(u.firstDate, (byDay.get(u.firstDate) ?? 0) + u.due);
+  const dues = [...byDay].sort(([x], [y]) => x.localeCompare(y)).map(([date, amount]) => ({ date, amount }));
+  return { balance: a.balance, totalDebt: a.totalDebt, oldestUnpaidDate: a.oldestUnpaidDate, dues };
+}
+
+export type AgingBuckets = [number, number, number];
+
+/** Debt by age: up to 30 days, 31–60, over 60 (a due date in the future counts as current). */
+export function agingBuckets(dues: DebtSummary["dues"], today: ISODate): AgingBuckets {
+  const b: AgingBuckets = [0, 0, 0];
+  for (const d of dues) {
+    const age = Math.round((Date.parse(today) - Date.parse(d.date)) / 86_400_000);
+    b[age <= 30 ? 0 : age <= 60 ? 1 : 2] += d.amount;
+  }
+  return b;
 }

@@ -1,14 +1,16 @@
 // lms-light data model. See HANDOFF.md §6.
 // Money = integer UZS. Balance is always SUM(LedgerEntry.amount), never a stored total.
 
+// Prisma 7: a TypeScript client generated into src/generated/prisma (not committed; `npm install`
+// runs `prisma generate`). No native query engine: the client talks to Postgres via @prisma/adapter-pg.
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
+// the connection URL is read in prisma.config.ts (CLI) and src/lib/db.ts (client)
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -117,6 +119,7 @@ enum Plan {
 
 enum NotificationStatus {
   PENDING
+  SENDING
   SENT
   FAILED
 }
@@ -133,7 +136,8 @@ model Center {
   phone              String?
   settings           Json     @default("{}")
   paymeMerchantId    String?
-  paymeKey           String?
+  /// unique: the Payme key identifies the center on /api/payme
+  paymeKey           String?  @unique
   paymeTestMode      Boolean  @default(true)
   receiptSeq         Int      @default(0)
   groupSeq           Int      @default(0)
@@ -216,6 +220,8 @@ model User {
   /// signup consent to the public offer and privacy policy: when, and which text version (BRAND.legal.version)
   termsAcceptedAt    DateTime?
   termsVersion       String?
+  /// platform (super) admin: granted only by an operator (scripts/platform-admin.ts), never by phone
+  platformAdmin      Boolean   @default(false)
 
   branches       UserBranch[]
   passwordResets PasswordReset[]
@@ -365,8 +371,38 @@ model Family {
   students   Student[]
   ledger     LedgerEntry[]
   paymeTxs   PaymeTransaction[]
+  balance    FamilyBalance?
 
   @@index([centerId, createdAt])
+}
+
+/// The family's FIFO allocation reduced to what debt lists and aging need (src/lib/billing/balance-cache.ts).
+/// Written only by the cache refresher; a trigger on LedgerEntry queues the family in FamilyBalanceDirty
+/// whenever its ledger changes, and readers refresh queued families before they read.
+model FamilyBalance {
+  familyId         String    @id
+  family           Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  centerId         String
+  /// SUM(ledger); negative = debt
+  balance          BigInt
+  totalDebt        BigInt
+  oldestUnpaidDate DateTime? @db.Date
+  /// unpaid money by the date it became due: [{ "d": "2026-09-01", "a": 150000 }]
+  dues             Json      @default("[]")
+  updatedAt        DateTime  @default(now())
+
+  @@index([centerId, balance])
+}
+
+/// Families whose ledger changed since their FamilyBalance was computed. Insert-only from the trigger;
+/// the refresher deletes exactly the rows it has seen.
+model FamilyBalanceDirty {
+  id        BigInt   @id @default(autoincrement())
+  centerId  String
+  familyId  String
+  createdAt DateTime @default(now())
+
+  @@index([centerId, familyId])
 }
 
 model Guardian {
@@ -445,6 +481,7 @@ model Enrollment {
 
   @@index([studentId])
   @@index([groupId])
+  @@index([endDate])
 }
 
 model EnrollmentFreeze {
@@ -513,6 +550,7 @@ model LedgerEntry {
   @@index([centerId, date])
   @@index([centerId, createdAt])
   @@index([studentId])
+  @@index([lessonId])
 }
 
 model SalaryRule {
@@ -681,10 +719,15 @@ model Notification {
   status    NotificationStatus @default(PENDING)
   error     String?
   attempts  Int                @default(0)
+  /// not sent before this moment (backoff after an error or Telegram 429)
+  nextAttemptAt DateTime       @default(now())
+  /// set while a sender holds the row (status SENDING); stale claims are taken back
+  lockedAt  DateTime?
   createdAt DateTime           @default(now())
   sentAt    DateTime?
 
   @@index([status, createdAt])
+  @@index([status, nextAttemptAt])
 }
 
 /// Login and reset-code attempts for rate limiting (key = "login:phone:998…", "login:ip:…", "reset:…").

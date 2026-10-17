@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { fromISODate, monthLabel, monthRange, shiftMonth, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { attendanceStats, debtAging, revenue, revenueByMonth, studentStats } from "@/lib/queries/reports";
+import { teacherWhere } from "@/lib/queries/staff";
 import { Card, PageHeader, Stat, Table, Td, Th, Tr } from "@/components/ui";
 import { BarChart } from "@/components/bar-chart";
 import { OwnerNotices } from "@/components/setup-banner";
@@ -30,7 +31,7 @@ export default async function Dashboard() {
       orderBy: { name: "asc" },
     }),
     db.user.findMany({
-      where: { centerId: ctx.centerId, archivedAt: null, OR: [{ isTeacher: true }, { role: "TEACHER" }] },
+      where: { centerId: ctx.centerId, archivedAt: null, ...teacherWhere },
       include: {
         groups: { where: { status: { in: ["ACTIVE", "PLANNED"] }, ...(ctx.activeBranchId ? { branchId: ctx.activeBranchId } : ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) }, include: { _count: { select: { enrollments: { where: { endDate: null, status: { in: ["ACTIVE", "FROZEN", "TRIAL"] } } } } } } },
         _count: { select: { lessons: { where: { status: "HELD", date: { gte: fromISODate(cur.start), lte: fromISODate(cur.end) } } } } },

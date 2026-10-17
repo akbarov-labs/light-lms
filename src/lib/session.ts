@@ -1,4 +1,4 @@
-// Session token = signed JWT (HS256) in an httpOnly cookie. Edge-safe (used by middleware too).
+// Session token = signed JWT (HS256) in an httpOnly cookie. Also used by the proxy (src/proxy.ts).
 import { jwtVerify, SignJWT } from "jose";
 
 export const SESSION_COOKIE = "lms_session";

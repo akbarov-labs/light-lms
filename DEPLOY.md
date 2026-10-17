@@ -107,6 +107,13 @@ Bot ota-onalarga balans va eslatmalar yuboradi, o'qituvchilarga davomat, xodimla
   ```bash
   docker compose -f docker-compose.prod.yml run --rm migrate npx tsx scripts/reset-password.ts 901234567
   ```
+- **Platforma admini** (`/platform`: barcha markazlar, tarif, markazni o'chirish) faqat server operatori tomonidan beriladi — telefon raqami bilan emas, bazadagi belgi bilan (audit jurnaliga yoziladi):
+  ```bash
+  docker compose -f docker-compose.prod.yml run --rm migrate npx tsx scripts/platform-admin.ts grant 901234567
+  docker compose -f docker-compose.prod.yml run --rm migrate npx tsx scripts/platform-admin.ts revoke 901234567
+  ```
+- `AUTH_SECRET` namunadagi/dev qiymatda bo'lsa, `APP_URL` `localhost` bo'lmagan har qanday serverda (http bo'lsa ham) ilova ishga tushmaydi.
+- `X-Forwarded-For` faqat `TRUST_PROXY=true` bo'lsa ishoniladi (prod compose'da Caddy orqasida yoqilgan). Ilovani proksisiz ochiq portda ishlatsangiz — `false` qoldiring, aks holda IP bo'yicha cheklovlarni chetlab o'tish mumkin.
 
 ## 9. Zaxira nusxalar (backup)
 
@@ -129,7 +136,7 @@ Bot ota-onalarga balans va eslatmalar yuboradi, o'qituvchilarga davomat, xodimla
 ```
 
 Skript: avval hozirgi bazadan xavfsizlik nusxasini oladi → web va worker'ni to'xtatadi → bazani bitta tranzaksiyada tiklaydi (`pg_restore --clean --single-transaction`) → migratsiyalarni qo'llaydi → web va worker'ni qayta yoqadi.
-Fayl `BACKUP_DIR` papkasida (standart: `./backups`) bo'lishi kerak. **Oyiga bir marta tiklashni sinab ko'ring** (masalan test serverda) — tekshirilmagan backup backup emas.
+Faylni istalgan joydan berish mumkin (skript uni backup konteyneriga ko'chiradi va avval tekshiradi). **Oyiga bir marta tiklashni sinab ko'ring** (masalan test serverda) — tekshirilmagan backup backup emas.
 
 ## 10. Yangilash
 
@@ -152,7 +159,7 @@ Har bir konteyner logi 10 MB × 5 fayl bilan cheklangan (disk to'lib qolmaydi).
 
 - **Sayt (landing)**: tizimga kirmagan mehmon `/` manzilida mahsulot sahifasini ko'radi (narxlar, savollar, oferta). Xodim kirgan bo'lsa — o'z paneli.
 - **Nom, aloqa, rekvizitlar**: hammasi bitta faylda — `src/config/brand.ts` (`name`, `contact`, `legal`). To'ldirgach qayta build qiling. `legal.entity` bo'sh bo'lsa, oferta va maxfiylik sahifalarida "loyiha" belgisi chiqadi.
-- **Demo server** (alohida, ikkinchi kichik VPS yoki shu serverda boshqa papka/domen, masalan `demo.example.uz`): `.env` da `DEMO_MODE=true`, `SEED_DEMO=true`, `MAIN_SITE_URL=https://crm.example.uz`. Mehmon `/demo` orqali parolsiz demo markazga kiradi; parollar, xodimlar va markaz sozlamalari qulflangan; har kecha 04:00 da baza tozalanib, bugungi sana bilan qayta to'ldiriladi (`npm run job:demo-reset` — qo'lda).
+- **Demo server** (alohida, ikkinchi kichik VPS yoki shu serverda boshqa papka/domen, masalan `demo.example.uz`): `.env` da `DEMO_MODE=true`, `SEED_DEMO=true`, `MAIN_SITE_URL=https://crm.example.uz`. Mehmon `/demo` orqali parolsiz demo markazga kiradi; parollar, xodimlar va markaz sozlamalari qulflangan; har kecha 04:00 da baza tozalanib, bugungi sana bilan qayta to'ldiriladi (qo'lda: `docker compose -f docker-compose.prod.yml exec worker node run-job.mjs demo-reset`).
 - **Asosiy serverda** `DEMO_URL=https://demo.example.uz/demo` qo'ying — saytda "Demoni ko'rish" tugmasi paydo bo'ladi.
 - ⚠️ `DEMO_MODE=true` ni **hech qachon** haqiqiy markazlar bor serverga qo'ymang. Himoya bor: 2 kundan eski boshqa markaz topilsa, tozalash to'xtaydi — lekin bunga tayanmang.
 
@@ -161,6 +168,7 @@ Har bir konteyner logi 10 MB × 5 fayl bilan cheklangan (disk to'lib qolmaydi).
 - `.env` da `TELEGRAM_BOT_TOKEN` va `OPS_TELEGRAM_CHAT_ID` (o'z chat ID'ingiz: botga yozing, so'ng `https://api.telegram.org/bot<TOKEN>/getUpdates` dan `message.chat.id`) qo'ying.
 - Shunda Telegram'ga xabar keladi: saytda server xatosi, tungi ish (hisob-kitob, eslatma) xatosi, worker to'xtashi, **har kuni 09:00 da oxirgi backup 26 soatdan eski bo'lsa**. Bir xil xabar 10 daqiqada bir martadan ko'p kelmaydi.
 - Qo'shimcha (ixtiyoriy): bepul tashqi tekshiruv (masalan, UptimeRobot) `https://<domen>/api/health` manzilini har 5 daqiqada tekshirsin — server butunlay o'chsa ham bilasiz.
+- Worker'ning o'z tekshiruvi bor: har 30 soniyada "yurak urishi" fayli yangilanadi; 2 daqiqadan eski bo'lsa `docker compose ps` da worker `unhealthy` ko'rinadi. Worker ishlar ustma-ust tushmaydi (ikkinchi nusxa yoki qo'lda ishga tushirilgan ish o'tkazib yuboriladi).
 
 ## 12. Muammolar
 
@@ -250,6 +258,10 @@ Put the @BotFather token in `TELEGRAM_BOT_TOKEN`, then `docker compose -f docker
 - HTTPS, HSTS, nonce-based CSP, `frame-ancestors 'none'`, `Secure`/`HttpOnly` cookies.
 - Last resort (the only owner lost the password, no Telegram link):
   `docker compose -f docker-compose.prod.yml run --rm migrate npx tsx scripts/reset-password.ts 901234567`
+- **Platform admin** (`/platform`: every center, plans, disabling a center) is a database flag granted only by the server operator — never by phone number; every change is audited:
+  `docker compose -f docker-compose.prod.yml run --rm migrate npx tsx scripts/platform-admin.ts grant 901234567` (`revoke` to take it away).
+- With the example/dev `AUTH_SECRET` the app refuses to start on any host other than `localhost`, even over plain http.
+- `X-Forwarded-For` is trusted only when `TRUST_PROXY=true` (set in the prod compose, behind Caddy). Running the app on an open port without a proxy? Leave it `false`, otherwise anyone can dodge the per-IP limits.
 
 ## 9. Backups
 
@@ -262,7 +274,7 @@ Put the @BotFather token in `TELEGRAM_BOT_TOKEN`, then `docker compose -f docker
 ```bash
 ./deploy/restore.sh backups/lms-20261012-023000.dump
 ```
-Takes a safety backup of the current database, stops web and worker, restores in one transaction (`pg_restore --clean --if-exists --single-transaction`), applies migrations, starts web and worker. The file must be inside `BACKUP_DIR` (default `./backups`). **Test a restore monthly** on a spare machine.
+Takes a safety backup of the current database, stops web and worker, restores in one transaction (`pg_restore --clean --if-exists --single-transaction`), applies migrations, starts web and worker. The dump can be anywhere (the script copies it into the backup container and checks it first). **Test a restore monthly** on a spare machine.
 
 ## 10. Updating
 
@@ -286,7 +298,7 @@ docker image prune -f
 
 - **Landing**: visitors without a session see the product site at `/` (pricing, FAQ, legal links); signed-in staff get their dashboard.
 - **Name, contacts, company details**: one file, `src/config/brand.ts` (`name`, `contact`, `legal`); rebuild after editing. While `legal.entity` is empty the offer and privacy pages carry a "draft" note.
-- **Demo server** (separate, e.g. `demo.example.uz`): `DEMO_MODE=true`, `SEED_DEMO=true`, `MAIN_SITE_URL=https://crm.example.uz`. `/demo` signs visitors in as the demo owner with no password; passwords, staff and center settings are locked; at 04:00 every night the database is wiped and re-seeded dated to today (`npm run job:demo-reset` by hand).
+- **Demo server** (separate, e.g. `demo.example.uz`): `DEMO_MODE=true`, `SEED_DEMO=true`, `MAIN_SITE_URL=https://crm.example.uz`. `/demo` signs visitors in as the demo owner with no password; passwords, staff and center settings are locked; at 04:00 every night the database is wiped and re-seeded dated to today (by hand: `docker compose -f docker-compose.prod.yml exec worker node run-job.mjs demo-reset`).
 - **Main server**: set `DEMO_URL=https://demo.example.uz/demo` to show "See the demo" on the landing page.
 - ⚠️ **Never** set `DEMO_MODE=true` on the server with real centers. The reset refuses to run if it finds another center older than two days, but do not rely on that.
 
@@ -295,3 +307,4 @@ docker image prune -f
 - Set `TELEGRAM_BOT_TOKEN` and `OPS_TELEGRAM_CHAT_ID` (your chat id: message the bot, then read `message.chat.id` at `https://api.telegram.org/bot<TOKEN>/getUpdates`).
 - You then get a Telegram message for server errors, failed nightly jobs, a worker crash, and **at 09:00 daily if the newest backup is older than 26 hours**. The same alert repeats at most every 10 minutes.
 - Optional: a free external check (e.g. UptimeRobot) on `https://<domain>/api/health` every 5 minutes tells you when the whole server is down.
+- The worker has its own health signal: a heartbeat file touched every 30 s; older than 2 minutes → `docker compose ps` shows the worker `unhealthy`. Jobs never overlap (a second replica or a manual run while the job is running is skipped).

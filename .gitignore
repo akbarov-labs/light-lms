@@ -13,3 +13,4 @@ coverage
 backups/
 test-results/
 playwright-report/
+src/generated/

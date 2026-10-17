@@ -29,6 +29,11 @@ export interface BillingGroup {
   prices?: { from: ISODate; price: number | null }[];
   /** Weekdays (1=Mon..7=Sun) of the group's weekly slots, one entry per slot. */
   slotWeekdays: number[];
+  /**
+   * Lessons are still being generated ahead (status ACTIVE/PLANNED). When false, slot dates past
+   * the last generated lesson are not lessons-to-come. Default true.
+   */
+  generating?: boolean;
 }
 
 export interface BillingFreeze {
@@ -62,6 +67,8 @@ export interface BillingLesson {
   id: string;
   date: ISODate;
   status: LessonStatus;
+  /** The slot date a rescheduled lesson came from (Lesson.origDate); null/absent when it sits on its slot. */
+  origDate?: ISODate | null;
 }
 
 export interface BillingSettings {
@@ -88,6 +95,8 @@ export interface ExpectedUnit {
   /** Owed amount, positive UZS. */
   amount: number;
   start: ISODate;
+  /** When the money is due (prepaid): the unit start, or the activation day when that is later. */
+  due: ISODate;
   period: string | null;
   description: string;
 }
@@ -104,6 +113,8 @@ export interface LedgerDelta {
   type: "CHARGE" | "CREDIT";
   /** Signed from the family's point of view: CHARGE negative, CREDIT positive. */
   amount: number;
+  /** Due date of the unit (null for a unit that disappeared). The entry is dated max(asOf, due). */
+  due: ISODate | null;
   period: string | null;
   description: string;
 }

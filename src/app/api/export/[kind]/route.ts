@@ -1,18 +1,21 @@
 // CSV export for every list (HANDOFF §5 "Export"). Same filters and scoping as the pages.
 import type { NextRequest } from "next/server";
-import type { Prisma } from "@prisma/client";
-import { branchWhere, getCtx, studentScope, type Ctx } from "@/lib/ctx";
+import { branchWhere, getCtx, type Ctx } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatDate, formatDateTime, toISODate, todayISO } from "@/lib/dates";
 import { slotSummary } from "@/lib/format";
 import { csvResponse, toCsv, type Cell } from "@/lib/csv";
-import { studentSearch } from "@/lib/search";
+import { inOrder, studentIds } from "@/lib/queries/students";
 import { balancesFor } from "@/lib/services/wallet";
 import { listPayments } from "@/lib/queries/payments";
-import { listDebtors } from "@/lib/queries/debtors";
+import { listAllDebtors } from "@/lib/queries/debtors";
+import { groupStatusWhere, strParam } from "@/lib/queries/params";
 import { listExpenses } from "@/lib/queries/expenses";
 import { liveSalary } from "@/lib/salary/service";
 import { auditWhere } from "@/lib/queries/audit";
+import { attendanceStats, billedByGroup } from "@/lib/queries/reports";
+import { isISODate, monthParam, monthRange } from "@/lib/dates";
+import { teacherWhere } from "@/lib/queries/staff";
 
 export const dynamic = "force-dynamic";
 
@@ -21,14 +24,17 @@ type Exporter = (ctx: Ctx, sp: Record<string, string | undefined>) => Promise<{ 
 const exporters: Record<string, Exporter> = {
   async students(ctx, sp) {
     const status = sp.status === "ARCHIVED" ? "ARCHIVED" : sp.status === "all" ? undefined : "ACTIVE";
-    const where: Prisma.StudentWhereInput = {
-      AND: [{ centerId: ctx.centerId }, studentScope(ctx), studentSearch(sp.q), status ? { status } : {}, sp.groupId ? { enrollments: { some: { groupId: sp.groupId, endDate: null } } } : {}],
-    };
-    const students = await db.student.findMany({
-      where,
-      include: { enrollments: { where: { endDate: null }, include: { group: { select: { name: true, code: true } } } }, family: { include: { guardians: true } }, branch: true },
-      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-    });
+    // same filters as the students page (incl. "with debt"), resolved in SQL; rows loaded in batches
+    const { ids } = await studentIds(ctx, { q: strParam(sp.q), status, groupId: strParam(sp.groupId), debt: sp.debt === "1" });
+    const students = [];
+    for (let i = 0; i < ids.length; i += 1000) {
+      const chunk = ids.slice(i, i + 1000);
+      const rows = await db.student.findMany({
+        where: { id: { in: chunk } },
+        include: { enrollments: { where: { endDate: null }, include: { group: { select: { name: true, code: true } } } }, family: { include: { guardians: true } }, branch: true },
+      });
+      students.push(...inOrder(chunk, rows));
+    }
     const bal = ctx.can("finance.view") || ctx.can("payments.take") ? await balancesFor([...new Set(students.map((s) => s.familyId))]) : null;
     const { t } = ctx;
     return {
@@ -41,7 +47,7 @@ const exporters: Record<string, Exporter> = {
   },
   async groups(ctx, sp) {
     const groups = await db.group.findMany({
-      where: { centerId: ctx.centerId, ...branchWhere(ctx), ...(sp.status && sp.status !== "all" && sp.status !== "current" ? { status: sp.status as "ACTIVE" } : sp.status === "all" ? {} : { status: { in: ["ACTIVE", "PLANNED"] } }), ...(sp.teacherId ? { teacherId: sp.teacherId } : {}), ...(sp.courseId ? { courseId: sp.courseId } : {}) },
+      where: { centerId: ctx.centerId, ...branchWhere(ctx), ...(groupStatusWhere(sp.status)), ...(sp.teacherId ? { teacherId: sp.teacherId } : {}), ...(sp.courseId ? { courseId: sp.courseId } : {}) },
       include: { course: true, teacher: true, room: true, branch: true, slots: true, _count: { select: { enrollments: { where: { endDate: null, status: { in: ["TRIAL", "ACTIVE", "FROZEN"] } } } } } },
       orderBy: { code: "asc" },
     });
@@ -70,7 +76,7 @@ const exporters: Record<string, Exporter> = {
   },
   async debtors(ctx, sp) {
     if (!ctx.can("payments.take") && !ctx.can("finance.view")) return null;
-    const rows = await listDebtors(ctx, sp);
+    const rows = await listAllDebtors(ctx, { groupId: strParam(sp.groupId), teacherId: strParam(sp.teacherId), min: strParam(sp.min) });
     const { t } = ctx;
     return {
       header: [t("common.students"), t("common.groups"), t("common.debt"), t("debtors.daysOverdue"), t("debtors.lastPayment"), t("common.phone"), "Telegram"],
@@ -102,9 +108,9 @@ const exporters: Record<string, Exporter> = {
   },
   async salary(ctx, sp) {
     if (!ctx.can("finance.view")) return null;
-    const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : todayISO().slice(0, 7);
+    const month = monthParam(sp.month);
     const teachers = await db.user.findMany({
-      where: { centerId: ctx.centerId, OR: [{ isTeacher: true }, { role: "TEACHER" }], ...(ctx.branchIds ? { branches: { some: { branchId: { in: ctx.branchIds } } } } : {}) },
+      where: { centerId: ctx.centerId, ...teacherWhere, ...(ctx.branchIds ? { branches: { some: { branchId: { in: ctx.branchIds } } } } : {}) },
       orderBy: { name: "asc" },
     });
     const { t } = ctx;
@@ -122,6 +128,21 @@ const exporters: Record<string, Exporter> = {
     return {
       header: ["time", "user", "entity", "entityId", "action", "before", "after"],
       rows: logs.map((l) => [formatDateTime(l.createdAt), l.userId ? users.get(l.userId) : "system", l.entity, l.entityId, l.action, l.before ? JSON.stringify(l.before) : "", l.after ? JSON.stringify(l.after) : ""]),
+    };
+  },
+  /** Reports page tables in full: billed and attendance per group for the chosen period. */
+  async "report-groups"(ctx, sp) {
+    if (!ctx.can("finance.view")) return null;
+    const m = monthRange(todayISO().slice(0, 7));
+    const p = { from: isISODate(sp.from) ? sp.from : m.start, to: isISODate(sp.to) ? sp.to : m.end };
+    const [billed, att] = await Promise.all([billedByGroup(ctx, p), attendanceStats(ctx, p)]);
+    const rate = new Map(att.byGroup.map((g) => [g.name, g.rate]));
+    const names = [...new Set([...billed.map((g) => g.name), ...att.byGroup.map((g) => g.name)])];
+    const b = new Map(billed.map((g) => [g.name, g]));
+    const { t } = ctx;
+    return {
+      header: [t("common.group"), t("common.course"), t("common.teacher"), t("reports.billed"), `${t("reports.attendance")} %`],
+      rows: names.map((n) => [n, b.get(n)?.course ?? "", b.get(n)?.teacher ?? "", b.get(n)?.billed ?? 0, rate.get(n) ?? ""]),
     };
   },
   async staff(ctx) {
@@ -144,8 +165,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ kind
   const ctx = await getCtx();
   if (!ctx) return new Response("unauthorized", { status: 401 });
   if (!ctx.can("export")) return new Response("forbidden", { status: 403 });
+  // own keys only: "constructor", "toString", "__proto__" are not exporters
+  if (!Object.hasOwn(exporters, kind)) return new Response("not found", { status: 404 });
   const exporter = exporters[kind];
-  if (!exporter) return new Response("not found", { status: 404 });
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries());
   const data = await exporter(ctx, sp);
   if (!data) return new Response("forbidden", { status: 403 });

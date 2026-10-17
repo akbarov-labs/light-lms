@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { formatDate, monthRange, toISODate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { listPayments } from "@/lib/queries/payments";
+import { pageParam } from "@/lib/queries/params";
 import { buttonClass, Badge, Card, EmptyState, LinkButton, PageHeader, Pagination, Stat, Table, Td, Th, Tr, cx } from "@/components/ui";
 import { Input, Select } from "@/components/fields";
 import { QuickPayButton } from "@/components/command-palette";
@@ -16,7 +17,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   const ctx = await requireStaff();
   if (!ctx.can("payments.take") && !ctx.can("finance.view")) redirect("/forbidden");
   const { t } = ctx;
-  const page = Math.max(1, Number(sp.page) || 1);
+  const page = pageParam(sp.page);
   const month = monthRange(todayISO().slice(0, 7));
   const { rows, total, users, totals } = await listPayments(ctx, sp, { skip: (page - 1) * PAGE, take: PAGE });
   const cashiers = await db.user.findMany({ where: { centerId: ctx.centerId, role: { not: "TEACHER" } }, select: { id: true, name: true }, orderBy: { name: "asc" } });

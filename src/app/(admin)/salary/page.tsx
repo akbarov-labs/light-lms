@@ -2,27 +2,30 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
-import { shiftMonth, todayISO } from "@/lib/dates";
+import { monthParam, shiftMonth } from "@/lib/dates";
 import { monthLabel } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { liveSalary, ruleFor } from "@/lib/salary/service";
 import { Badge, Card, LinkButton, PageHeader, Table, Td, Th, Tr } from "@/components/ui";
+import { teacherWhere } from "@/lib/queries/staff";
 
 export default async function SalaryPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const sp = await searchParams;
   const ctx = await requireStaff("finance.view");
   const { t } = ctx;
-  const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : todayISO().slice(0, 7);
+  const month = monthParam(sp.month);
   const teachers = await db.user.findMany({
-    where: { centerId: ctx.centerId, OR: [{ isTeacher: true }, { role: "TEACHER" }], ...(ctx.branchIds ? { branches: { some: { branchId: { in: ctx.branchIds } } } } : {}) },
+    where: { centerId: ctx.centerId, ...teacherWhere, ...(ctx.branchIds ? { branches: { some: { branchId: { in: ctx.branchIds } } } } : {}) },
     orderBy: [{ archivedAt: "asc" }, { name: "asc" }],
   });
-  const rows = await Promise.all(
+  const all = await Promise.all(
     teachers.map(async (u) => {
       const [{ result }, rule, slip] = await Promise.all([liveSalary(ctx.centerId, u.id, month), ruleFor(u.id, month), db.payslip.findUnique({ where: { teacherId_month: { teacherId: u.id, month } } })]);
       return { u, result, rule, slip };
     }),
   );
+  // an archived teacher with nothing to pay this month (no lessons, no base after leaving) is noise
+  const rows = all.filter((r) => !r.u.archivedAt || r.slip || r.result.total !== 0 || r.result.lessonsHeld > 0);
   const total = rows.reduce((s, r) => s + (r.slip && r.slip.status !== "DRAFT" ? r.slip.total : r.result.total), 0);
   return (
     <>

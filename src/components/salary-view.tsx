@@ -11,6 +11,7 @@ export function SalaryBreakdown({ ctx, result, lessons, showLessons = true }: { 
     <div className="space-y-4">
       <Card pad={false} title={t("salary.live")}>
         {result.warnings.includes("noRule") && <p className="m-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-800">{t("salary.noRule")}</p>}
+        {result.warnings.includes("archived") && <p className="m-3 rounded-lg bg-zinc-50 p-2 text-sm text-zinc-700">{t("money.salaryArchived")}</p>}
         <Table>
           <thead><tr><Th>{t("common.group")}</Th><Th className="text-right">{t("salary.lessonsHeld")}</Th><Th className="text-right">{t("salary.studentLessons")}</Th><Th className="text-right">{t("salary.earnedBase")}</Th><Th className="text-right">{t("common.amount")}</Th></tr></thead>
           <tbody>

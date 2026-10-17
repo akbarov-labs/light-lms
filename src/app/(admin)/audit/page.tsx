@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/dates";
-import { auditWhere } from "@/lib/queries/audit";
+import { listAudit } from "@/lib/queries/audit";
+import { pageParam } from "@/lib/queries/params";
 import { Card, EmptyState, LinkButton, PageHeader, Pagination, Table, Td, Th, Tr } from "@/components/ui";
 import { Input, Select } from "@/components/fields";
 
@@ -33,18 +34,16 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   // the global journal spans every branch, so branch-scoped users see history on each record instead
   if ((!ctx.can("finance.view") && !ctx.can("settings")) || ctx.branchIds) redirect("/forbidden");
   const { t } = ctx;
-  const page = Math.max(1, Number(sp.page) || 1);
-  const where = auditWhere(ctx, sp);
-  const [logs, total, users] = await Promise.all([
-    db.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * PAGE, take: PAGE }),
-    db.auditLog.count({ where }),
+  const page = pageParam(sp.page);
+  const [{ rows: logs, total, exact }, users] = await Promise.all([
+    listAudit(ctx, sp, page, PAGE),
     db.user.findMany({ where: { centerId: ctx.centerId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   const names = new Map(users.map((u) => [u.id, u.name]));
   const qs = new URLSearchParams(Object.entries(sp).filter(([k, v]) => v && k !== "page") as [string, string][]).toString();
   return (
     <>
-      <PageHeader title={t("nav.audit")} subtitle={total} actions={ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/audit?${qs}`}>{t("common.export")}</LinkButton>} />
+      <PageHeader title={t("nav.audit")} subtitle={exact ? total : `${total}+`} actions={ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/audit?${qs}`}>{t("common.export")}</LinkButton>} />
       <form className="mb-4 flex flex-wrap items-center gap-2 *:w-full *:min-w-0 sm:*:w-auto">
         <Select name="entity" aria-label={t("audit.entity")} defaultValue={sp.entity ?? ""}>
           <option value="">{t("audit.entity")}: {t("common.all")}</option>

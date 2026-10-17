@@ -1,4 +1,4 @@
-import type { Student } from "@prisma/client";
+import type { Student } from "@/generated/prisma/client";
 import type { Ctx } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { toISODate } from "@/lib/dates";

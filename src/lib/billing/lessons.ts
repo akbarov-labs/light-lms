@@ -45,6 +45,18 @@ export function countSlotDates(slotWeekdays: number[], from: ISODate, to: ISODat
   return n;
 }
 
+/** Every slot occurrence in [from, to] (holidays excluded), one entry per slot. */
+export function slotDates(slotWeekdays: number[], from: ISODate, to: ISODate, holidays: Set<ISODate>): ISODate[] {
+  const out: ISODate[] = [];
+  if (from > to || slotWeekdays.length === 0) return out;
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    if (holidays.has(d)) continue;
+    const wd = weekdayOf(d);
+    for (const w of slotWeekdays) if (w === wd) out.push(d);
+  }
+  return out;
+}
+
 export function isFrozenOn(enrollment: Pick<BillingEnrollment, "freezes">, date: ISODate): boolean {
   return enrollment.freezes.some((f) => f.from <= date && date <= f.to);
 }

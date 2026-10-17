@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+/**
+ * Payme fiscal receipt data (OFD): IKPU (MXIK) code of the service, its package code and VAT %.
+ * When set, CheckPerformTransaction returns `detail` so Payme prints a fiscal receipt.
+ */
+export const paymeFiscalSchema = z.object({
+  ikpu: z.string().regex(/^\d{17}$/),
+  packageCode: z.string().trim().min(1).max(40),
+  vatPercent: z.number().int().min(0).max(100),
+});
+export type PaymeFiscal = z.infer<typeof paymeFiscalSchema>;
+
 // Center-level settings stored in Center.settings (JSON). Defaults per HANDOFF §6.
 export const centerSettingsSchema = z.object({
   trialLessons: z.number().int().min(0).max(10).default(1),
@@ -24,7 +35,10 @@ export const centerSettingsSchema = z.object({
       teacherReminder: z.boolean().default(true),
       dailyReport: z.boolean().default(true),
     })
-    .default({}),
+    // prefault: {} is parsed, so every nested default applies (zod 4 .default() would return {} as is)
+    .prefault({}),
+  // a broken value must not reset every other setting to its default
+  paymeFiscal: paymeFiscalSchema.nullable().default(null).catch(null),
 });
 
 export type CenterSettings = z.infer<typeof centerSettingsSchema>;

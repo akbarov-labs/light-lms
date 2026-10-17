@@ -12,6 +12,7 @@ import { fromISODate, toISODate } from "@/lib/dates";
 import { saveAttendance, type AttendanceRow, type AttendanceStatus } from "@/lib/services/attendance";
 import { assertNoLessonClash } from "@/lib/services/lessons";
 import { syncGroup } from "@/lib/billing/sync";
+import { teacherWhere } from "@/lib/queries/staff";
 
 const STATUSES = ["PRESENT", "ABSENT", "LATE", "EXCUSED"] as const;
 
@@ -124,7 +125,7 @@ export async function substituteAction(_: ActionState, fd: FormData): Promise<Ac
   return runAction("groups.edit", async (ctx) => {
     const f = z.object({ lessonId: zId, teacherId: zId }).parse(formObject(fd));
     const { lesson } = await lessonFor(ctx, f.lessonId, false);
-    const teacher = await db.user.findFirst({ where: { id: f.teacherId, centerId: ctx.centerId, archivedAt: null, OR: [{ isTeacher: true }, { role: "TEACHER" }] } });
+    const teacher = await db.user.findFirst({ where: { id: f.teacherId, centerId: ctx.centerId, archivedAt: null, ...teacherWhere } });
     if (!teacher) throw new UserError("error.notFound");
     await db.$transaction(async (tx) => {
       await assertNoLessonClash(tx, ctx.t, { id: lesson.id, date: toISODate(lesson.date), startTime: lesson.startTime, endTime: lesson.endTime, teacherId: teacher.id, roomId: null });

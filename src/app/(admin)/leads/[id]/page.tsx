@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { LeadStage } from "@prisma/client";
+import type { LeadStage } from "@/generated/prisma/client";
 import { canAccessBranch, requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatDate, formatDateTime } from "@/lib/dates";

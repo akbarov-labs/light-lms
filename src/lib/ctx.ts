@@ -14,15 +14,24 @@ export * from "./ctx-core";
 
 export const BRANCH_COOKIE = "branch";
 
-/** Session → context. `disabled` = a valid session whose center a platform admin switched off. */
-const loadCtx = cache(async (): Promise<{ ctx: Ctx | null; disabled: boolean }> => {
+type Loaded = { ctx: Ctx | null; disabled: boolean; mustChange: boolean };
+const NONE: Loaded = { ctx: null, disabled: false, mustChange: false };
+
+/**
+ * Session → context. `disabled` = a valid session whose center a platform admin switched off.
+ * `mustChange` = the user must set a new password first (session `pwc` claim or the DB flag):
+ * only the change-password page/action may use such a context (S9) — the proxy alone is
+ * not enough, because a server action can be POSTed from any path, /password included.
+ */
+const loadCtx = cache(async (): Promise<Loaded> => {
   const jar = await cookies();
   const session = await verifySession(jar.get(SESSION_COOKIE)?.value);
-  if (!session) return { ctx: null, disabled: false };
+  if (!session) return NONE;
   const user = await loadUser(session.sub);
-  if (!user || user.archivedAt || user.centerId !== session.cid) return { ctx: null, disabled: false };
-  if (sessionStale(session.iat, user.passwordChangedAt)) return { ctx: null, disabled: false };
-  if (user.center.disabledAt) return { ctx: null, disabled: true };
+  if (!user || user.archivedAt || user.centerId !== session.cid) return NONE;
+  if (sessionStale(session.iat, user.passwordChangedAt)) return NONE;
+  if (user.center.disabledAt) return { ctx: null, disabled: true, mustChange: false };
+  const mustChange = session.pwc === true || user.mustChangePassword;
   const base = buildCtx(user);
   const picked = jar.get(BRANCH_COOKIE)?.value || null;
   let activeBranchId: string | null = null;
@@ -34,10 +43,24 @@ const loadCtx = cache(async (): Promise<{ ctx: Ctx | null; disabled: boolean }> 
   }
   const cookieLang = jar.get(LANG_COOKIE)?.value;
   const locale: Locale = isLocale(cookieLang) ? cookieLang : isLocale(user.locale) ? user.locale : isLocale(user.center.locale) ? user.center.locale : "uz";
-  return { ctx: buildCtx(user, { activeBranchId, locale }), disabled: false };
+  return { ctx: buildCtx(user, { activeBranchId, locale }), disabled: false, mustChange };
 });
 
-export const getCtx = async (): Promise<Ctx | null> => (await loadCtx()).ctx;
+/** The signed-in user, or null (also null while a forced password change is pending). */
+export const getCtx = async (): Promise<Ctx | null> => {
+  const { ctx, mustChange } = await loadCtx();
+  return mustChange ? null : ctx;
+};
+
+/** Only for the change-password page and action: the context even while a password change is pending. */
+export const getCtxForPasswordChange = async (): Promise<Ctx | null> => (await loadCtx()).ctx;
+
+/** Page variant of getCtxForPasswordChange: redirect to login without a session. */
+export async function requireCtxForPasswordChange(): Promise<Ctx> {
+  const { ctx, disabled } = await loadCtx();
+  if (!ctx) toLogin(disabled);
+  return ctx;
+}
 
 function toLogin(disabled: boolean): never {
   redirect(disabled ? "/login?disabled=1" : "/login");
@@ -45,8 +68,9 @@ function toLogin(disabled: boolean): never {
 
 /** For pages: redirect to login without a session, show 403 without the permission. */
 export async function requireCtx(perm?: Perm): Promise<Ctx> {
-  const { ctx, disabled } = await loadCtx();
+  const { ctx, disabled, mustChange } = await loadCtx();
   if (!ctx) toLogin(disabled);
+  if (mustChange) redirect("/password");
   if (perm && !ctx.can(perm)) redirect("/forbidden");
   return ctx;
 }
@@ -60,8 +84,10 @@ export async function requireStaff(perm?: Perm): Promise<Ctx> {
 
 /** For server actions: throw instead of redirecting on missing permission. */
 export async function actionCtx(perm?: Perm): Promise<Ctx> {
-  const { ctx, disabled } = await loadCtx();
+  const { ctx, disabled, mustChange } = await loadCtx();
   if (!ctx) toLogin(disabled);
+  // a pending forced password change blocks every action except changePasswordAction
+  if (mustChange) redirect("/password");
   if (perm && !ctx.can(perm)) throw new UserError("error.forbidden");
   return ctx;
 }

@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { isLocale, LANG_COOKIE, makeT } from "@/lib/i18n";
 import { LanguageMenu } from "@/components/language-menu";
 import { SignupForm } from "./form";
+import { mainSiteUrl } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Markaz yaratish" };
@@ -14,7 +15,7 @@ export default async function SignupPage() {
   const locale = isLocale(lang) ? lang : "uz";
   const t = makeT(locale);
   // the demo server sends real signups to the main site
-  if (demoMode() && process.env.MAIN_SITE_URL) redirect(signupHref());
+  if (demoMode() && mainSiteUrl()) redirect(signupHref());
   const startedAt = new Date().getTime();
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">

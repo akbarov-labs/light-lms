@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { checkAuthSecret, clientIp, hashResetCode, newResetCode, newTempPassword, passwordProblem, resetCodeMatches, secureCookies } from "./security";
 import { buildCsp, securityHeaders } from "./headers";
 import { sessionStale } from "../session";
+import { assertStrongAuthSecret, authSecretVerdict } from "./startup";
 
 const hdrs = (o: Record<string, string>) => ({ get: (k: string) => o[k.toLowerCase()] ?? null });
 
@@ -19,10 +20,67 @@ describe("checkAuthSecret", () => {
 });
 
 describe("clientIp", () => {
-  it("takes the address the nearest proxy appended", () => {
-    expect(clientIp(hdrs({ "x-forwarded-for": "10.0.0.1, 203.0.113.9" }))).toBe("203.0.113.9");
-    expect(clientIp(hdrs({ "x-real-ip": "198.51.100.2" }))).toBe("198.51.100.2");
-    expect(clientIp(hdrs({}))).toBe("unknown");
+  it("behind a trusted proxy takes the address the nearest proxy appended", () => {
+    const trustProxy = true;
+    expect(clientIp(hdrs({ "x-forwarded-for": "10.0.0.1, 203.0.113.9" }), { trustProxy })).toBe("203.0.113.9");
+    expect(clientIp(hdrs({ "x-real-ip": "198.51.100.2" }), { trustProxy })).toBe("198.51.100.2");
+    expect(clientIp(hdrs({}), { trustProxy })).toBe("direct");
+  });
+  it("without TRUST_PROXY ignores forwarding headers (spoofable): peer or one shared bucket", () => {
+    const trustProxy = false;
+    expect(clientIp(hdrs({ "x-forwarded-for": "203.0.113.9" }), { trustProxy })).toBe("direct");
+    expect(clientIp(hdrs({ "x-real-ip": "198.51.100.2" }), { trustProxy })).toBe("direct");
+    expect(clientIp(hdrs({ "x-forwarded-for": "203.0.113.9" }), { trustProxy, peer: "192.0.2.7" })).toBe("192.0.2.7");
+  });
+  it("reads TRUST_PROXY from the environment", () => {
+    const prev = process.env.TRUST_PROXY;
+    process.env.TRUST_PROXY = "true";
+    expect(clientIp(hdrs({ "x-forwarded-for": "203.0.113.9" }))).toBe("203.0.113.9");
+    process.env.TRUST_PROXY = "false";
+    expect(clientIp(hdrs({ "x-forwarded-for": "203.0.113.9" }))).toBe("direct");
+    if (prev === undefined) delete process.env.TRUST_PROXY;
+    else process.env.TRUST_PROXY = prev;
+  });
+});
+
+describe("authSecretVerdict (startup)", () => {
+  const DEV = "dev-only-secret-change-me-0123456789abcdef";
+  const GOOD = "q3Zl8m1VbH2xYt9KcR0pW4sJ7nF6dE5uA+gL/oQiT2M=";
+  it("a good secret always starts", () => {
+    expect(authSecretVerdict(GOOD, "https://crm.example.uz").action).toBe("ok");
+    expect(authSecretVerdict(GOOD, "http://192.168.1.20:3000").action).toBe("ok");
+  });
+  it("the dev fallback / example / missing secret is refused off localhost, even on http", () => {
+    expect(authSecretVerdict(DEV, "http://192.168.1.20:3000").action).toBe("refuse");
+    expect(authSecretVerdict("change-me-to-a-long-random-string", "http://crm.example.uz").action).toBe("refuse");
+    expect(authSecretVerdict(undefined, "http://10.0.0.5").action).toBe("refuse");
+    expect(authSecretVerdict(DEV, "https://crm.example.uz").action).toBe("refuse");
+  });
+  it("only warns on a local http install", () => {
+    expect(authSecretVerdict(DEV, "http://localhost:3000").action).toBe("warn");
+    expect(authSecretVerdict(DEV, "http://127.0.0.1:3010").action).toBe("warn");
+    expect(authSecretVerdict(DEV, "http://[::1]:3000").action).toBe("warn");
+    expect(authSecretVerdict(DEV, undefined).action).toBe("warn");
+  });
+  it("a short but private secret warns on http, is refused on https", () => {
+    expect(authSecretVerdict("Zx81kQ0pLm", "http://192.168.1.20:3000").action).toBe("warn");
+    expect(authSecretVerdict("Zx81kQ0pLm", "https://crm.example.uz").action).toBe("refuse");
+  });
+  it("assertStrongAuthSecret throws on refuse", () => {
+    const prev = { s: process.env.AUTH_SECRET, u: process.env.APP_URL };
+    process.env.AUTH_SECRET = DEV;
+    process.env.APP_URL = "http://192.168.1.20:3000";
+    const err = console.error;
+    console.error = () => {};
+    try {
+      expect(() => assertStrongAuthSecret("test")).toThrow(/Refusing to start/);
+    } finally {
+      console.error = err;
+      for (const [k, v] of [["AUTH_SECRET", prev.s], ["APP_URL", prev.u]] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocate, type AllocEntry } from "./allocation";
+import { agingBuckets, allocate, debtSummary, type AllocEntry } from "./allocation";
 
 let n = 0;
 const e = (over: Partial<AllocEntry> & Pick<AllocEntry, "type" | "amount" | "date">): AllocEntry => ({
@@ -79,5 +79,44 @@ describe("allocation", () => {
     expect(a.balance).toBe(0);
     expect(a.totalDebt).toBe(0);
     expect(a.unallocated).toBe(0);
+  });
+});
+
+describe("debt summary for the balance cache", () => {
+  it("adds up unpaid units by the day they became due, oldest first", () => {
+    const a = allocate([
+      e({ type: "CHARGE", amount: -600_000, date: "2026-09-01", enrollmentId: "ali", billingKey: "sub:ali:2026-09-01" }),
+      e({ type: "CHARGE", amount: -500_000, date: "2026-09-01", enrollmentId: "vali", billingKey: "sub:vali:2026-09-01" }),
+      e({ type: "CHARGE", amount: -600_000, date: "2026-10-01", enrollmentId: "ali", billingKey: "sub:ali:2026-10-01" }),
+      e({ type: "PAYMENT", amount: 700_000, date: "2026-10-03" }),
+    ]);
+    expect(debtSummary(a)).toEqual({
+      balance: -1_000_000,
+      totalDebt: 1_000_000,
+      oldestUnpaidDate: "2026-09-01",
+      dues: [
+        { date: "2026-09-01", amount: 400_000 },
+        { date: "2026-10-01", amount: 600_000 },
+      ],
+    });
+  });
+
+  it("a paid-up or prepaid family has no dues", () => {
+    expect(debtSummary(allocate([e({ type: "PAYMENT", amount: 100_000, date: "2026-10-01" })]))).toEqual({ balance: 100_000, totalDebt: 0, oldestUnpaidDate: null, dues: [] });
+    expect(debtSummary(allocate([]))).toEqual({ balance: 0, totalDebt: 0, oldestUnpaidDate: null, dues: [] });
+  });
+
+  it("ages dues: 0–30 days, 31–60, over 60; a future due date is current", () => {
+    const dues = [
+      { date: "2026-07-01", amount: 1 },
+      { date: "2026-08-17", amount: 10 },
+      { date: "2026-08-18", amount: 100 },
+      { date: "2026-09-17", amount: 1_000 },
+      { date: "2026-10-17", amount: 10_000 },
+      { date: "2026-11-01", amount: 100_000 },
+    ];
+    // 2026-08-17 is 61 days before 2026-10-17, 2026-08-18 is 60, 2026-09-17 is 30
+    expect(agingBuckets(dues, "2026-10-17")).toEqual([111_000, 100, 11]);
+    expect(agingBuckets([], "2026-10-17")).toEqual([0, 0, 0]);
   });
 });

@@ -1,16 +1,16 @@
 import { requireCtx } from "@/lib/ctx";
 import { db } from "@/lib/db";
-import { todayISO } from "@/lib/dates";
+import { monthParam } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { liveSalary } from "@/lib/salary/service";
 import type { SalaryResult } from "@/lib/salary/engine";
 import { SalaryBreakdown } from "@/components/salary-view";
 import { Badge } from "@/components/ui";
 
-export default async function TeacherSalary() {
+export default async function TeacherSalary({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const ctx = await requireCtx();
   const { t } = ctx;
-  const month = todayISO().slice(0, 7);
+  const month = monthParam((await searchParams).month);
   const [{ result, lessons }, last] = await Promise.all([
     liveSalary(ctx.centerId, ctx.userId, month),
     db.payslip.findFirst({ where: { teacherId: ctx.userId, status: { not: "DRAFT" } }, orderBy: { month: "desc" } }),

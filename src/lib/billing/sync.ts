@@ -1,10 +1,10 @@
 // DB side of the billing engine: load an enrollment, compute expected units, post the deltas.
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
 import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { fromISODate, toISODate, todayISO, type ISODate } from "@/lib/dates";
 import { readSettings } from "@/lib/settings";
-import { computeExpected, planSync } from "./engine";
+import { computeExpected, deltaDate, planSync } from "./engine";
 import type { BillingInput, EnrollmentTerms, LedgerDelta } from "./types";
 
 const enrollmentInclude = {
@@ -60,7 +60,7 @@ type EnrollmentWithFreezes = Prisma.EnrollmentGetPayload<{ include: { freezes: t
 export function buildInput(p: {
   group: GroupWithCourse;
   enrollment: EnrollmentWithFreezes;
-  lessons: { id: string; date: Date; status: "SCHEDULED" | "HELD" | "CANCELLED" }[];
+  lessons: { id: string; date: Date; status: "SCHEDULED" | "HELD" | "CANCELLED"; origDate?: Date | null }[];
   holidays: Set<ISODate>;
   excusedLessonIds: Set<string>;
   excusedAbsenceCredit: boolean;
@@ -86,6 +86,7 @@ export function buildInput(p: {
       endDate: d(g.endDate),
       priceOverride: g.priceOverride,
       slotWeekdays: g.slots.map((s) => s.weekday),
+      generating: g.status === "ACTIVE" || g.status === "PLANNED",
       prices: parseGroupPrices(g.priceHistory),
     },
     enrollment: {
@@ -101,7 +102,7 @@ export function buildInput(p: {
       freezes: enrollment.freezes.map((f) => ({ from: toISODate(f.fromDate), to: toISODate(f.toDate) })),
       terms: parseTermsHistory(enrollment.termsHistory),
     },
-    lessons: p.lessons.map((l) => ({ id: l.id, date: toISODate(l.date), status: l.status })),
+    lessons: p.lessons.map((l) => ({ id: l.id, date: toISODate(l.date), status: l.status, origDate: d(l.origDate) })),
     excusedLessonIds: p.excusedLessonIds,
     holidays: p.holidays,
     settings: { excusedAbsenceCredit: p.excusedAbsenceCredit },
@@ -115,7 +116,7 @@ export async function loadBillingInput(tx: Tx, enrollmentId: string, asOf: ISODa
   const g = enrollment.group;
   const settings = readSettings(g.center.settings);
   const [lessons, holidays, excused] = await Promise.all([
-    tx.lesson.findMany({ where: { groupId: g.id }, select: { id: true, date: true, status: true }, orderBy: { date: "asc" } }),
+    tx.lesson.findMany({ where: { groupId: g.id }, select: { id: true, date: true, status: true, origDate: true }, orderBy: { date: "asc" } }),
     tx.holiday.findMany({ where: { centerId: g.centerId }, select: { date: true } }),
     settings.excusedAbsenceCredit
       ? tx.attendance.findMany({ where: { enrollmentId, status: "EXCUSED" }, select: { lessonId: true } })
@@ -143,7 +144,7 @@ export async function loadGroupInputs(groupIds: string[], asOf: ISODate, tx: Tx 
   });
   const centerIds = [...new Set(groups.map((g) => g.centerId))];
   const [lessons, holidays, excused] = await Promise.all([
-    tx.lesson.findMany({ where: { groupId: { in: groupIds } }, select: { id: true, date: true, status: true, groupId: true }, orderBy: { date: "asc" } }),
+    tx.lesson.findMany({ where: { groupId: { in: groupIds } }, select: { id: true, date: true, status: true, origDate: true, groupId: true }, orderBy: { date: "asc" } }),
     tx.holiday.findMany({ where: { centerId: { in: centerIds } }, select: { date: true, centerId: true } }),
     tx.attendance.findMany({ where: { status: "EXCUSED", lesson: { groupId: { in: groupIds } } }, select: { lessonId: true, enrollmentId: true } }),
   ]);
@@ -193,7 +194,8 @@ async function syncInTx(tx: Tx, enrollmentId: string, asOf: ISODate, userId: str
       billingKey: x.key,
       period: x.period,
       description: x.description,
-      date: fromISODate(asOf),
+      // a unit due later (activation months ahead) is dated when it is due, so "days overdue" starts then
+      date: fromISODate(deltaDate(x, asOf)),
       createdById: userId,
     })),
   });

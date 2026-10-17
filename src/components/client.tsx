@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, MoreHorizontal, X, AlertCircle, Loader2 } from "lucide-react";
 import { buttonClass, cx, type ButtonVariant } from "./ui";
+import { typedMoney } from "@/lib/money";
 
 type ActionState = { ok?: boolean; error?: string; message?: string; at?: number } | null;
 type Action = (prev: ActionState, fd: FormData) => Promise<ActionState>;
@@ -283,29 +284,34 @@ export function ActionMenu({ items, label }: { items: MenuItem[]; label: string 
 
 /** Money input that groups digits while typing ("1 250 000"); submits the digits. */
 export function MoneyInput({ name, defaultValue, required, autoFocus, className, onValue, placeholder = "0" }: { name: string; defaultValue?: number | string; required?: boolean; autoFocus?: boolean; className?: string; onValue?: (n: number) => void; placeholder?: string }) {
-  const fmt = (v: string) => v.replace(/\D/g, "").replace(/^0+(?=\d)/, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  const [val, setVal] = useState(fmt(String(defaultValue ?? "")));
+  // typedMoney keeps a decimal tail ("300 000,00") instead of gluing it onto the so'm (audit B1)
+  const [val, setVal] = useState(typedMoney(String(defaultValue ?? "")).display);
+  const parsed = typedMoney(val).value;
+  const bad = val !== "" && parsed === null;
   useEffect(() => {
-    onValue?.(Number(val.replace(/\D/g, "")) || 0);
+    onValue?.(parsed ?? 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [val]);
   return (
     <div className="relative">
       <input
-        inputMode="numeric"
+        inputMode="decimal"
         autoComplete="off"
         required={required}
         autoFocus={autoFocus}
         value={val}
         placeholder={placeholder}
-        onChange={(e) => setVal(fmt(e.target.value))}
+        aria-invalid={bad || undefined}
+        onChange={(e) => setVal(typedMoney(e.target.value).display)}
         className={cx(
           "tnum block h-9 w-full rounded-lg border border-zinc-200 bg-white py-1.5 pl-3 pr-14 text-base text-zinc-900 transition-[border-color,box-shadow] hover:border-zinc-300 focus:border-accent focus:outline-hidden focus:ring-[3px] focus:ring-accent/15 sm:text-sm",
+          bad && "border-red-400",
           className,
         )}
       />
       <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-zinc-500">so&apos;m</span>
-      <input type="hidden" name={name} value={val.replace(/\D/g, "")} />
+      {/* the server parses the typed text with parseMoney and rejects a non-zero decimal tail */}
+      <input type="hidden" name={name} value={val} />
     </div>
   );
 }
