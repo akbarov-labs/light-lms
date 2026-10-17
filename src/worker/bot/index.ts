@@ -8,7 +8,8 @@ import { todayISO } from "@/lib/dates";
 import { saveAttendance, type AttendanceStatus } from "@/lib/services/attendance";
 import { lessonRoster } from "@/lib/roster";
 import { liveSalary } from "@/lib/salary/service";
-import type { Locale } from "@/lib/i18n";
+import { makeT, type Locale } from "@/lib/i18n";
+import { UserError } from "@/lib/user-error";
 import { ownerReport } from "../jobs";
 import { createResetCodeForChat } from "@/lib/auth/password";
 import { B, buttonKey } from "./texts";
@@ -29,6 +30,20 @@ import {
 const CYCLE: AttendanceStatus[] = ["PRESENT", "ABSENT", "LATE", "EXCUSED"];
 /** Unsaved attendance per chat + lesson (single worker process, so memory is enough). */
 const drafts = new Map<string, Map<string, AttendanceStatus>>();
+/** Abandoned drafts are never saved; keep the newest ones only. */
+const MAX_DRAFTS = 500;
+
+function remember(key: string, draft: Map<string, AttendanceStatus>) {
+  drafts.set(key, draft);
+  while (drafts.size > MAX_DRAFTS) drafts.delete(drafts.keys().next().value!);
+}
+
+/** What the teacher sees when saving fails: the translated reason, never an internal message. */
+export function saveErrorText(e: unknown, l: Locale): string {
+  if (e instanceof UserError) return makeT(l)(e.key, e.vars).slice(0, 200);
+  console.error("[bot] attendance save failed", e);
+  return makeT(l)("error.generic");
+}
 
 async function localeOf(ctx: Context): Promise<Locale> {
   const chatId = String(ctx.chat?.id ?? "");
@@ -46,7 +61,8 @@ async function menu(chatId: string, l: Locale): Promise<Keyboard> {
 
 function rosterKeyboard(lessonId: string, rows: { studentId: string; name: string }[], draft: Map<string, AttendanceStatus>, l: Locale) {
   const kb = new InlineKeyboard();
-  rows.forEach((r, i) => kb.text(`${r.name} — ${B.status[l][draft.get(r.studentId) ?? "PRESENT"]}`, `A:${lessonId}:${i}`).row());
+  // by student id, not position: the roster can change while the message is open
+  rows.forEach((r) => kb.text(`${r.name} — ${B.status[l][draft.get(r.studentId) ?? "PRESENT"]}`, `A:${lessonId}:${r.studentId}`).row());
   return kb.text(B.save[l], `S:${lessonId}`);
 }
 
@@ -170,7 +186,7 @@ export function createBot(token: string): Bot {
   bot.on("callback_query:data", async (ctx) => {
     const chatId = String(ctx.chat?.id ?? "");
     const l = await localeOf(ctx);
-    const [op, lessonId, idx] = ctx.callbackQuery.data.split(":");
+    const [op, lessonId, studentId] = ctx.callbackQuery.data.split(":");
     const teacher = await teacherFor(chatId);
     const lesson = lessonId ? await db.lesson.findUnique({ where: { id: lessonId }, include: { group: { select: { name: true, teacherId: true, centerId: true } } } }) : null;
     if (!teacher || !lesson || lesson.group.centerId !== teacher.centerId || (lesson.teacherId !== teacher.id && lesson.group.teacherId !== teacher.id)) {
@@ -182,7 +198,7 @@ export function createBot(token: string): Bot {
     let draft = drafts.get(key);
     if (!draft) {
       draft = new Map(rows.map((r) => [r.studentId, (r.status ?? "PRESENT") as AttendanceStatus]));
-      drafts.set(key, draft);
+      remember(key, draft);
     }
     if (op === "L") {
       await ctx.answerCallbackQuery();
@@ -191,7 +207,8 @@ export function createBot(token: string): Bot {
       return;
     }
     if (op === "A") {
-      const r = rows[Number(idx)];
+      // a student no longer on the roster (or an old position-based button) only redraws the list
+      const r = rows.find((x) => x.studentId === studentId);
       if (r) draft.set(r.studentId, CYCLE[(CYCLE.indexOf(draft.get(r.studentId) ?? "PRESENT") + 1) % CYCLE.length]);
       await ctx.answerCallbackQuery();
       await ctx.editMessageReplyMarkup({ reply_markup: rosterKeyboard(lessonId, rows, draft, l) });
@@ -210,7 +227,7 @@ export function createBot(token: string): Bot {
         await ctx.editMessageReplyMarkup({ reply_markup: undefined });
         await ctx.reply(B.saved[l]);
       } catch (e) {
-        await ctx.answerCallbackQuery({ text: String((e as Error).message).slice(0, 180) });
+        await ctx.answerCallbackQuery({ text: saveErrorText(e, l), show_alert: true });
       }
     }
   });

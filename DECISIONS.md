@@ -150,3 +150,6 @@
 2026-10-17 — Telegram sends from the queue abort after 15 s and retry with backoff — a hung call blocked the batch.
 2026-10-17 — Payme GetStatement selects and orders by Payme's own time (paymeTime, else createTime); a CreateTransaction that loses the insert race answers like the idempotent path instead of −32400.
 2026-10-17 — "Is a teacher" lives in one place (teacherWhere / isTeacherRow in src/lib/queries/staff.ts).
+2026-10-17 — Bot handlers are tested end to end (tests/bot-handlers.test.ts): the real grammY bot with `botInfo` preset and an API transformer that records calls instead of calling Telegram, on the integration database. Covers linking, /lang, /parol, every menu button, refusals, and the attendance roster → toggle → save flow.
+2026-10-17 — Bot roster buttons carry the student id (`A:<lesson>:<student>`, 53 bytes, under Telegram's 64) instead of the list position, so a student joining or leaving while the roster is open can't shift a tap onto another child. Old position buttons only redraw the list. Unsaved drafts are capped at the newest 500.
+2026-10-17 — A failed bot attendance save shows the translated UserError text in an alert; any other error is logged and shown as the generic error, never its internal message.
