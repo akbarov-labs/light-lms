@@ -9,10 +9,21 @@ import { parseMoney } from "@/lib/money";
 import { fromISODate, monthRange, shiftMonth, todayISO, type ISODate } from "@/lib/dates";
 import { makeT } from "@/lib/i18n";
 import { centerUsage } from "@/lib/services/plan-usage";
+import { assertBillable } from "@/lib/services/enrollments";
 import { debtSinceColumn, parseImportDate } from "./import-parse";
 
 /** Marker of an opening balance on LedgerEntry.period (no billingKey: it is not an engine unit). */
 export const OPENING_PERIOD = "opening";
+
+/** Same late-joiner rule as a manual enrollment (audit B8), reported as a row error. */
+async function billableOrRowError(tx: Tx, enrollmentId: string, t: ReturnType<typeof makeT>): Promise<void> {
+  try {
+    await assertBillable(tx, enrollmentId);
+  } catch (e) {
+    if (e instanceof UserError) throw new Error(t("money.wholeCourseFull"));
+    throw e;
+  }
+}
 // opening balances imported before the marker existed are recognised by their description
 const LEGACY_OPENING = [makeT("uz")("import.opening"), makeT("ru")("import.opening")];
 
@@ -135,7 +146,8 @@ export async function importStudents(ctx: Ctx, text: string, dry: boolean): Prom
           await assertFamilyAccess(ctx, existing.familyId);
           let enrolled = false;
           if (group && !(await tx.enrollment.findFirst({ where: { studentId: existing.id, groupId: group.id, endDate: null }, select: { id: true } }))) {
-            await tx.enrollment.create({ data: { studentId: existing.id, groupId: group.id, startDate: fromISODate(today), activatedAt: fromISODate(nextMonth), status: "ACTIVE" } });
+            const en = await tx.enrollment.create({ data: { studentId: existing.id, groupId: group.id, startDate: fromISODate(today), activatedAt: fromISODate(nextMonth), status: "ACTIVE" } });
+            await billableOrRowError(tx, en.id, t);
             enrolled = true;
           }
           // never a second opening balance; a balance for a family that never had one is refused as before
@@ -162,7 +174,10 @@ export async function importStudents(ctx: Ctx, text: string, dry: boolean): Prom
           if (parent) await tx.guardian.create({ data: { familyId, name: parent === phone ? `${firstName} ${lastName}` : `${lastName} (ota-ona)`, phone: parent, isPrimary: true, relation: parent === phone ? "self" : null } });
         }
         const s = await tx.student.create({ data: { centerId: ctx.centerId, familyId, branchId: group?.branchId ?? ctx.activeBranchId ?? ctx.branchIds?.[0] ?? null, firstName, lastName, phone, source: "Import" } });
-        if (group) await tx.enrollment.create({ data: { studentId: s.id, groupId: group.id, startDate: fromISODate(today), activatedAt: fromISODate(nextMonth), status: "ACTIVE" } });
+        if (group) {
+          const en = await tx.enrollment.create({ data: { studentId: s.id, groupId: group.id, startDate: fromISODate(today), activatedAt: fromISODate(nextMonth), status: "ACTIVE" } });
+          await billableOrRowError(tx, en.id, t);
+        }
         if (balance !== 0) {
           await tx.ledgerEntry.create({
             data: {

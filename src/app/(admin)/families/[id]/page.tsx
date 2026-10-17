@@ -89,6 +89,7 @@ export default async function FamilyPage({ params, searchParams }: { params: Pro
                     <Field label={t("common.date")}><Input type="date" name="date" defaultValue={todayISO()} required /></Field>
                     <Field label={t("common.reason")}><Input name="reason" required /></Field>
                   </FormGrid>
+                  <Checkbox name="force" label={t("money.refundForce")} />
                   <p className="text-xs text-zinc-500">{t("pay.refundHint")}</p>
                   <SubmitButton variant="danger">{t("pay.refund")}</SubmitButton>
                 </ModalForm>

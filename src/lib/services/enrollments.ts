@@ -41,7 +41,7 @@ export async function nextLessonDate(tx: Tx, groupId: string, from: ISODate): Pr
 }
 
 /** Refuse to start billing a late joiner when the open-ended whole course has no lessons left to sell. */
-async function assertBillable(tx: Tx, enrollmentId: string): Promise<void> {
+export async function assertBillable(tx: Tx, enrollmentId: string): Promise<void> {
   const { input } = await loadBillingInput(tx, enrollmentId, todayISO());
   if (wholeCourseExhausted(input)) throw new UserError("money.wholeCourseFull");
 }
