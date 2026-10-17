@@ -2,20 +2,28 @@
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { isHttpsDeployment } from "./secret";
 
-export { checkAuthSecret, isHttpsDeployment, type SecretCheck } from "./secret";
+export { checkAuthSecret, isHttpsDeployment, isLocalAppUrl, isPublicSecret, type SecretCheck } from "./secret";
 
 /**
- * Client IP for rate limiting. Behind Caddy (docker-compose.prod.yml) the proxy overwrites
- * X-Forwarded-For with the real peer address, and the app port is not published, so the
- * last entry is trustworthy. Without a proxy it is best effort.
+ * Client IP for rate limiting. X-Forwarded-For / X-Real-IP are client-settable, so they are read
+ * only when TRUST_PROXY=true (docker-compose.prod.yml: Caddy overwrites them and the app port is
+ * not published, so the last XFF entry is the real peer). Otherwise the direct peer address is
+ * used when the caller has one, else every request shares one "direct" bucket (fail closed:
+ * spoofed headers can't mint fresh rate-limit buckets).
  */
-export function clientIp(h: { get(name: string): string | null }): string {
-  const xff = h.get("x-forwarded-for");
-  if (xff) {
-    const parts = xff.split(",").map((p) => p.trim()).filter(Boolean);
-    if (parts.length) return parts[parts.length - 1].slice(0, 64);
+export function clientIp(h: { get(name: string): string | null }, opts: { peer?: string | null; trustProxy?: boolean } = {}): string {
+  const trust = opts.trustProxy ?? process.env.TRUST_PROXY === "true";
+  if (trust) {
+    const xff = h.get("x-forwarded-for");
+    if (xff) {
+      const parts = xff.split(",").map((p) => p.trim()).filter(Boolean);
+      if (parts.length) return parts[parts.length - 1].slice(0, 64);
+    }
+    const real = (h.get("x-real-ip") ?? "").trim().slice(0, 64);
+    if (real) return real;
   }
-  return (h.get("x-real-ip") ?? "unknown").trim().slice(0, 64) || "unknown";
+  const peer = (opts.peer ?? "").trim().slice(0, 64);
+  return peer || "direct";
 }
 
 /** Cookies get `Secure` when the site is served over HTTPS (directly or behind the proxy). */
