@@ -7,6 +7,8 @@ export default defineConfig([
   ...nextVitals,
   ...nextTs,
   {
+    // eslint-plugin-react 7.37's "detect" calls context.getFilename(), removed in ESLint 10; keep in step with react
+    settings: { react: { version: "19.3" } },
     rules: {
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       // eslint-plugin-react-hooks 7 (eslint-config-next 16) adds React Compiler rules. The compiler is not
