@@ -99,6 +99,27 @@ export function collectLessons(p: {
     });
 }
 
+export interface BranchCandidate {
+  id: string;
+  /** Lessons the teacher held in this branch in the payslip's month. */
+  lessons: number;
+  /** Branch.createdAt (ISO string or Date): the tie-breaker, oldest first. */
+  createdAt: string | Date;
+}
+
+/**
+ * Branch a paid payslip is booked to as an expense: where the teacher held most lessons that
+ * month; a tie goes to the oldest branch (then the lowest id). No lessons that month: the
+ * teacher's oldest branch. Deterministic, so the same payslip always lands in the same branch P&L.
+ */
+export function pickExpenseBranch(held: BranchCandidate[], home: Omit<BranchCandidate, "lessons">[]): string | null {
+  const t = (d: string | Date) => new Date(d).getTime();
+  const oldest = (a: Omit<BranchCandidate, "lessons">, b: Omit<BranchCandidate, "lessons">) => t(a.createdAt) - t(b.createdAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const busy = held.filter((b) => b.lessons > 0).sort((a, b) => b.lessons - a.lessons || oldest(a, b));
+  if (busy.length > 0) return busy[0].id;
+  return [...home].sort(oldest)[0]?.id ?? null;
+}
+
 /**
  * Does the fixed/base part apply to this month? Not for a month that starts after the teacher was
  * archived (the month they leave in is still paid in full; no pro-rating).

@@ -113,6 +113,25 @@ describe("B7 — refunds above the credit", () => {
     expect(a.enrollments.get("a")?.debt).toBe(0);
   });
 
+  it("N5: the overdraw ages from the day the wallet went negative; a reversed payment does not reset it", () => {
+    const overdraw = [e({ type: "PAYMENT", amount: 100_000, date: "2026-01-02" }), e({ type: "REFUND", amount: -150_000, date: "2026-01-10" })];
+    const pay = e({ type: "PAYMENT", amount: 50_000, date: "2026-03-01" });
+    const a = allocate([...overdraw, pay, e({ type: "REVERSAL", amount: -50_000, date: "2026-03-05", reversesId: pay.id })]);
+    expect(a.totalDebt).toBe(50_000);
+    expect(a.oldestUnpaidDate).toBe("2026-01-10");
+    expect(a.units.find((u) => u.key === OVERDRAW_KEY)?.firstDate).toBe("2026-01-10");
+    // a partial payment does not end the episode either
+    expect(allocate([...overdraw, e({ type: "PAYMENT", amount: 20_000, date: "2026-02-01" })]).oldestUnpaidDate).toBe("2026-01-10");
+    // cleared by a real payment, overdrawn again later: a new episode
+    const again = allocate([...overdraw, e({ type: "PAYMENT", amount: 50_000, date: "2026-02-01" }), e({ type: "REFUND", amount: -30_000, date: "2026-03-10" })]);
+    expect(again).toMatchObject({ totalDebt: 30_000, oldestUnpaidDate: "2026-03-10" });
+    // charges unpaid since before the overdraw keep their own (older) date
+    const charged = allocate([e({ type: "CHARGE", amount: -200_000, date: "2025-12-01", enrollmentId: "a", billingKey: "sub:a:2025-12-01" }), ...overdraw]);
+    expect(charged.totalDebt).toBe(250_000);
+    expect(charged.units.find((u) => u.key === OVERDRAW_KEY)?.firstDate).toBe("2026-01-10");
+    expect(charged.oldestUnpaidDate).toBe("2025-12-01");
+  });
+
   it("a refund within the credit leaves no debt", () => {
     const a = allocate([e({ type: "PAYMENT", amount: 500_000, date: "2026-10-02" }), e({ type: "REFUND", amount: -500_000, date: "2026-10-03" })]);
     expect(a).toMatchObject({ balance: 0, totalDebt: 0, unallocated: 0, oldestUnpaidDate: null });

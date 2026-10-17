@@ -8,6 +8,9 @@ export function formatMoney(amount: number | null | undefined, currency = "so'm"
   return `${sign}${grouped} ${currency}`;
 }
 
+/** Largest amount any money field accepts (forms, import opening balances): 1 000 000 000 so'm. */
+export const MAX_AMOUNT = 1_000_000_000;
+
 /** A single payment above this needs an explicit "yes, this amount is right" (typo guard). */
 export const LARGE_PAYMENT = 50_000_000;
 

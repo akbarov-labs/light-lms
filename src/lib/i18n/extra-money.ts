@@ -14,6 +14,8 @@ export const moneyUz = {
   "money.import.skipped": "Allaqachon mavjud (o'tkazib yuborildi): {n}.",
   "money.import.badDebtSince": "qarz sanasi noto'g'ri (kk.oo.yyyy yoki yyyy-oo-kk)",
   "money.import.futureDebtSince": "qarz sanasi kelajakda bo'lishi mumkin emas",
+  "money.import.balanceTooLarge": "balans juda katta (ko'pi bilan {max})",
+  "money.import.possibleDuplicate": "{name} — shu ismli o'quvchi allaqachon bor, telefon yo'q: yangi o'quvchi yaratiladi. Dublikat emasligini tekshiring.",
   "money.import.debtSinceHint": "Ixtiyoriy 7-ustun — qarz qaysi sanadan (kk.oo.yyyy): qarzdorlik kunlari shu sanadan hisoblanadi. Faylni qayta import qilish mavjud o'quvchilar, guruhlar va boshlang'ich qoldiqni takrorlamaydi.",
 } as const;
 
@@ -32,5 +34,7 @@ export const moneyRu: Record<keyof typeof moneyUz, string> = {
   "money.import.skipped": "Уже есть (пропущено): {n}.",
   "money.import.badDebtSince": "неверная дата долга (дд.мм.гггг или гггг-мм-дд)",
   "money.import.futureDebtSince": "дата долга не может быть в будущем",
+  "money.import.balanceTooLarge": "слишком большой баланс (не больше {max})",
+  "money.import.possibleDuplicate": "{name} — ученик с таким именем уже есть, телефона нет: будет создан новый ученик. Проверьте, что это не дубликат.",
   "money.import.debtSinceHint": "Необязательный 7-й столбец — с какой даты долг (дд.мм.гггг): дни просрочки считаются от неё. Повторный импорт того же файла не дублирует учеников, группы и начальный остаток.",
 };

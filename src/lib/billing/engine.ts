@@ -88,22 +88,57 @@ function lessonsIn(lessons: BillingLesson[], p: Period): BillingLesson[] {
  * is pro-rated instead of charging a full month for half a month (DECISIONS.md).
  */
 export function scheduledInPeriod(input: BillingInput, p: Period): number {
-  let n = lessonsIn(input.lessons, p).length + notGeneratedIn(input, p).length;
-  const { startDate, endDate, slotWeekdays } = input.group;
-  if (p.start < startDate) {
-    const to = p.end < startDate ? p.end : prevDay(startDate);
-    n += countSlotDates(slotWeekdays, p.start, to, input.holidays);
+  const inPeriod = lessonsIn(input.lessons, p);
+  let n = inPeriod.length + notGeneratedIn(input, p).length;
+  const { startDate, endDate } = input.group;
+  if (p.start < startDate) n += freeSlotDates(input, inPeriod, p.start, p.end < startDate ? p.end : prevDay(startDate));
+  if (endDate && p.end > endDate) n += freeSlotDates(input, inPeriod, p.start > endDate ? p.start : nextDay(endDate), p.end);
+  return n;
+}
+
+/** The slot date a lesson stands for: where it was generated, even if it was moved since. */
+const slotDateOf = (l: BillingLesson): ISODate => l.origDate ?? l.date;
+
+/**
+ * Slot dates in [from, to] (outside the group's start/end) that no lesson of the period stands
+ * for. A lesson kept there — cancelled, with attendance, moved after the end date was set — is
+ * already counted as a generated lesson; counting its slot date too would price the month over
+ * one lesson too many (endDate Oct 25 + a cancelled Oct 28 kept: 10/13, not 10/14).
+ */
+function freeSlotDates(input: BillingInput, inPeriod: BillingLesson[], from: ISODate, to: ISODate): number {
+  const free = new Map<ISODate, number>();
+  let n = 0;
+  for (const d of slotDates(input.group.slotWeekdays, from, to, input.holidays)) {
+    free.set(d, (free.get(d) ?? 0) + 1);
+    n++;
   }
-  if (endDate && p.end > endDate) {
-    const from = p.start > endDate ? p.start : nextDay(endDate);
-    n += countSlotDates(slotWeekdays, from, p.end, input.holidays);
+  for (const l of inPeriod) {
+    const left = free.get(slotDateOf(l)) ?? 0;
+    if (left > 0) {
+      free.set(slotDateOf(l), left - 1);
+      n--;
+    }
   }
   return n;
 }
 
 /**
+ * The last slot date lessons have been generated up to. A rescheduled lesson counts at the slot it
+ * came from, so a lesson moved far ahead does not push the horizon past slot dates that are not
+ * generated yet (they would drop out of the count and the first charge would not be final).
+ */
+function generatedUpTo(lessons: BillingLesson[]): ISODate {
+  let last = "";
+  for (const l of lessons) {
+    const d = slotDateOf(l);
+    if (d > last) last = d;
+  }
+  return last;
+}
+
+/**
  * Slot dates of the period that are not generated yet: inside the group's own start/end, after
- * the last generated lesson and after `asOf` (a past day without a lesson really had none).
+ * the last generated slot date and after `asOf` (a past day without a lesson really had none).
  * Lessons are generated ~60 days ahead, so this only matters for a period that starts later —
  * an enrollment or activation dated months ahead. Counting them in both the numerator and the
  * denominator makes the first charge final instead of growing as lessons get generated.
@@ -111,7 +146,7 @@ export function scheduledInPeriod(input: BillingInput, p: Period): number {
 function notGeneratedIn(input: BillingInput, p: Period): ISODate[] {
   const g = input.group;
   if (g.generating === false) return [];
-  const last = input.lessons.reduce((m, l) => (l.date > m ? l.date : m), "");
+  const last = generatedUpTo(input.lessons);
   let from = p.start > g.startDate ? p.start : g.startDate;
   const after = last > input.asOf ? last : input.asOf;
   if (from <= after) from = nextDay(after);
@@ -183,7 +218,7 @@ export function courseLessonsFrom(input: BillingInput, from: ISODate): number {
   const g = input.group;
   if (!g.endDate) return Math.max(1, estimatedLessonsLeft(input, from));
   const generated = input.lessons.filter((l) => l.date >= from && l.date <= g.endDate!).length;
-  const last = input.lessons.reduce((m, l) => (l.date > m ? l.date : m), "");
+  const last = generatedUpTo(input.lessons);
   const tailFrom = last && last >= from ? nextDay(last) : from;
   return Math.max(1, generated + countSlotDates(g.slotWeekdays, tailFrom, g.endDate, input.holidays));
 }
@@ -412,6 +447,22 @@ export function lessonValue(input: BillingInput, lessonId: string, payTrial: boo
   // only when its installment and every earlier one of the package are fully paid.
   let j = 1;
   while (j < inst && addMonthsAnchored(start, j) <= lesson.date) j++;
-  const keys = Array.from({ length: j }, (_, x) => `pkg:${e.id}:${pkgIndex}:${x + 1}`);
-  return { value: price / info.size, key: keys[j - 1], keys, trial: false };
+  const all = Array.from({ length: j }, (_, x) => `pkg:${e.id}:${pkgIndex}:${x + 1}`);
+  // An installment that owes nothing (a leaver's later installments are credited to 0) has nothing
+  // to collect: it must not block the lessons it covers, so they are keyed to the charged ones.
+  const owed = expectedAmounts(input);
+  const keys = all.filter((k) => owed.get(k) !== 0);
+  return { value: price / info.size, key: keys[keys.length - 1] ?? all[j - 1], keys, trial: false };
+}
+
+const expectedCache = new WeakMap<BillingInput, Map<string, number>>();
+
+/** Expected amount per billing key (cached per input: salary asks for every lesson of a group). */
+function expectedAmounts(input: BillingInput): Map<string, number> {
+  let m = expectedCache.get(input);
+  if (!m) {
+    m = new Map(computeExpected(input).map((u) => [u.key, u.amount]));
+    expectedCache.set(input, m);
+  }
+  return m;
 }

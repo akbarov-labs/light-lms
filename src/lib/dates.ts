@@ -13,8 +13,26 @@ export function fromISODate(s: ISODate): Date {
   return new Date(`${s}T00:00:00.000Z`);
 }
 
+/** A real calendar date "YYYY-MM-DD": 2026-02-31 and 2026-13-01 are refused (no silent roll-over). */
 export function isISODate(s: unknown): s is ISODate {
-  return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(fromISODate(s).getTime());
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = fromISODate(s);
+  return !Number.isNaN(d.getTime()) && toISODate(d) === s;
+}
+
+/** Years a month parameter may name (salary pages, exports): anything else is a typo or a probe. */
+export const MONTH_YEARS = { min: 2000, max: 2100 } as const;
+
+/** "YYYY-MM" with MM 01–12 and a sane year. */
+export function isMonth(s: unknown): s is string {
+  if (typeof s !== "string") return false;
+  const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(s);
+  return !!m && Number(m[1]) >= MONTH_YEARS.min && Number(m[1]) <= MONTH_YEARS.max;
+}
+
+/** A month query parameter, or the current month (Tashkent) when it is missing or invalid. */
+export function monthParam(raw: unknown, now: Date = new Date()): string {
+  return isMonth(raw) ? raw : todayISO(now).slice(0, 7);
 }
 
 /** Today's calendar date in the center timezone. */
