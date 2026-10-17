@@ -5,7 +5,8 @@ import { audit } from "@/lib/audit";
 import { postPayment, reverseEntry } from "@/lib/services/payments";
 import { todayISO } from "@/lib/dates";
 import { readSettings } from "@/lib/settings";
-import type { PaymeRepo, PaymeTx } from "./payme";
+import { isUniqueViolation } from "@/lib/db-errors";
+import { DuplicatePaymeTx, type PaymeRepo, type PaymeTx } from "./payme";
 
 /** Fiscal receipt line title (receipts are printed in Uzbek). */
 export const FISCAL_TITLE = "O'quv kurslari uchun to'lov";
@@ -39,17 +40,23 @@ export const prismaPaymeRepo: PaymeRepo = {
     return r ? toTx(r) : null;
   },
   async createTx(tx) {
-    const r = await db.paymeTransaction.create({
-      data: {
-        paymeId: tx.paymeId,
-        centerId: tx.centerId,
-        familyId: tx.familyId,
-        amountTiyin: BigInt(tx.amountTiyin),
-        state: tx.state,
-        createTime: BigInt(tx.createTime),
-        paymeTime: tx.paymeTime === null || tx.paymeTime === undefined ? null : BigInt(tx.paymeTime),
-      },
-    });
+    let r: PaymeTransaction;
+    try {
+      r = await db.paymeTransaction.create({
+        data: {
+          paymeId: tx.paymeId,
+          centerId: tx.centerId,
+          familyId: tx.familyId,
+          amountTiyin: BigInt(tx.amountTiyin),
+          state: tx.state,
+          createTime: BigInt(tx.createTime),
+          paymeTime: tx.paymeTime === null || tx.paymeTime === undefined ? null : BigInt(tx.paymeTime),
+        },
+      });
+    } catch (e) {
+      if (isUniqueViolation(e, "paymeId")) throw new DuplicatePaymeTx(tx.paymeId);
+      throw e;
+    }
     await db.auditLog.create({ data: { centerId: tx.centerId, entity: "PaymeTransaction", entityId: r.id, action: "create", after: { paymeId: tx.paymeId, amountTiyin: tx.amountTiyin } } });
     return toTx(r);
   },
@@ -88,8 +95,13 @@ export const prismaPaymeRepo: PaymeRepo = {
       return toTx(r);
     }, { timeout: 30_000 });
   },
+  // GetStatement is about Payme's clock: the "time" it sent in CreateTransaction (older rows without it
+  // fall back to our create time), selected and ordered by that
   async statement(centerId, from, to) {
-    const rows = await db.paymeTransaction.findMany({ where: { centerId, createTime: { gte: BigInt(from), lte: BigInt(to) } }, orderBy: { createTime: "asc" } });
+    const rows = await db.$queryRaw<PaymeTransaction[]>`
+      SELECT * FROM "PaymeTransaction"
+      WHERE "centerId" = ${centerId} AND COALESCE("paymeTime", "createTime") BETWEEN ${BigInt(from)} AND ${BigInt(to)}
+      ORDER BY COALESCE("paymeTime", "createTime") ASC, "createTime" ASC, id ASC`;
     return rows.map(toTx);
   },
 };

@@ -170,6 +170,45 @@ describe("Payme on the database", () => {
     const bad = await handlePayme({ auth: `Basic ${Buffer.from("Paycom:nope").toString("base64")}`, body: JSON.stringify({ id: 2, method: "CheckTransaction", params: { id: "pm-1" } }) }, prismaPaymeRepo);
     expect(bad.error?.code).toBe(-32504);
   });
+
+  it("two concurrent CreateTransaction calls for one id both answer the same transaction (L8)", async () => {
+    await db.center.update({ where: { id: centerId }, data: { paymeMerchantId: "m-test", paymeKey: "k-test" } });
+    const fam = await db.family.findFirstOrThrow({ where: { centerId } });
+    const auth = `Basic ${Buffer.from("Paycom:k-test").toString("base64")}`;
+    const t0 = Date.now();
+    const create = () => handlePayme({ auth, body: JSON.stringify({ id: 1, method: "CreateTransaction", params: { id: "pm-race", time: t0, amount: 10_000_000, account: { family_id: fam.id } } }) }, prismaPaymeRepo, t0);
+    // slow inserts down so both calls are past their "does it exist?" read before either row is committed
+    await db.$executeRawUnsafe(`CREATE OR REPLACE FUNCTION test_slow_payme() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.3); RETURN NEW; END $$`);
+    await db.$executeRawUnsafe(`CREATE TRIGGER test_slow_payme BEFORE INSERT ON "PaymeTransaction" FOR EACH ROW EXECUTE FUNCTION test_slow_payme()`);
+    try {
+      const [a, b] = await Promise.all([create(), create()]);
+      expect(a.error).toBeUndefined();
+      expect(b.error).toBeUndefined();
+      expect(a.result).toMatchObject({ state: 1, create_time: t0 });
+      expect(b.result).toEqual(a.result);
+    } finally {
+      await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS test_slow_payme ON "PaymeTransaction"`);
+      await db.$executeRawUnsafe(`DROP FUNCTION IF EXISTS test_slow_payme()`);
+    }
+    expect(await db.paymeTransaction.count({ where: { paymeId: "pm-race" } })).toBe(1);
+  });
+
+  it("GetStatement selects and orders by Payme's own time, not ours (L5)", async () => {
+    await db.center.update({ where: { id: centerId }, data: { paymeMerchantId: "m-test", paymeKey: "k-test" } });
+    const fam = await db.family.findFirstOrThrow({ where: { centerId } });
+    const auth = `Basic ${Buffer.from("Paycom:k-test").toString("base64")}`;
+    const rpc = (method: string, params: object, now: number) => handlePayme({ auth, body: JSON.stringify({ id: 1, method, params }) }, prismaPaymeRepo, now);
+    // Payme's clock is behind ours: "time" is 10 min before our create time, and the order differs
+    const base = Date.UTC(2031, 0, 1);
+    await rpc("CreateTransaction", { id: "pm-st-a", time: base - 600_000 + 20, amount: 10_000_000, account: { family_id: fam.id } }, base);
+    await rpc("CreateTransaction", { id: "pm-st-b", time: base - 600_000 + 10, amount: 10_000_000, account: { family_id: fam.id } }, base + 1);
+    const list = async (from: number, to: number) => ((await rpc("GetStatement", { from, to }, base + 5)).result as { transactions: { id: string; time: number }[] }).transactions;
+    expect((await list(base - 600_000, base - 590_000)).map((t) => [t.id, t.time])).toEqual([
+      ["pm-st-b", base - 600_000 + 10],
+      ["pm-st-a", base - 600_000 + 20],
+    ]);
+    expect(await list(base, base + 10)).toEqual([]);
+  });
 });
 
 describe("data isolation", () => {
