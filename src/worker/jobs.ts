@@ -12,11 +12,13 @@ import { enqueue, familyChats, staffChat } from "@/lib/notify";
 import { msg, esc } from "@/lib/messages";
 import { allocationsFor, balancesFor } from "@/lib/services/wallet";
 import { payLinkForFamily } from "@/lib/payments/links";
-import { buildCtx, loadUser } from "@/lib/ctx-core";
+import { branchWhere, buildCtx, loadUser, studentScope } from "@/lib/ctx-core";
 import { debtAging, revenue } from "@/lib/queries/reports";
+import { zonedRange } from "@/lib/queries/period";
 import { formatMoney } from "@/lib/money";
 import { purgeOldAttempts } from "@/lib/auth/attempts-db";
 import { purgeOldNotifications } from "./notifications";
+import { errText } from "./util";
 
 export type JobResult = Record<string, number | string>;
 
@@ -31,12 +33,6 @@ export async function forEachLimit<T>(items: readonly T[], limit: number, fn: (i
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
 }
-
-/** Short error text for a job result: the last line of the message (Prisma puts the cause there). */
-const errText = (e: unknown) => {
-  const lines = (e instanceof Error ? e.message : String(e)).split("\n").map((l) => l.trim()).filter(Boolean);
-  return (lines[lines.length - 1] ?? "error").slice(0, 200);
-};
 
 /**
  * 00:30 — lessons ahead, group statuses, freeze statuses, billing for every billable enrollment, housekeeping.
@@ -139,58 +135,83 @@ export async function billingSync(today: ISODate = todayISO()): Promise<JobResul
 
 const ALLOC_CHUNK = 500;
 
-/** 10:00 — "new period starts in N days" reminders and escalating debt reminders. */
+/**
+ * Run one item of a job (a center, an enrollment, a recipient): a throw is logged and counted, the
+ * other items still run. The counts end in "Failed", so jobProblems() raises the ops alert.
+ */
+async function isolated(label: string, fn: () => Promise<void>, onFail: () => void): Promise<void> {
+  try {
+    await fn();
+  } catch (e) {
+    onFail();
+    console.error(`[${label}] failed:`, e);
+  }
+}
+
+/**
+ * 10:00 — "new period starts in N days" reminders and escalating debt reminders. Each center and each
+ * reminder runs on its own: one broken enrollment or center does not stop the rest.
+ */
 export async function reminders(today: ISODate = todayISO()): Promise<JobResult> {
   const centers = await db.center.findMany({ select: { id: true, name: true, settings: true } });
   let upcoming = 0;
   let debts = 0;
+  let centersFailed = 0;
+  let remindersFailed = 0;
+  const failItem = () => remindersFailed++;
   for (const c of centers) {
-    const s = readSettings(c.settings);
-    if (s.notify.reminder && s.reminderDaysBefore > 0) {
-      const enrollments = await db.enrollment.findMany({
-        where: { endDate: null, status: { in: ["ACTIVE", "FROZEN"] }, group: { centerId: c.id, course: { pricingType: "SUBSCRIPTION" } } },
-        include: { group: { include: { course: true } }, student: { select: { id: true, firstName: true, lastName: true, familyId: true } } },
-      });
-      for (const e of enrollments) {
-        const anchor = e.group.course.renewal === "CALENDAR" ? 1 : e.group.course.renewal === "GROUP_START" ? parts(toISODate(e.group.startDate)).d : parts(toISODate(e.activatedAt ?? e.startDate)).d;
-        const next = nextPeriodStart(periodContaining(today, anchor).start, anchor);
-        if (diffDays(next, today) !== s.reminderDaysBefore) continue;
-        const { input } = await loadBillingInput(db, e.id, next);
-        const unit = computeExpected(input).find((u) => u.start === next);
-        if (!unit || unit.amount <= 0) continue;
-        const payUrl = await payLinkForFamily(e.student.familyId);
-        upcoming += await db.$transaction(async (tx) => {
-          const chats = await familyChats(tx, e.student.familyId, e.student.id);
-          return enqueue(
-            tx,
-            c.id,
-            chats,
-            (l) => msg.reminder(l, { center: c.name, student: `${e.student.firstName} ${e.student.lastName}`, group: e.group.name, amount: unit.amount, date: next, payUrl }),
-            `remind:${e.id}:${next}`,
-          );
+    await isolated(`reminders center ${c.id}`, async () => {
+      const s = readSettings(c.settings);
+      if (s.notify.reminder && s.reminderDaysBefore > 0) {
+        const enrollments = await db.enrollment.findMany({
+          where: { endDate: null, status: { in: ["ACTIVE", "FROZEN"] }, group: { centerId: c.id, course: { pricingType: "SUBSCRIPTION" } } },
+          include: { group: { include: { course: true } }, student: { select: { id: true, firstName: true, lastName: true, familyId: true } } },
         });
+        for (const e of enrollments) {
+          await isolated(`reminders enrollment ${e.id}`, async () => {
+            const anchor = e.group.course.renewal === "CALENDAR" ? 1 : e.group.course.renewal === "GROUP_START" ? parts(toISODate(e.group.startDate)).d : parts(toISODate(e.activatedAt ?? e.startDate)).d;
+            const next = nextPeriodStart(periodContaining(today, anchor).start, anchor);
+            if (diffDays(next, today) !== s.reminderDaysBefore) return;
+            const { input } = await loadBillingInput(db, e.id, next);
+            const unit = computeExpected(input).find((u) => u.start === next);
+            if (!unit || unit.amount <= 0) return;
+            const payUrl = await payLinkForFamily(e.student.familyId);
+            upcoming += await db.$transaction(async (tx) => {
+              const chats = await familyChats(tx, e.student.familyId, e.student.id);
+              return enqueue(
+                tx,
+                c.id,
+                chats,
+                (l) => msg.reminder(l, { center: c.name, student: `${e.student.firstName} ${e.student.lastName}`, group: e.group.name, amount: unit.amount, date: next, payUrl }),
+                `remind:${e.id}:${next}`,
+              );
+            });
+          }, failItem);
+        }
       }
-    }
-    if (s.notify.debt) {
-      const neg = await db.ledgerEntry.groupBy({ by: ["familyId"], where: { centerId: c.id }, _sum: { amount: true }, having: { amount: { _sum: { lt: 0 } } } });
-      // ledgers of the debtor families are loaded a chunk at a time, not one query per family
-      let allocs = new Map<string, Allocation>();
-      for (let i = 0; i < neg.length; i++) {
-        if (i % ALLOC_CHUNK === 0) allocs = await allocationsFor(neg.slice(i, i + ALLOC_CHUNK).map((x) => x.familyId));
-        const n = neg[i];
-        const alloc = allocs.get(n.familyId);
-        if (!alloc?.oldestUnpaidDate) continue;
-        const overdue = diffDays(today, alloc.oldestUnpaidDate);
-        if (![3, 7, 14, 30].includes(overdue)) continue;
-        const payUrl = await payLinkForFamily(n.familyId);
-        debts += await db.$transaction(async (tx) => {
-          const chats = await familyChats(tx, n.familyId);
-          return enqueue(tx, c.id, chats, (l) => msg.debt(l, { center: c.name, debt: -(n._sum.amount ?? 0), payUrl }), `debt-overdue:${n.familyId}:${today}`);
-        });
+      if (s.notify.debt) {
+        const neg = await db.ledgerEntry.groupBy({ by: ["familyId"], where: { centerId: c.id }, _sum: { amount: true }, having: { amount: { _sum: { lt: 0 } } } });
+        // ledgers of the debtor families are loaded a chunk at a time, not one query per family
+        let allocs = new Map<string, Allocation>();
+        for (let i = 0; i < neg.length; i++) {
+          if (i % ALLOC_CHUNK === 0) allocs = await allocationsFor(neg.slice(i, i + ALLOC_CHUNK).map((x) => x.familyId));
+          const n = neg[i];
+          await isolated(`reminders debt family ${n.familyId}`, async () => {
+            const alloc = allocs.get(n.familyId);
+            if (!alloc?.oldestUnpaidDate) return;
+            const overdue = diffDays(today, alloc.oldestUnpaidDate);
+            if (![3, 7, 14, 30].includes(overdue)) return;
+            const payUrl = await payLinkForFamily(n.familyId);
+            debts += await db.$transaction(async (tx) => {
+              const chats = await familyChats(tx, n.familyId);
+              return enqueue(tx, c.id, chats, (l) => msg.debt(l, { center: c.name, debt: -(n._sum.amount ?? 0), payUrl }), `debt-overdue:${n.familyId}:${today}`);
+            });
+          }, failItem);
+        }
       }
-    }
+    }, () => centersFailed++);
   }
-  return { upcoming, debts };
+  return { upcoming, debts, centersFailed, remindersFailed };
 }
 
 /** 20:00 — teachers whose lessons today still have no attendance. */
@@ -208,14 +229,17 @@ export async function teacherReminders(today: ISODate = todayISO()): Promise<Job
     else byTeacher.set(l.teacherId, [l]);
   }
   let sent = 0;
+  let teachersFailed = 0;
   for (const [teacherId, list] of byTeacher) {
-    sent += await db.$transaction(async (tx) => {
-      const chat = await staffChat(tx, teacherId);
-      if (!chat) return 0;
-      return enqueue(tx, list[0].group.center.id, [chat], (l) => msg.teacherReminder(l, { lessons: list.map((x) => `${x.startTime} ${x.group.name} #${x.group.code}`) }), `teacher:${teacherId}:${today}`);
-    });
+    await isolated(`teacher-reminders ${teacherId}`, async () => {
+      sent += await db.$transaction(async (tx) => {
+        const chat = await staffChat(tx, teacherId);
+        if (!chat) return 0;
+        return enqueue(tx, list[0].group.center.id, [chat], (l) => msg.teacherReminder(l, { lessons: list.map((x) => `${x.startTime} ${x.group.name} #${x.group.code}`) }), `teacher:${teacherId}:${today}`);
+      });
+    }, () => teachersFailed++);
   }
-  return { teachers: byTeacher.size, sent };
+  return { teachers: byTeacher.size, sent, teachersFailed };
 }
 
 /** Owner / manager report text (also used by the bot's 📊 button). */
@@ -230,9 +254,10 @@ export async function ownerReport(userId: string, today: ISODate = todayISO()): 
     revenue(ctx, { from: today, to: today }),
     revenue(ctx, { from: m.start, to: m.end }),
     debtAging(ctx),
-    db.student.count({ where: { centerId: ctx.centerId, createdAt: { gte: fromISODate(today), lt: fromISODate(addDays(today, 1)) } } }),
-    db.enrollment.count({ where: { status: "LEFT", endDate: fromISODate(today), group: { centerId: ctx.centerId } } }),
-    db.lesson.count({ where: { date: fromISODate(today), status: "SCHEDULED", group: { centerId: ctx.centerId, ...(ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) } } }),
+    // same scope as revenue/debt: a branch-limited manager sees only their branches (as studentStats does)
+    db.student.count({ where: { centerId: ctx.centerId, createdAt: zonedRange(today, today), ...studentScope(ctx) } }),
+    db.enrollment.count({ where: { status: "LEFT", endDate: fromISODate(today), group: { centerId: ctx.centerId, ...branchWhere(ctx) } } }),
+    db.lesson.count({ where: { date: fromISODate(today), status: "SCHEDULED", group: { centerId: ctx.centerId, ...branchWhere(ctx) } } }),
   ]);
   const money = (n: number) => formatMoney(n, ctx.locale === "ru" ? "сум" : "so'm");
   return [
@@ -249,14 +274,17 @@ export async function ownerReport(userId: string, today: ISODate = todayISO()): 
 export async function dailyReport(today: ISODate = todayISO()): Promise<JobResult> {
   const users = await db.user.findMany({ where: { archivedAt: null, telegramChatId: { not: null }, role: { in: ["OWNER", "MANAGER"] } }, include: { center: { select: { settings: true } } } });
   let sent = 0;
+  let reportsFailed = 0;
   for (const u of users) {
-    if (!readSettings(u.center.settings).notify.dailyReport) continue;
-    const text = await ownerReport(u.id, today);
-    if (!text) continue;
-    sent += await db.$transaction(async (tx) => {
-      const chat = await staffChat(tx, u.id);
-      return chat ? enqueue(tx, u.centerId, [chat], () => text, `report:${u.id}:${today}`) : 0;
-    });
+    await isolated(`daily-report ${u.id}`, async () => {
+      if (!readSettings(u.center.settings).notify.dailyReport) return;
+      const text = await ownerReport(u.id, today);
+      if (!text) return;
+      sent += await db.$transaction(async (tx) => {
+        const chat = await staffChat(tx, u.id);
+        return chat ? enqueue(tx, u.centerId, [chat], () => text, `report:${u.id}:${today}`) : 0;
+      });
+    }, () => reportsFailed++);
   }
-  return { recipients: users.length, sent };
+  return { recipients: users.length, sent, reportsFailed };
 }

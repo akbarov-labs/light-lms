@@ -26,19 +26,21 @@ function likeAny(term: string): string {
  * SQL condition for a student row aliased `s` (TRUE for an empty query, FALSE when nothing can match).
  * Written as `s.id IN (… UNION …)`: each arm is a plain (I)LIKE on one table that its GIN index can
  * answer, and the planner sees a small id set — an OR across tables would make it scan every student.
+ * Every arm is limited to the center itself: a 1–2 letter term can't use a trigram index, and without
+ * the center filter inside the arm it would scan every center's students.
  */
-export function studentSearchSql(q: string | undefined, s = "s"): Prisma.Sql {
+export function studentSearchSql(q: string | undefined, centerId: string, s = "s"): Prisma.Sql {
   const p = parseSearch(q);
   if (!p) return Prisma.sql`TRUE`;
   const arms: Prisma.Sql[] = [];
   if (p.words.length) {
     const all = p.words.map((w) => Prisma.sql`(sn."firstName" ILIKE ${likeAny(w)} OR sn."lastName" ILIKE ${likeAny(w)})`);
-    arms.push(Prisma.sql`SELECT sn.id FROM "Student" sn WHERE ${Prisma.join(all, " AND ")}`);
+    arms.push(Prisma.sql`SELECT sn.id FROM "Student" sn WHERE sn."centerId" = ${centerId} AND ${Prisma.join(all, " AND ")}`);
   }
   if (p.digits) {
     const like = likeAny(p.digits);
-    arms.push(Prisma.sql`SELECT sp.id FROM "Student" sp WHERE sp.phone LIKE ${like}`);
-    arms.push(Prisma.sql`SELECT sf.id FROM "Guardian" sg JOIN "Student" sf ON sf."familyId" = sg."familyId" WHERE sg.phone LIKE ${like}`);
+    arms.push(Prisma.sql`SELECT sp.id FROM "Student" sp WHERE sp."centerId" = ${centerId} AND sp.phone LIKE ${like}`);
+    arms.push(Prisma.sql`SELECT sf.id FROM "Guardian" sg JOIN "Student" sf ON sf."familyId" = sg."familyId" WHERE sf."centerId" = ${centerId} AND sg.phone LIKE ${like}`);
   }
   if (!arms.length) return Prisma.sql`FALSE`;
   return Prisma.sql`${Prisma.raw(`"${s}"`)}.id IN (${Prisma.join(arms, " UNION ")})`;

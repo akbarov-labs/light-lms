@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { generateAllLessons } from "@/lib/services/lessons";
 import { billingSync, dailyReport, nightly, reminders, teacherReminders } from "./jobs";
-import { processNotifications } from "./notifications";
+import { processNotifications, telegramSender } from "./notifications";
 import { resetDemo } from "./demo-reset";
 import { lockKeyFor, withJobLock } from "./job-lock";
 import { todayISO } from "@/lib/dates";
@@ -25,7 +25,7 @@ const jobs: Record<string, () => Promise<unknown>> = {
     if (!token) return "TELEGRAM_BOT_TOKEN empty — nothing sent";
     const { Bot } = await import("grammy");
     const bot = new Bot(token);
-    return processNotifications((chatId, text) => bot.api.sendMessage(chatId, text, { parse_mode: "HTML" }).then(() => undefined));
+    return processNotifications(telegramSender(bot.api));
   },
 };
 // the queue claims rows itself (FOR UPDATE SKIP LOCKED), so it runs next to the worker without a job lock

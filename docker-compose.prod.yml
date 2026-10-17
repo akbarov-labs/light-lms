@@ -19,6 +19,7 @@ x-app-env: &app-env
   MAIN_SITE_URL: ${MAIN_SITE_URL:-}
   OPS_TELEGRAM_CHAT_ID: ${OPS_TELEGRAM_CHAT_ID:-}
   TZ: Asia/Tashkent
+  DB_POOL_TIMEOUT_MS: ${DB_POOL_TIMEOUT_MS:-15000}
 
 # worker liveness: the process touches this file every 30 s; older than 2 min = unhealthy
 x-worker-healthcheck: &worker-healthcheck
@@ -68,6 +69,7 @@ services:
       <<: *app-env
       # Caddy is the only way in and sets X-Forwarded-For, so the app may trust it (login limiting per IP)
       TRUST_PROXY: "true"
+      DB_POOL_MAX: ${DB_POOL_MAX:-20}
     init: true
     # not published: Caddy is the only way in (it also sets X-Forwarded-For for login limiting)
     expose:
@@ -90,6 +92,8 @@ services:
     environment:
       <<: *app-env
       BACKUP_CHECK_DIR: /backups
+      # billing runs 4 syncs at a time + the notification queue + the bot: 10 is plenty
+      DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-10}
     # read-only view of the backups, so the worker can alert when last night's dump is missing
     volumes:
       - ${BACKUP_DIR:-./backups}:/backups:ro

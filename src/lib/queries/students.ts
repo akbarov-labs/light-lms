@@ -17,7 +17,7 @@ export interface StudentFilters {
 
 /** WHERE for a student row aliased `s` in the center and the user's branch scope. */
 export function studentWhereSql(ctx: Ctx, f: StudentFilters): Prisma.Sql {
-  const parts: Prisma.Sql[] = [Prisma.sql`s."centerId" = ${ctx.centerId}`, studentScopeSql(ctx, "s"), studentSearchSql(f.q, "s")];
+  const parts: Prisma.Sql[] = [Prisma.sql`s."centerId" = ${ctx.centerId}`, studentScopeSql(ctx, "s"), studentSearchSql(f.q, ctx.centerId, "s")];
   if (f.status) parts.push(Prisma.sql`s.status = ${f.status}::"StudentStatus"`);
   if (f.groupId) parts.push(Prisma.sql`EXISTS (SELECT 1 FROM "Enrollment" fe WHERE fe."studentId" = s.id AND fe."groupId" = ${f.groupId} AND fe."endDate" IS NULL)`);
   // one pass over the (centerId, familyId) INCLUDE (amount) index, hashed — not an id list from the app

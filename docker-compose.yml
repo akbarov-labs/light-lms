@@ -11,6 +11,7 @@ x-app-env: &app-env
   MAIN_SITE_URL: ${MAIN_SITE_URL:-}
   OPS_TELEGRAM_CHAT_ID: ${OPS_TELEGRAM_CHAT_ID:-}
   TZ: ${TZ:-Asia/Tashkent}
+  DB_POOL_TIMEOUT_MS: ${DB_POOL_TIMEOUT_MS:-15000}
 
 # worker liveness: the process touches this file every 30 s; older than 2 min = unhealthy
 x-worker-healthcheck: &worker-healthcheck
@@ -58,6 +59,7 @@ services:
       <<: *app-env
       # true only behind a reverse proxy that sets X-Forwarded-For (otherwise clients could fake their IP)
       TRUST_PROXY: ${TRUST_PROXY:-false}
+      DB_POOL_MAX: ${DB_POOL_MAX:-20}
     init: true
     # localhost only by default; WEB_BIND=0.0.0.0 in .env to open it to the LAN (e.g. testing on a phone)
     ports:
@@ -76,7 +78,10 @@ services:
     build:
       context: .
       target: worker
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # billing runs 4 syncs at a time + the notification queue + the bot: 10 is plenty
+      DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-10}
     init: true
     # SIGTERM: finish the message in flight, stop the bot, up to 10 s
     stop_grace_period: 20s

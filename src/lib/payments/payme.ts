@@ -40,12 +40,21 @@ export interface PaymeRepo {
   centerByKey(key: string): Promise<PaymeCenter | null>;
   family(familyId: string): Promise<{ id: string; centerId: string } | null>;
   findTx(paymeId: string): Promise<PaymeTx | null>;
+  /** Throws DuplicatePaymeTx when a transaction with this paymeId already exists (a concurrent create won). */
   createTx(tx: Omit<PaymeTx, "id">): Promise<PaymeTx>;
   /** Post the PAYMENT ledger entry and mark the transaction performed — atomically. */
   perform(tx: PaymeTx, now: number): Promise<PaymeTx>;
   /** Cancel; for a performed transaction also post the REVERSAL. Atomic. */
   cancel(tx: PaymeTx, reason: number, now: number): Promise<PaymeTx>;
+  /** Transactions whose Payme time (paymeTime, else createTime) is in [from, to], ordered by that time. */
   statement(centerId: string, from: number, to: number): Promise<PaymeTx[]>;
+}
+
+/** createTx lost a race: another CreateTransaction with the same Payme id inserted first. */
+export class DuplicatePaymeTx extends Error {
+  constructor(public paymeId: string) {
+    super(`Payme transaction ${paymeId} already exists`);
+  }
 }
 
 type Msg = { ru: string; uz: string; en: string };
@@ -156,6 +165,17 @@ export function fiscalDetail(fiscal: PaymeFiscalItem, amountTiyin: number) {
   };
 }
 
+/** CreateTransaction for an id we already have: same answer while it is open, errors otherwise. */
+async function createAgain(repo: PaymeRepo, existing: PaymeTx, centerId: string, now: number) {
+  if (existing.centerId !== centerId) throw new RpcFail(E.NOT_FOUND, M.notFound, "id");
+  if (existing.state !== 1) throw new RpcFail(E.CANT_PERFORM, M.cantPerform, "state");
+  if (now - existing.createTime > TIMEOUT_MS) {
+    await repo.cancel(existing, 4, now);
+    throw new RpcFail(E.CANT_PERFORM, M.cantPerform, "timeout");
+  }
+  return { create_time: existing.createTime, transaction: existing.id, state: existing.state };
+}
+
 async function dispatch(repo: PaymeRepo, center: PaymeCenter, method: string, params: Record<string, unknown>, now: number): Promise<unknown> {
   const centerId = center.id;
   switch (method) {
@@ -168,20 +188,21 @@ async function dispatch(repo: PaymeRepo, center: PaymeCenter, method: string, pa
       const time = num(params.time);
       if (!id || time === null) throw new RpcFail(E.INVALID, M.invalid);
       const existing = await repo.findTx(id);
-      if (existing) {
-        if (existing.centerId !== centerId) throw new RpcFail(E.NOT_FOUND, M.notFound, "id");
-        if (existing.state !== 1) throw new RpcFail(E.CANT_PERFORM, M.cantPerform, "state");
-        if (now - existing.createTime > TIMEOUT_MS) {
-          await repo.cancel(existing, 4, now);
-          throw new RpcFail(E.CANT_PERFORM, M.cantPerform, "timeout");
-        }
-        return { create_time: existing.createTime, transaction: existing.id, state: existing.state };
-      }
+      if (existing) return createAgain(repo, existing, centerId, now);
       // no "another transaction in progress" check: the family wallet accepts parallel payments;
       // each transaction still times out on its own after 12 h (above, and in PerformTransaction)
       const { family, amount } = await checkAccount(repo, centerId, params);
-      const tx = await repo.createTx({ paymeId: id, centerId, familyId: family.id, amountTiyin: amount, state: 1, createTime: now, paymeTime: time, performTime: null, cancelTime: null, reason: null });
-      return { create_time: tx.createTime, transaction: tx.id, state: tx.state };
+      try {
+        const tx = await repo.createTx({ paymeId: id, centerId, familyId: family.id, amountTiyin: amount, state: 1, createTime: now, paymeTime: time, performTime: null, cancelTime: null, reason: null });
+        return { create_time: tx.createTime, transaction: tx.id, state: tx.state };
+      } catch (e) {
+        // Payme retried while the first call was still running and the other call inserted first:
+        // answer like the idempotent path instead of a system error
+        if (!(e instanceof DuplicatePaymeTx)) throw e;
+        const winner = await repo.findTx(id);
+        if (!winner) throw e;
+        return createAgain(repo, winner, centerId, now);
+      }
     }
     case "PerformTransaction": {
       const tx = await txOf(repo, centerId, params);

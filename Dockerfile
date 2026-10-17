@@ -15,9 +15,10 @@ COPY prisma/schema.prisma ./prisma/schema.prisma
 RUN npm ci --no-audit --no-fund
 
 # Full source + generated Prisma client, shared by the build, worker-build and tools stages.
+# No second `prisma generate`: the deps stage already generated from the same schema.prisma, and
+# .dockerignore excludes src/generated, so `COPY . .` adds the source next to that client without touching it.
 FROM deps AS source
 COPY . .
-RUN npx prisma generate
 
 FROM source AS build
 RUN npm run build

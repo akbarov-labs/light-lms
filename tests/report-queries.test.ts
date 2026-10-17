@@ -218,6 +218,32 @@ describe("revenue in SQL (P2, B12)", () => {
     expect(await revenueByMonth(ctx, 6)).toEqual(expected);
     expect(expected[5].total).toBeGreaterThanOrEqual(11_000);
   });
+
+  it("a branch scope counts only money attributed to its branches; branch totals add up to the center (M2)", async () => {
+    // G1 and G2 are sibling families with students in both RA and RB: each must count once, in one branch
+    const march = { from: "2026-03-01", to: "2026-03-31" };
+    const center = await revenue(await ctxOf(R.owner), march);
+    const onRA = await revenue(await ctxOf(R.owner, R.RA), march);
+    const onRB = await revenue(await ctxOf(R.owner, R.RB), march);
+    expect(onRA.total).toBe(120_000);
+    expect(Object.fromEntries(onRA.byBranch)).toEqual({ [R.RA]: 120_000 });
+    expect(onRB.total).toBe(80_000);
+    expect(Object.fromEntries(onRB.byBranch)).toEqual({ [R.RB]: 80_000 });
+    expect(onRA.total + onRB.total + (center.byBranch.get("-") ?? 0)).toBe(center.total);
+    // a branch-limited user sees the same numbers as the owner's switcher
+    const adminRB = await staff(R.center, "998955500013", "ADMIN", [R.RB]);
+    expect((await revenue(await ctxOf(adminRB.id), march)).total).toBe(80_000);
+
+    const now = today.slice(0, 7);
+    const months = (branch: string) =>
+      Array.from({ length: 6 }, (_, i) => {
+        const month = shiftMonth(now, i - 5);
+        const { start, end } = monthRange(month);
+        return { month, total: rMoney.filter((m) => m.counts && m.branch === branch && m.date >= start && m.date <= end).reduce((s, m) => s + m.amount, 0) };
+      });
+    expect(await revenueByMonth(await ctxOf(R.owner, R.RA), 6)).toEqual(months("RA"));
+    expect(await revenueByMonth(await ctxOf(R.owner, R.RB), 6)).toEqual(months("RB"));
+  });
 });
 
 describe("Tashkent month boundaries (B13)", () => {

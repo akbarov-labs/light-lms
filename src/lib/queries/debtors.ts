@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import type { Ctx } from "@/lib/ctx-core";
 import { diffDays, toISODate, todayISO } from "@/lib/dates";
 import { allocate, type AllocEntry, type Allocation } from "@/lib/billing/allocation";
+import { parseMoney } from "@/lib/money";
 import { familyScopeSql } from "./scope-sql";
 
 export interface DebtorFilters {
@@ -42,9 +43,18 @@ export const ALLOC_BATCH = 500;
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
+/**
+ * The "min debt" filter in so'm, or 0 = no filter. Parsed like every money input (parseMoney): stripping
+ * non-digits read "150 000,50" as 15 000 050 and "1,5 mln" as 15. Unparseable or ≤ 0 → no filter.
+ */
+export function debtMinimum(raw: unknown): number {
+  const n = parseMoney(typeof raw === "string" ? raw : "");
+  return n !== null && n > 0 ? n : 0;
+}
+
 /** Debtor families (balance < 0) of the center in the user's branch scope, with optional filters. */
 function debtorBaseSql(ctx: Ctx, f: DebtorFilters = {}): Prisma.Sql {
-  const min = Number(String(f.min ?? "").replace(/\D/g, "")) || 0;
+  const min = debtMinimum(f.min);
   const groupId = str(f.groupId);
   const teacherId = str(f.teacherId);
   const groupTeacher =
