@@ -117,6 +117,7 @@ enum Plan {
 
 enum NotificationStatus {
   PENDING
+  SENDING
   SENT
   FAILED
 }
@@ -133,7 +134,8 @@ model Center {
   phone              String?
   settings           Json     @default("{}")
   paymeMerchantId    String?
-  paymeKey           String?
+  /// unique: the Payme key identifies the center on /api/payme
+  paymeKey           String?  @unique
   paymeTestMode      Boolean  @default(true)
   receiptSeq         Int      @default(0)
   groupSeq           Int      @default(0)
@@ -216,6 +218,8 @@ model User {
   /// signup consent to the public offer and privacy policy: when, and which text version (BRAND.legal.version)
   termsAcceptedAt    DateTime?
   termsVersion       String?
+  /// platform (super) admin: granted only by an operator (scripts/platform-admin.ts), never by phone
+  platformAdmin      Boolean   @default(false)
 
   branches       UserBranch[]
   passwordResets PasswordReset[]
@@ -445,6 +449,7 @@ model Enrollment {
 
   @@index([studentId])
   @@index([groupId])
+  @@index([endDate])
 }
 
 model EnrollmentFreeze {
@@ -513,6 +518,7 @@ model LedgerEntry {
   @@index([centerId, date])
   @@index([centerId, createdAt])
   @@index([studentId])
+  @@index([lessonId])
 }
 
 model SalaryRule {
@@ -681,10 +687,15 @@ model Notification {
   status    NotificationStatus @default(PENDING)
   error     String?
   attempts  Int                @default(0)
+  /// not sent before this moment (backoff after an error or Telegram 429)
+  nextAttemptAt DateTime       @default(now())
+  /// set while a sender holds the row (status SENDING); stale claims are taken back
+  lockedAt  DateTime?
   createdAt DateTime           @default(now())
   sentAt    DateTime?
 
   @@index([status, createdAt])
+  @@index([status, nextAttemptAt])
 }
 
 /// Login and reset-code attempts for rate limiting (key = "login:phone:998…", "login:ip:…", "reset:…").

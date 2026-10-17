@@ -1,9 +1,17 @@
 // Uzbek (Latin) — default UI language. Every key here must exist in ru.ts (enforced by types).
 import { BRAND } from "@/config/brand";
 import { saasUz } from "./saas";
+import { moneyUz } from "./extra-money";
+import { securityUz } from "./extra-security";
+import { workerUz } from "./extra-worker";
+import { uiUz } from "./extra-ui";
 
 export const uz = {
   ...saasUz,
+  ...moneyUz,
+  ...securityUz,
+  ...workerUz,
+  ...uiUz,
   "app.name": BRAND.name as string,
   "common.save": "Saqlash",
   "common.cancel": "Bekor qilish",
