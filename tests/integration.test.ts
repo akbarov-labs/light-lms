@@ -35,9 +35,12 @@ beforeAll(async () => {
 
 describe("billing on the database", () => {
   it("the seeded ledger already equals what the engine expects (nothing left to post)", async () => {
+    // the job syncs every center; other test files may have left unsynced enrollments elsewhere,
+    // so "nothing to post" is checked on the demo center only
+    const before = await db.ledgerEntry.count({ where: { centerId } });
     const res = await billingSync(today);
     expect(res.syncFailed).toBe(0);
-    expect(res.ledgerEntries).toBe(0);
+    expect(await db.ledgerEntry.count({ where: { centerId } })).toBe(before);
   });
 
   it("running sync again and again posts nothing", async () => {
@@ -115,7 +118,7 @@ describe("payments", () => {
 describe("salary", () => {
   it("last month is locked and paid, with a salary expense", async () => {
     const lastMonth = shiftMonth(today.slice(0, 7), -1);
-    const slips = await db.payslip.findMany({ where: { month: lastMonth } });
+    const slips = await db.payslip.findMany({ where: { month: lastMonth, teacher: { centerId } } });
     expect(slips.length).toBe(4);
     for (const s of slips) {
       expect(s.status).toBe("PAID");
