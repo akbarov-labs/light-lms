@@ -5,7 +5,7 @@ import { audit } from "@/lib/audit";
 import { assertFamilyAccess, canAccessBranch, UserError, type Ctx } from "@/lib/ctx-core";
 import { parseCsv } from "@/lib/csv-parse";
 import { normalizePhone } from "@/lib/phone";
-import { parseMoney } from "@/lib/money";
+import { formatMoney, MAX_AMOUNT, parseMoney } from "@/lib/money";
 import { fromISODate, monthRange, shiftMonth, todayISO, type ISODate } from "@/lib/dates";
 import { makeT } from "@/lib/i18n";
 import { centerUsage } from "@/lib/services/plan-usage";
@@ -14,6 +14,9 @@ import { debtSinceColumn, parseImportDate } from "./import-parse";
 
 /** Marker of an opening balance on LedgerEntry.period (no billingKey: it is not an engine unit). */
 export const OPENING_PERIOD = "opening";
+
+/** Student.source of imported rows. */
+const IMPORT_SOURCE = "Import";
 
 /** Same late-joiner rule as a manual enrollment (audit B8), reported as a row error. */
 async function billableOrRowError(tx: Tx, enrollmentId: string, t: ReturnType<typeof makeT>): Promise<void> {
@@ -32,17 +35,37 @@ export async function familyHasOpening(tx: Tx, familyId: string): Promise<boolea
   return !!e;
 }
 
+const nameWhere = (firstName: string, lastName: string) => ({
+  firstName: { equals: firstName, mode: "insensitive" as const },
+  lastName: { equals: lastName, mode: "insensitive" as const },
+});
+
 /**
  * The student this row describes, if already in the center: same first + last name (any case) and
- * the same phone (student's own, or a guardian's of their family). A row without any phone matches
- * a phoneless student of a family without guardians — what an earlier import of it created.
+ * the same phone (student's own, or a guardian's of their family).
+ * Without any phone a name alone is no identity (two "Ali Valiyev" are common), so only a true
+ * re-import of the same row matches — a phoneless student of a guardian-less family who still has
+ * an open enrollment in the row's group; for a row without a group, a phoneless imported student
+ * with no enrollment whose opening balance is the row's. Anything else becomes a new student.
  */
-async function findExisting(tx: Tx, centerId: string, firstName: string, lastName: string, phones: string[]) {
-  const name = { firstName: { equals: firstName, mode: "insensitive" as const }, lastName: { equals: lastName, mode: "insensitive" as const } };
-  const where = phones.length
-    ? { centerId, ...name, OR: [{ phone: { in: phones } }, { family: { guardians: { some: { phone: { in: phones } } } } }] }
-    : { centerId, ...name, phone: null, family: { guardians: { none: {} } } };
-  return tx.student.findFirst({ where, orderBy: { createdAt: "asc" }, select: { id: true, familyId: true } });
+async function findExisting(tx: Tx, centerId: string, row: { firstName: string; lastName: string; phones: string[]; groupId: string | null; balance: number }) {
+  const name = nameWhere(row.firstName, row.lastName);
+  const select = { id: true, familyId: true } as const;
+  if (row.phones.length) {
+    const where = { centerId, ...name, OR: [{ phone: { in: row.phones } }, { family: { guardians: { some: { phone: { in: row.phones } } } } }] };
+    return tx.student.findFirst({ where, orderBy: { createdAt: "asc" }, select });
+  }
+  const phoneless = { centerId, ...name, phone: null, family: { guardians: { none: {} } } };
+  if (row.groupId) {
+    return tx.student.findFirst({ where: { ...phoneless, enrollments: { some: { groupId: row.groupId, endDate: null } } }, orderBy: { createdAt: "asc" }, select });
+  }
+  const candidates = await tx.student.findMany({
+    where: { ...phoneless, source: IMPORT_SOURCE, enrollments: { none: {} } },
+    orderBy: { createdAt: "asc" },
+    select: { ...select, ledger: { where: { period: OPENING_PERIOD }, select: { amount: true } } },
+  });
+  const same = candidates.find((c) => c.ledger.reduce((s, x) => s + x.amount, 0) === row.balance);
+  return same ? { id: same.id, familyId: same.familyId } : null;
 }
 
 export interface ImportResult {
@@ -50,6 +73,8 @@ export interface ImportResult {
   created: number;
   existing: number;
   errors: string[];
+  /** Rows imported anyway that may duplicate a student (same name, no phone to tell them apart). */
+  warnings: string[];
 }
 
 export async function importStudents(ctx: Ctx, text: string, dry: boolean): Promise<ImportResult> {
@@ -63,11 +88,12 @@ export async function importStudents(ctx: Ctx, text: string, dry: boolean): Prom
   const today = todayISO();
   const nextMonth = monthRange(shiftMonth(today.slice(0, 7), 1)).start;
   const errors: string[] = [];
+  const warnings: string[] = [];
   const existingRows: string[] = [];
   let created = 0;
   // plan limit: each imported row with a group becomes a new active student
   let seats = (await centerUsage(ctx.centerId)).remaining;
-  const seenInDryRun = new Set<string>();
+  const seenRows = new Set<string>();
 
   for (const [i, r] of rows.entries()) {
     const n = i + 1;
@@ -87,6 +113,11 @@ export async function importStudents(ctx: Ctx, text: string, dry: boolean): Prom
     const balance = balanceRaw ? parseMoney(balanceRaw) : 0;
     if (balance === null) {
       errors.push(t("import.row", { n, msg: t("import.badBalance") }));
+      continue;
+    }
+    // same ceiling as every money form: a pasted account number must not become a balance
+    if (Math.abs(balance) > MAX_AMOUNT) {
+      errors.push(t("import.row", { n, msg: t("money.import.balanceTooLarge", { max: formatMoney(MAX_AMOUNT) }) }));
       continue;
     }
     if (balance !== 0 && !ctx.can("payments.refund")) {
@@ -111,11 +142,16 @@ export async function importStudents(ctx: Ctx, text: string, dry: boolean): Prom
     const parent = normalizePhone(parentRaw) ?? phone;
     const phones = [...new Set([phone, parent].filter((p): p is string => !!p))];
 
-    const known = await findExisting(db, ctx.centerId, firstName, lastName, phones);
-    const dupKey = `${firstName.toLowerCase()}|${lastName.toLowerCase()}|${phones.join(",")}`;
+    const identity = { firstName, lastName, phones, groupId: group?.id ?? null, balance };
+    const known = await findExisting(db, ctx.centerId, identity);
+    // without a phone the row's group and balance are part of what makes it "the same row"
+    const dupKey = `${firstName.toLowerCase()}|${lastName.toLowerCase()}|${phones.join(",")}${phones.length ? "" : `|${code}|${balance}`}`;
+    const again = seenRows.has(dupKey);
+    seenRows.add(dupKey);
+    if (!phones.length && !known && !again && (await db.student.findFirst({ where: { centerId: ctx.centerId, ...nameWhere(firstName, lastName) }, select: { id: true } }))) {
+      warnings.push(t("import.row", { n, msg: t("money.import.possibleDuplicate", { name: `${lastName} ${firstName}` }) }));
+    }
     if (dry) {
-      const again = seenInDryRun.has(dupKey);
-      seenInDryRun.add(dupKey);
       if (known || again) {
         const openHere = known && group ? await db.enrollment.findFirst({ where: { studentId: known.id, groupId: group.id, endDate: null }, select: { id: true } }) : null;
         if (again || !group || openHere) {
@@ -141,7 +177,7 @@ export async function importStudents(ctx: Ctx, text: string, dry: boolean): Prom
     try {
       const outcome = await db.$transaction(async (tx) => {
         // look again inside the transaction: the row above may have created this student
-        const existing = await findExisting(tx, ctx.centerId, firstName, lastName, phones);
+        const existing = await findExisting(tx, ctx.centerId, identity);
         if (existing) {
           await assertFamilyAccess(ctx, existing.familyId);
           let enrolled = false;
@@ -173,7 +209,7 @@ export async function importStudents(ctx: Ctx, text: string, dry: boolean): Prom
           familyId = f.id;
           if (parent) await tx.guardian.create({ data: { familyId, name: parent === phone ? `${firstName} ${lastName}` : `${lastName} (ota-ona)`, phone: parent, isPrimary: true, relation: parent === phone ? "self" : null } });
         }
-        const s = await tx.student.create({ data: { centerId: ctx.centerId, familyId, branchId: group?.branchId ?? ctx.activeBranchId ?? ctx.branchIds?.[0] ?? null, firstName, lastName, phone, source: "Import" } });
+        const s = await tx.student.create({ data: { centerId: ctx.centerId, familyId, branchId: group?.branchId ?? ctx.activeBranchId ?? ctx.branchIds?.[0] ?? null, firstName, lastName, phone, source: IMPORT_SOURCE } });
         if (group) {
           const en = await tx.enrollment.create({ data: { studentId: s.id, groupId: group.id, startDate: fromISODate(today), activatedAt: fromISODate(nextMonth), status: "ACTIVE" } });
           await billableOrRowError(tx, en.id, t);
@@ -208,6 +244,6 @@ export async function importStudents(ctx: Ctx, text: string, dry: boolean): Prom
     }
   }
   const summary = dry ? t("import.checked", { ok: created, errors: errors.length }) : t("import.result", { rows: rows.length, created, errors: errors.length });
-  const lines = [summary, ...(existingRows.length ? [t("money.import.skipped", { n: existingRows.length })] : []), ...errors.slice(0, 30), ...existingRows.slice(0, 30)];
-  return { message: lines.join("\n"), created, existing: existingRows.length, errors };
+  const lines = [summary, ...(existingRows.length ? [t("money.import.skipped", { n: existingRows.length })] : []), ...errors.slice(0, 30), ...warnings.slice(0, 30), ...existingRows.slice(0, 30)];
+  return { message: lines.join("\n"), created, existing: existingRows.length, errors, warnings };
 }
