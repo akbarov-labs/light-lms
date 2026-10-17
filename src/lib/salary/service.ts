@@ -2,7 +2,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { fromISODate, minDate, monthRange, toISODate, todayISO } from "@/lib/dates";
+import { fromISODate, isMonth, minDate, monthRange, toISODate, todayISO } from "@/lib/dates";
 import { loadGroupInputs } from "@/lib/billing/sync";
 import { readSettings } from "@/lib/settings";
 import { allocationsFor } from "@/lib/services/wallet";
@@ -13,6 +13,11 @@ import { collectLessons, computeSalary, type HeldLesson, type SalaryResult, type
 
 export const SALARY_CATEGORY = "Oylik / Salary";
 
+/** Every salary entry point takes "YYYY-MM" (MM 01–12): "2026-13" must not roll over into next January. */
+export function assertMonth(month: string): void {
+  if (!isMonth(month)) throw new UserError("error.date");
+}
+
 export async function ruleFor(teacherId: string, month: string) {
   return db.salaryRule.findFirst({
     where: { teacherId, validFrom: { lte: fromISODate(monthRange(month).start) } },
@@ -21,6 +26,7 @@ export async function ruleFor(teacherId: string, month: string) {
 }
 
 export async function liveSalary(centerId: string, teacherId: string, month: string): Promise<{ result: SalaryResult; lessons: HeldLesson[] }> {
+  assertMonth(month);
   const { start, end } = monthRange(month);
   const [center, teacher, rule, rows, adjustments] = await Promise.all([
     db.center.findUniqueOrThrow({ where: { id: centerId }, select: { settings: true } }),
@@ -68,6 +74,7 @@ async function assertTeacher(actor: Actor, teacherId: string) {
 }
 
 export async function lockPayslip(actor: Actor, teacherId: string, month: string) {
+  assertMonth(month);
   await assertTeacher(actor, teacherId);
   const { result } = await liveSalary(actor.centerId, teacherId, month);
   await db.$transaction(async (tx) => {
@@ -80,6 +87,7 @@ export async function lockPayslip(actor: Actor, teacherId: string, month: string
 }
 
 export async function unlockPayslip(actor: Actor, teacherId: string, month: string) {
+  assertMonth(month);
   await assertTeacher(actor, teacherId);
   await db.$transaction(async (tx) => {
     const p = await tx.payslip.findUnique({ where: { teacherId_month: { teacherId, month } } });
@@ -91,6 +99,7 @@ export async function unlockPayslip(actor: Actor, teacherId: string, month: stri
 
 /** Mark a locked payslip paid and book it as an expense so profit is correct. */
 export async function markPayslipPaid(actor: Actor, teacherId: string, month: string) {
+  assertMonth(month);
   const teacher = await assertTeacher(actor, teacherId);
   await db.$transaction(async (tx) => {
     const p = await tx.payslip.findUnique({ where: { teacherId_month: { teacherId, month } } });
@@ -118,6 +127,7 @@ export async function markPayslipPaid(actor: Actor, teacherId: string, month: st
 }
 
 export async function addAdjustment(actor: Actor, teacherId: string, month: string, amount: number, reason: string) {
+  assertMonth(month);
   await assertTeacher(actor, teacherId);
   const p = await db.payslip.findUnique({ where: { teacherId_month: { teacherId, month } } });
   if (p && p.status !== "DRAFT") throw new UserError("error.locked");

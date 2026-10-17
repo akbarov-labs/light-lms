@@ -1,6 +1,6 @@
 // FormData → typed values with zod. Empty strings become undefined.
 import { z } from "zod";
-import { isISODate } from "./dates";
+import { isISODate, isMonth } from "./dates";
 import { parseMoney } from "./money";
 import { normalizePhone } from "./phone";
 
@@ -29,6 +29,8 @@ export const zId = z.preprocess(empty, z.string().min(1).max(64));
 export const zOptId = z.preprocess(empty, z.string().min(1).max(64).optional());
 export const zDate = z.preprocess(empty, z.string().refine(isISODate, "date"));
 export const zOptDate = z.preprocess(empty, z.string().refine(isISODate, "date").optional());
+/** "YYYY-MM" (MM 01–12, year 2000–2100): salary month, adjustments, payslips. */
+export const zMonth = z.preprocess(empty, z.string().refine(isMonth, "month"));
 export const zTime = z.preprocess(empty, z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "HH:mm"));
 export const zMoney = z.preprocess((v) => parseMoney(empty(v)), z.number().int().min(0).max(1_000_000_000));
 export const zOptMoney = z.preprocess((v) => (empty(v) === undefined ? undefined : parseMoney(v)), z.number().int().min(0).max(1_000_000_000).optional());

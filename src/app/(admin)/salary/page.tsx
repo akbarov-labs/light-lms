@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
-import { shiftMonth, todayISO } from "@/lib/dates";
+import { monthParam, shiftMonth } from "@/lib/dates";
 import { monthLabel } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { liveSalary, ruleFor } from "@/lib/salary/service";
@@ -12,7 +12,7 @@ export default async function SalaryPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const ctx = await requireStaff("finance.view");
   const { t } = ctx;
-  const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : todayISO().slice(0, 7);
+  const month = monthParam(sp.month);
   const teachers = await db.user.findMany({
     where: { centerId: ctx.centerId, OR: [{ isTeacher: true }, { role: "TEACHER" }], ...(ctx.branchIds ? { branches: { some: { branchId: { in: ctx.branchIds } } } } : {}) },
     orderBy: [{ archivedAt: "asc" }, { name: "asc" }],

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { formObject, zBool, zDate, zId, zInt, zMoney, zOptDate, zOptId, zOptInt, zOptMoney, zOptPhone, zOptStr, zPhone, zStr, zTags, zTime } from "./forms";
+import { formObject, zBool, zDate, zId, zInt, zMoney, zOptDate, zOptId, zOptInt, zOptMoney, zOptPhone, zOptStr, zPhone, zStr, zMonth, zTags, zTime } from "./forms";
 
 const schema = z.object({
   name: zStr,
@@ -54,5 +54,18 @@ describe("form schemas", () => {
     const r = schema.safeParse(formObject(fd({ ...required, groupId: "" })));
     expect(r.success).toBe(false);
     expect(r.success ? [] : r.error.issues.map((i) => i.path.join("."))).toEqual(["groupId"]);
+  });
+
+  it("dates that do not exist are refused, not rolled over to the next month", () => {
+    for (const bad of ["2026-02-31", "2026-13-01", "2026-04-31"]) {
+      expect(zDate.safeParse(bad).success, bad).toBe(false);
+      expect(zOptDate.safeParse(bad).success, bad).toBe(false);
+    }
+    expect(zDate.safeParse("2028-02-29").success).toBe(true);
+    expect(zOptDate.safeParse("").success).toBe(true);
+  });
+  it("zMonth accepts only real months", () => {
+    expect(zMonth.safeParse("2026-10").success).toBe(true);
+    for (const bad of ["2026-13", "2026-00", "26-10", "", "1999-01"]) expect(zMonth.safeParse(bad).success, bad).toBe(false);
   });
 });
