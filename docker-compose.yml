@@ -6,16 +6,23 @@ x-app-env: &app-env
   APP_URL: ${APP_URL:-http://localhost:3000}
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
   SEED_DEMO: ${SEED_DEMO:-true}
-  PLATFORM_ADMIN_PHONES: ${PLATFORM_ADMIN_PHONES:-}
   DEMO_MODE: ${DEMO_MODE:-false}
   DEMO_URL: ${DEMO_URL:-}
   MAIN_SITE_URL: ${MAIN_SITE_URL:-}
   OPS_TELEGRAM_CHAT_ID: ${OPS_TELEGRAM_CHAT_ID:-}
   TZ: ${TZ:-Asia/Tashkent}
 
+# worker liveness: the process touches this file every 30 s; older than 2 min = unhealthy
+x-worker-healthcheck: &worker-healthcheck
+  test: ["CMD", "node", "-e", "process.exit(Date.now() - require('fs').statSync('/tmp/worker-heartbeat').mtimeMs < 120000 ? 0 : 1)"]
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 60s
+
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:16.14-alpine
     environment:
       POSTGRES_USER: lms
       POSTGRES_PASSWORD: lms
@@ -47,9 +54,14 @@ services:
     build:
       context: .
       target: web
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # true only behind a reverse proxy that sets X-Forwarded-For (otherwise clients could fake their IP)
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+    init: true
+    # localhost only by default; WEB_BIND=0.0.0.0 in .env to open it to the LAN (e.g. testing on a phone)
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -63,9 +75,12 @@ services:
   worker:
     build:
       context: .
-      target: tools
+      target: worker
     environment: *app-env
-    command: ["npx", "tsx", "src/worker/index.ts"]
+    init: true
+    # SIGTERM: finish the message in flight, stop the bot, up to 10 s
+    stop_grace_period: 20s
+    healthcheck: *worker-healthcheck
     depends_on:
       migrate:
         condition: service_completed_successfully
