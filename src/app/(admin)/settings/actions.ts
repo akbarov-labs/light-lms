@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { runAction, type ActionState } from "@/lib/action";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
@@ -11,7 +11,7 @@ import { formList, formObject, zBool, zDate, zId, zOptId, zOptInt, zOptStr, zPho
 import { UserError } from "@/lib/user-error";
 import { assertNotDemo } from "@/lib/demo-guard";
 import { PERMS, type Perm, type RoleName } from "@/lib/perms";
-import { readSettings } from "@/lib/settings";
+import { paymeFiscalSchema, readSettings, type PaymeFiscal } from "@/lib/settings";
 import { fromISODate } from "@/lib/dates";
 import { generateLessons } from "@/lib/services/lessons";
 import { syncGroup } from "@/lib/billing/sync";
@@ -41,7 +41,19 @@ const centerSchema = z.object({
   paymeMerchantId: zOptStr,
   paymeKey: zOptStr,
   paymeTestMode: zBool,
+  fiscalIkpu: zOptStr,
+  fiscalPackageCode: zOptStr,
+  fiscalVat: zOptStr,
 });
+
+/** All three fiscal fields empty → no fiscal receipt; otherwise they must form a valid PaymeFiscal. */
+function parseFiscal(f: { fiscalIkpu?: string; fiscalPackageCode?: string; fiscalVat?: string }): PaymeFiscal | null {
+  if (!f.fiscalIkpu && !f.fiscalPackageCode && !f.fiscalVat) return null;
+  const vat = f.fiscalVat === undefined ? NaN : Number(f.fiscalVat.replace(",", "."));
+  const r = paymeFiscalSchema.safeParse({ ikpu: (f.fiscalIkpu ?? "").replace(/\s/g, ""), packageCode: f.fiscalPackageCode ?? "", vatPercent: vat });
+  if (!r.success) throw new UserError("settings.paymeFiscalInvalid");
+  return r.data;
+}
 
 const NOTIFY = ["payment", "reminder", "debt", "absence", "trial", "teacherReminder", "dailyReport"] as const;
 
@@ -52,6 +64,10 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
     const clash = await db.center.findFirst({ where: { slug: f.slug, id: { not: ctx.centerId } } });
     if (clash) throw new UserError("settings.slugTaken");
     const before = await db.center.findUniqueOrThrow({ where: { id: ctx.centerId } });
+    // one Payme cashbox key = one center (unique index): Payme requests are routed by the key
+    const paymeKey = f.paymeKey === "-" ? null : (f.paymeKey ?? before.paymeKey);
+    if (paymeKey && (await db.center.findFirst({ where: { paymeKey, id: { not: ctx.centerId } }, select: { id: true } }))) throw new UserError("settings.paymeKeyTaken");
+    const paymeFiscal = parseFiscal(f);
     const old = readSettings(before.settings);
     const settings = {
       ...old,
@@ -68,34 +84,41 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
         return list.length ? [...new Set(list)] : old.expenseCategories;
       })(),
       notify: Object.fromEntries(NOTIFY.map((k) => [k, fd.get(`notify.${k}`) === "on"])) as typeof old.notify,
+      paymeFiscal,
     };
-    await db.$transaction(async (tx) => {
-      const after = await tx.center.update({
-        where: { id: ctx.centerId },
-        data: {
-          name: f.name,
-          slug: f.slug,
-          accentColor: f.accentColor,
-          logoUrl: f.logoUrl ?? null,
-          phone: f.phone ?? null,
-          locale: f.locale,
-          settings: settings as unknown as Prisma.InputJsonValue,
-          paymeMerchantId: f.paymeMerchantId ?? null,
-          // keep the stored key when the field is left empty (it is never shown back)
-          paymeKey: f.paymeKey === "-" ? null : (f.paymeKey ?? before.paymeKey),
-          paymeTestMode: f.paymeTestMode,
-        },
+    await db
+      .$transaction(async (tx) => {
+        const after = await tx.center.update({
+          where: { id: ctx.centerId },
+          data: {
+            name: f.name,
+            slug: f.slug,
+            accentColor: f.accentColor,
+            logoUrl: f.logoUrl ?? null,
+            phone: f.phone ?? null,
+            locale: f.locale,
+            settings: settings as unknown as Prisma.InputJsonValue,
+            paymeMerchantId: f.paymeMerchantId ?? null,
+            // keep the stored key when the field is left empty (it is never shown back)
+            paymeKey,
+            paymeTestMode: f.paymeTestMode,
+          },
+        });
+        await audit(tx, {
+          centerId: ctx.centerId,
+          userId: ctx.userId,
+          entity: "Center",
+          entityId: ctx.centerId,
+          action: "settings",
+          before: { ...before, paymeKey: before.paymeKey ? "***" : null },
+          after: { ...after, paymeKey: after.paymeKey ? "***" : null },
+        });
+      })
+      .catch((e: unknown) => {
+        // lost a race with another center saving the same key (unique index)
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && String(e.meta?.target ?? "").includes("paymeKey")) throw new UserError("settings.paymeKeyTaken");
+        throw e;
       });
-      await audit(tx, {
-        centerId: ctx.centerId,
-        userId: ctx.userId,
-        entity: "Center",
-        entityId: ctx.centerId,
-        action: "settings",
-        before: { ...before, paymeKey: before.paymeKey ? "***" : null },
-        after: { ...after, paymeKey: after.paymeKey ? "***" : null },
-      });
-    });
     revalidatePath("/", "layout");
     return { message: ctx.t("common.saved") };
   });

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { buildPayLink, E, handlePayme, keyFromAuth, TIMEOUT_MS, type PaymeRepo, type PaymeTx } from "./payme";
+import { buildPayLink, E, handlePayme, keyFromAuth, TIMEOUT_MS, type PaymeFiscalItem, type PaymeRepo, type PaymeTx } from "./payme";
 
 const KEY = "secret-key";
 const auth = (key = KEY) => `Basic ${Buffer.from(`Paycom:${key}`).toString("base64")}`;
@@ -13,17 +13,15 @@ class MemRepo implements PaymeRepo {
     ["fam1", { id: "fam1", centerId: "c1" }],
     ["famX", { id: "famX", centerId: "c2" }],
   ]);
+  fiscal: PaymeFiscalItem | null = null;
   async centerByKey(key: string) {
-    return key === KEY ? { id: "c1" } : key === "other" ? { id: "c2" } : null;
+    return key === KEY ? { id: "c1", fiscal: this.fiscal } : key === "other" ? { id: "c2" } : null;
   }
   async family(id: string) {
     return this.families.get(id) ?? null;
   }
   async findTx(paymeId: string) {
     return this.txs.find((t) => t.paymeId === paymeId) ?? null;
-  }
-  async activeTxForFamily(familyId: string) {
-    return this.txs.find((t) => t.familyId === familyId && t.state === 1) ?? null;
   }
   async createTx(tx: Omit<PaymeTx, "id">) {
     const t = { ...tx, id: `our-${this.txs.length + 1}` };
@@ -73,8 +71,18 @@ describe("Payme auth & protocol", () => {
 });
 
 describe("CheckPerformTransaction", () => {
-  it("happy path", async () => {
+  it("happy path without fiscal data: no detail", async () => {
     expect((await call("CheckPerformTransaction", { amount: 60_000_000, account: { family_id: "fam1" } })).result).toEqual({ allow: true });
+  });
+  it("happy path with fiscal data: a receipt line for the whole amount (tiyin)", async () => {
+    repo.fiscal = { title: "O'quv kurslari uchun to'lov", ikpu: "10305008002000000", packageCode: "1545632", vatPercent: 0 };
+    expect((await call("CheckPerformTransaction", { amount: 60_000_000, account: { family_id: "fam1" } })).result).toEqual({
+      allow: true,
+      detail: {
+        receipt_type: 0,
+        items: [{ title: "O'quv kurslari uchun to'lov", price: 60_000_000, count: 1, code: "10305008002000000", package_code: "1545632", vat_percent: 0 }],
+      },
+    });
   });
   it("unknown family (or another center's family) → -31050 with data=family_id", async () => {
     const r = await call("CheckPerformTransaction", { amount: 100, account: { family_id: "nobody" } });
@@ -96,15 +104,23 @@ describe("CreateTransaction", () => {
     expect(b.result).toEqual(a.result);
     expect(repo.txs).toHaveLength(1);
   });
-  it("another active transaction for the same family → -31099", async () => {
-    await create("p1");
-    expect((await create("p2")).error?.code).toBe(E.BUSY);
+  it("parallel transactions for the same family are allowed (accumulative wallet)", async () => {
+    expect((await create("p1")).result).toMatchObject({ state: 1 });
+    expect((await create("p2", 30_000_000)).result).toMatchObject({ state: 1 });
+    expect((await call("PerformTransaction", { id: "p2" }, { now: T0 + 1000 })).result).toMatchObject({ state: 2 });
+    expect((await call("PerformTransaction", { id: "p1" }, { now: T0 + 2000 })).result).toMatchObject({ state: 2 });
+    expect(repo.ledger.map((l) => l.amount)).toEqual([300_000, 600_000]);
   });
-  it("an expired active transaction is cancelled so a new one can start", async () => {
+  it("each transaction still times out on its own after 12 h", async () => {
     await create("p1");
-    const r = await create("p2", 60_000_000, "fam1", T0 + TIMEOUT_MS + 1);
-    expect(r.result).toMatchObject({ state: 1 });
+    expect((await create("p2", 60_000_000, "fam1", T0 + TIMEOUT_MS + 1)).result).toMatchObject({ state: 1 });
+    expect((await call("PerformTransaction", { id: "p1" }, { now: T0 + TIMEOUT_MS + 2 })).error?.code).toBe(E.CANT_PERFORM);
     expect(repo.txs[0]).toMatchObject({ state: -1, reason: 4 });
+    expect(repo.txs[1]).toMatchObject({ state: 1 });
+  });
+  it("another center's family is refused even with a valid key → -31050", async () => {
+    expect((await create("p1", 60_000_000, "famX")).error).toMatchObject({ code: E.ACCOUNT, data: "family_id" });
+    expect(repo.txs).toHaveLength(0);
   });
   it("re-create after 12h timeout → cancelled with reason 4 and -31008", async () => {
     await create("p1");

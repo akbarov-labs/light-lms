@@ -4,7 +4,11 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { postPayment, reverseEntry } from "@/lib/services/payments";
 import { todayISO } from "@/lib/dates";
+import { readSettings } from "@/lib/settings";
 import type { PaymeRepo, PaymeTx } from "./payme";
+
+/** Fiscal receipt line title (receipts are printed in Uzbek). */
+export const FISCAL_TITLE = "O'quv kurslari uchun to'lov";
 
 const toTx = (r: PaymeTransaction): PaymeTx => ({
   id: r.id,
@@ -22,17 +26,16 @@ const toTx = (r: PaymeTransaction): PaymeTx => ({
 
 export const prismaPaymeRepo: PaymeRepo = {
   async centerByKey(key) {
-    return db.center.findFirst({ where: { paymeKey: key, paymeMerchantId: { not: null } }, select: { id: true } });
+    const c = await db.center.findFirst({ where: { paymeKey: key, paymeMerchantId: { not: null } }, select: { id: true, settings: true } });
+    if (!c) return null;
+    const f = readSettings(c.settings).paymeFiscal;
+    return { id: c.id, fiscal: f ? { title: FISCAL_TITLE, ikpu: f.ikpu, packageCode: f.packageCode, vatPercent: f.vatPercent } : null };
   },
   async family(id) {
     return db.family.findUnique({ where: { id }, select: { id: true, centerId: true } });
   },
   async findTx(paymeId) {
     const r = await db.paymeTransaction.findUnique({ where: { paymeId } });
-    return r ? toTx(r) : null;
-  },
-  async activeTxForFamily(familyId) {
-    const r = await db.paymeTransaction.findFirst({ where: { familyId, state: 1 }, orderBy: { createTime: "desc" } });
     return r ? toTx(r) : null;
   },
   async createTx(tx) {

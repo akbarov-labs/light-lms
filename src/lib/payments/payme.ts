@@ -19,12 +19,27 @@ export interface PaymeTx {
   reason: number | null;
 }
 
+/** Fiscal receipt line data for CheckPerformTransaction `detail` (developer.help.paycom.uz). */
+export interface PaymeFiscalItem {
+  /** Receipt line title (the service). */
+  title: string;
+  /** IKPU / MXIK code of the service. */
+  ikpu: string;
+  packageCode: string;
+  vatPercent: number;
+}
+
+export interface PaymeCenter {
+  id: string;
+  /** Set when the center filled in its fiscal data; null = no `detail` in CheckPerformTransaction. */
+  fiscal?: PaymeFiscalItem | null;
+}
+
 export interface PaymeRepo {
-  /** Center whose Payme key matches (the key identifies the merchant cashbox). */
-  centerByKey(key: string): Promise<{ id: string } | null>;
+  /** Center whose Payme key matches (the key identifies the merchant cashbox; unique per center). */
+  centerByKey(key: string): Promise<PaymeCenter | null>;
   family(familyId: string): Promise<{ id: string; centerId: string } | null>;
   findTx(paymeId: string): Promise<PaymeTx | null>;
-  activeTxForFamily(familyId: string): Promise<PaymeTx | null>;
   createTx(tx: Omit<PaymeTx, "id">): Promise<PaymeTx>;
   /** Post the PAYMENT ledger entry and mark the transaction performed — atomically. */
   perform(tx: PaymeTx, now: number): Promise<PaymeTx>;
@@ -53,7 +68,6 @@ const M = {
   method: { ru: "Метод не найден", uz: "Metod topilmadi", en: "Method not found" },
   amount: { ru: "Неверная сумма", uz: "Noto'g'ri summa", en: "Invalid amount" },
   account: { ru: "Плательщик не найден", uz: "To'lovchi topilmadi", en: "Payer not found" },
-  busy: { ru: "Есть незавершённая транзакция", uz: "Tugallanmagan tranzaksiya bor", en: "Another transaction is in progress" },
   notFound: { ru: "Транзакция не найдена", uz: "Tranzaksiya topilmadi", en: "Transaction not found" },
   cantPerform: { ru: "Невозможно выполнить операцию", uz: "Amalni bajarib bo'lmaydi", en: "Unable to perform operation" },
   internal: { ru: "Системная ошибка", uz: "Tizim xatosi", en: "System error" },
@@ -70,7 +84,6 @@ export const E = {
   CANT_CANCEL: -31007,
   CANT_PERFORM: -31008,
   ACCOUNT: -31050,
-  BUSY: -31099,
 } as const;
 
 class RpcFail extends Error {
@@ -112,6 +125,10 @@ function view(tx: PaymeTx) {
   };
 }
 
+/**
+ * The family must belong to the center whose key signed the request (a key only ever pays into its
+ * own center's wallets). `family_id` is an accumulative wallet: any number of payments, also in parallel.
+ */
 async function checkAccount(repo: PaymeRepo, centerId: string, params: Record<string, unknown>) {
   const account = (params.account ?? {}) as Record<string, unknown>;
   const familyId = str(account.family_id);
@@ -131,11 +148,20 @@ async function txOf(repo: PaymeRepo, centerId: string, params: Record<string, un
   return tx;
 }
 
-async function dispatch(repo: PaymeRepo, centerId: string, method: string, params: Record<string, unknown>, now: number): Promise<unknown> {
+/** Fiscal receipt for the whole amount: one service line, count 1, price = amount (tiyin). */
+export function fiscalDetail(fiscal: PaymeFiscalItem, amountTiyin: number) {
+  return {
+    receipt_type: 0,
+    items: [{ title: fiscal.title, price: amountTiyin, count: 1, code: fiscal.ikpu, package_code: fiscal.packageCode, vat_percent: fiscal.vatPercent }],
+  };
+}
+
+async function dispatch(repo: PaymeRepo, center: PaymeCenter, method: string, params: Record<string, unknown>, now: number): Promise<unknown> {
+  const centerId = center.id;
   switch (method) {
     case "CheckPerformTransaction": {
-      await checkAccount(repo, centerId, params);
-      return { allow: true };
+      const { amount } = await checkAccount(repo, centerId, params);
+      return center.fiscal ? { allow: true, detail: fiscalDetail(center.fiscal, amount) } : { allow: true };
     }
     case "CreateTransaction": {
       const id = str(params.id);
@@ -151,12 +177,9 @@ async function dispatch(repo: PaymeRepo, centerId: string, method: string, param
         }
         return { create_time: existing.createTime, transaction: existing.id, state: existing.state };
       }
+      // no "another transaction in progress" check: the family wallet accepts parallel payments;
+      // each transaction still times out on its own after 12 h (above, and in PerformTransaction)
       const { family, amount } = await checkAccount(repo, centerId, params);
-      const active = await repo.activeTxForFamily(family.id);
-      if (active) {
-        if (now - active.createTime > TIMEOUT_MS) await repo.cancel(active, 4, now);
-        else throw new RpcFail(E.BUSY, M.busy, "family_id");
-      }
       const tx = await repo.createTx({ paymeId: id, centerId, familyId: family.id, amountTiyin: amount, state: 1, createTime: now, paymeTime: time, performTime: null, cancelTime: null, reason: null });
       return { create_time: tx.createTime, transaction: tx.id, state: tx.state };
     }
@@ -221,7 +244,7 @@ export async function handlePayme(req: { auth: string | null; body: string }, re
     const center = key ? await repo.centerByKey(key) : null;
     if (!center) throw new RpcFail(E.AUTH, M.auth);
     if (typeof msg.method !== "string" || typeof msg.params !== "object" || msg.params === null) throw new RpcFail(E.INVALID, M.invalid);
-    const result = await dispatch(repo, center.id, msg.method, msg.params as Record<string, unknown>, now);
+    const result = await dispatch(repo, center, msg.method, msg.params as Record<string, unknown>, now);
     return { jsonrpc: "2.0", id, result };
   } catch (e) {
     if (e instanceof RpcFail) return { jsonrpc: "2.0", id, error: { code: e.code, message: e.msg, ...(e.data ? { data: e.data } : {}) } };
