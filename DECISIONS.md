@@ -131,3 +131,14 @@
 2026-10-17 — mysql2 (pulled in by prisma 7.10.0) overridden to 3.24.4 — the security fix prisma 7.10.1 ships, without taking a 2-day-old release.
 2026-10-17 — Coverage floor on money code (src/lib/billing, salary, payments): lines/statements/functions 90%, branches 80% (`npm run test:coverage`); DB adapters are covered by the integration suite instead.
 2026-10-17 — Export buttons are plain <a> links — Next's <Link> prefetched the CSV routes.
+2026-10-17 — Second independent review (fresh reviewers) verified every first-round finding fixed and found a smaller set; fixed below.
+2026-10-17 — Import: a row without a phone matches only a true re-import — same name + open enrollment in the row's group (no group: a phoneless imported student with no enrollment and the same opening balance); otherwise a new student, flagged "possible duplicate" — a name alone is no identity.
+2026-10-17 — Import opening balances are capped at ±1 000 000 000 (MAX_AMOUNT, shared with money forms) — a pasted account number must not become a balance.
+2026-10-17 — Billing horizon = latest slot date a lesson stands for (origDate for moved lessons) — a lesson moved far ahead must not make the first charge non-final.
+2026-10-17 — Slot dates outside a group's start/end count in the denominator only when no lesson of the period stands for them — kept cancelled/held/moved lessons were counted twice (undercharge).
+2026-10-17 — Pay-from-collected ignores installments whose expected amount is 0 — a leaver's credited installment could never be "paid" and blocked the teacher's pay.
+2026-10-17 — wallet:overdraw is dated on the first day of the current overdrawn run, reversed money pairs ignored — later reversals reset aging and reminders.
+2026-10-17 — Salary month = YYYY-MM, MM 01–12, year 2000–2100; pages fall back to the current month, actions and the service refuse — "2026-13" rolled into next January and could book a salary twice.
+2026-10-17 — Dates must round-trip (2026-02-31 refused) — they silently rolled over in forms and made report SQL fail.
+2026-10-17 — Salary expense branch = branch where the teacher held most lessons that month; tie → oldest branch — deterministic branch P&L.
+2026-10-17 — Reversals take the same per-family money lock as refunds — a concurrent reversal let a refund pass the cap. A payment reversed after a refund may leave the wallet negative by design: the money did not arrive, so it is debt (wallet:overdraw, aged, reminded).
