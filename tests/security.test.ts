@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { setPlatformAdmin } from "@/lib/platform";
-import { assertLeadRefs, buildCtx, loadUser } from "@/lib/ctx-core";
+import { assertLeadRefs, assertTeacherAccess, buildCtx, loadUser } from "@/lib/ctx-core";
 import { UserError } from "@/lib/user-error";
 import { unlinkChat, unlinkIfPhoneChanged, unlinkRef } from "@/lib/telegram-links";
 import { createResetCodeForChat } from "@/lib/auth/password";
@@ -77,6 +77,28 @@ describe("S6 lead references stay inside the center", () => {
     await expect(assertLeadRefs(ctx, { courseId: ownCourse.id, branchId, assignedToId: owner.id })).resolves.toBeUndefined();
     // a lead that already points at the archived person can still be edited
     await expect(assertLeadRefs(ctx, { assignedToId: archived.id }, { courseId: null, assignedToId: archived.id })).resolves.toBeUndefined();
+  });
+});
+
+describe("S8 salary changes target a teacher of my branches, never myself (unless owner)", () => {
+  it("checks the target", async () => {
+    const manager = await staff("998977780601", { role: "MANAGER", perms: ["finance.view"], isTeacher: true });
+    const teacher = await staff("998977780602", { role: "TEACHER" });
+    const admin = await staff("998977780603", { role: "ADMIN" });
+    const owner = await staff("998977780604", { role: "OWNER", isTeacher: true });
+    const otherBranch = await db.branch.create({ data: { centerId, name: "Far branch" } });
+    const farTeacher = await staff("998977780605", { role: "TEACHER" });
+    await db.userBranch.deleteMany({ where: { userId: farTeacher.id } });
+    await db.userBranch.create({ data: { userId: farTeacher.id, branchId: otherBranch.id } });
+
+    const m = await ctxOf(manager.id);
+    await expect(assertTeacherAccess(m, teacher.id)).resolves.toBeUndefined();
+    await expect(assertTeacherAccess(m, manager.id)).rejects.toThrow(UserError); // himself
+    await expect(assertTeacherAccess(m, admin.id)).rejects.toThrow(UserError); // not a teacher
+    await expect(assertTeacherAccess(m, farTeacher.id)).rejects.toThrow(UserError); // other branch
+    const o = await ctxOf(owner.id);
+    await expect(assertTeacherAccess(o, owner.id)).resolves.toBeUndefined();
+    await expect(assertTeacherAccess(o, farTeacher.id)).resolves.toBeUndefined();
   });
 });
 

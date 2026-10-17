@@ -145,11 +145,17 @@ export function staffPermsFor(actor: Pick<Ctx, "role" | "can">, role: RoleName, 
   return PERMS.filter((p) => (canGrant(actor, p) ? wanted.has(p) : had.has(p)));
 }
 
-/** A teacher whose salary this user may see/change: unscoped, or teaching in one of the user's branches. */
+/**
+ * A teacher whose salary this user may change (rule, adjustment, lock/unlock/paid):
+ * - the target is a teacher (isTeacher or role TEACHER) of this center,
+ * - inside the user's branches (unscoped users: any),
+ * - and only an OWNER may touch their own salary — a manager with finance.view can't bonus/pay themselves (S8).
+ */
 export async function assertTeacherAccess(ctx: Ctx, teacherId: string): Promise<void> {
   const t = await db.user.findFirst({ where: { id: teacherId, centerId: ctx.centerId }, include: { branches: { select: { branchId: true } } } });
-  if (!t) throw new UserError("error.notFound");
+  if (!t || !(t.isTeacher || t.role === "TEACHER")) throw new UserError("error.notFound");
   if (ctx.branchIds && !t.branches.some((b) => ctx.branchIds!.includes(b.branchId))) throw new UserError("error.notFound");
+  if (t.id === ctx.userId && ctx.role !== "OWNER") throw new UserError("error.forbidden");
 }
 
 /**
