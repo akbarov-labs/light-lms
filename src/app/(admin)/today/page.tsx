@@ -15,17 +15,21 @@ export default async function TodayPage() {
   const { t } = ctx;
   const today = todayISO();
   const bw = branchWhere(ctx);
-  const [lessons, missing, trials, leads, debtors] = await Promise.all([
+  const missingWhere = { status: "SCHEDULED" as const, date: { gte: fromISODate(addDays(today, -7)), lt: fromISODate(today) }, group: { centerId: ctx.centerId, ...bw } };
+  const [lessons, missing, missingCount, trials, leads, debtors] = await Promise.all([
     db.lesson.findMany({
       where: { date: fromISODate(today), group: { centerId: ctx.centerId, ...bw } },
       include: { group: { select: { id: true, name: true, code: true } }, teacher: { select: { name: true } }, room: { select: { name: true } }, _count: { select: { attendance: true } } },
       orderBy: { startTime: "asc" },
     }),
+    // the 20 most recent; the title carries the full count
     db.lesson.findMany({
-      where: { status: "SCHEDULED", date: { gte: fromISODate(addDays(today, -7)), lt: fromISODate(today) }, group: { centerId: ctx.centerId, ...bw } },
+      where: missingWhere,
       include: { group: { select: { name: true, code: true } }, teacher: { select: { name: true } } },
-      orderBy: { date: "desc" },
+      orderBy: [{ date: "desc" }, { startTime: "desc" }],
+      take: 20,
     }),
+    db.lesson.count({ where: missingWhere }),
     db.enrollment.findMany({
       where: { status: "TRIAL", endDate: null, group: { centerId: ctx.centerId, ...bw, lessons: { some: { date: fromISODate(today), status: { not: "CANCELLED" } } } } },
       include: { student: { select: { id: true, firstName: true, lastName: true, phone: true } }, group: { select: { id: true, name: true, code: true, lessons: { where: { date: fromISODate(today) }, select: { startTime: true } } } } },
@@ -46,7 +50,7 @@ export default async function TodayPage() {
       <OwnerNotices ctx={ctx} />
       <div className="grid gap-4 xl:grid-cols-2 *:min-w-0">
         {missing.length > 0 && (
-          <Card className="border-amber-200 xl:col-span-2" pad={false} title={<span className="text-amber-800">{`${t("today.missingPast")} (${missing.length})`}</span>}>
+          <Card className="border-amber-200 xl:col-span-2" pad={false} title={<span className="text-amber-800">{`${t("today.missingPast")} (${missingCount})`}</span>}>
             <Table>
               <tbody>
                 {missing.map((l) => (

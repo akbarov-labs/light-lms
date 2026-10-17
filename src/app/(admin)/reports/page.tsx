@@ -25,6 +25,11 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     db.branch.findMany({ where: { centerId: ctx.centerId }, select: { id: true, name: true } }),
   ]);
   const bname = new Map(branches.map((b) => [b.id, b.name]));
+  // big centers have hundreds of groups: the page shows the top rows, the CSV has all of them
+  const BILLED_ROWS = 20;
+  const ATT_ROWS = 15;
+  const csvHref = `/api/export/report-groups?from=${p.from}&to=${p.to}`;
+  const more = (n: number) => (n > 0 ? <a href={csvHref} className="block px-4 py-2.5 text-xs text-zinc-600 underline decoration-zinc-300 hover:text-zinc-900 hover:decoration-zinc-900">{t("ui.moreInCsv", { n })}</a> : null);
   const branchLabel = (id: string) => (id === "-" ? t("reports.unknown") : (bname.get(id) ?? id));
   return (
     <>
@@ -74,18 +79,20 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         {billed.length === 0 ? <EmptyState>{t("common.empty")}</EmptyState> : (
           <Table>
             <thead><tr><Th>{t("common.group")}</Th><Th>{t("common.course")}</Th><Th>{t("common.teacher")}</Th><Th className="text-right">{t("reports.billed")}</Th></tr></thead>
-            <tbody>{billed.map((g) => <Tr key={g.name}><Td>{g.name}</Td><Td>{g.course}</Td><Td>{g.teacher}</Td><Td className="whitespace-nowrap text-right font-medium">{formatMoney(g.billed)}</Td></Tr>)}</tbody>
+            <tbody>{billed.slice(0, BILLED_ROWS).map((g) => <Tr key={g.name}><Td>{g.name}</Td><Td>{g.course}</Td><Td>{g.teacher}</Td><Td className="whitespace-nowrap text-right font-medium">{formatMoney(g.billed)}</Td></Tr>)}</tbody>
           </Table>
         )}
+        {more(billed.length - BILLED_ROWS)}
       </Card>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card pad={false} title={`${t("reports.attendance")} · ${t("common.groups")}`}>
-          <Table><tbody>{att.byGroup.map((g) => <Tr key={g.name}><Td className="text-sm">{g.name}</Td><Td className="text-right font-medium">{g.rate}%</Td></Tr>)}</tbody></Table>
+          <Table><tbody>{att.byGroup.slice(0, ATT_ROWS).map((g) => <Tr key={g.name}><Td className="text-sm">{g.name}</Td><Td className="text-right font-medium">{g.rate}%</Td></Tr>)}</tbody></Table>
+          {more(att.byGroup.length - ATT_ROWS)}
         </Card>
         <Card pad={false} title={`${t("reports.attendance")} · ${t("common.teacher")}`}>
           <Table><tbody>{att.byTeacher.map((g) => <Tr key={g.name}><Td className="text-sm">{g.name}</Td><Td className="text-right font-medium">{g.rate}%</Td></Tr>)}</tbody></Table>
         </Card>
-        <Card pad={false} title={`${t("reports.missing")} (${att.missing.length})`}>
+        <Card pad={false} title={`${t("reports.missing")} (${att.missing.length >= 200 ? "200+" : att.missing.length})`}>
           <Table><tbody>{att.missing.slice(0, 30).map((l) => <Tr key={l.id}><Td className="whitespace-nowrap text-xs"><Link href={`/lessons/${l.id}`} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{formatDate(l.date)} {l.time}</Link></Td><Td className="text-xs">{l.group}</Td><Td className="text-xs">{l.teacher}</Td></Tr>)}</tbody></Table>
         </Card>
       </div>

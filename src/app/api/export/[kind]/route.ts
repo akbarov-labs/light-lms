@@ -13,6 +13,8 @@ import { groupStatusWhere, strParam } from "@/lib/queries/params";
 import { listExpenses } from "@/lib/queries/expenses";
 import { liveSalary } from "@/lib/salary/service";
 import { auditWhere } from "@/lib/queries/audit";
+import { attendanceStats, billedByGroup } from "@/lib/queries/reports";
+import { isISODate, monthRange } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +127,21 @@ const exporters: Record<string, Exporter> = {
     return {
       header: ["time", "user", "entity", "entityId", "action", "before", "after"],
       rows: logs.map((l) => [formatDateTime(l.createdAt), l.userId ? users.get(l.userId) : "system", l.entity, l.entityId, l.action, l.before ? JSON.stringify(l.before) : "", l.after ? JSON.stringify(l.after) : ""]),
+    };
+  },
+  /** Reports page tables in full: billed and attendance per group for the chosen period. */
+  async "report-groups"(ctx, sp) {
+    if (!ctx.can("finance.view")) return null;
+    const m = monthRange(todayISO().slice(0, 7));
+    const p = { from: isISODate(sp.from) ? sp.from : m.start, to: isISODate(sp.to) ? sp.to : m.end };
+    const [billed, att] = await Promise.all([billedByGroup(ctx, p), attendanceStats(ctx, p)]);
+    const rate = new Map(att.byGroup.map((g) => [g.name, g.rate]));
+    const names = [...new Set([...billed.map((g) => g.name), ...att.byGroup.map((g) => g.name)])];
+    const b = new Map(billed.map((g) => [g.name, g]));
+    const { t } = ctx;
+    return {
+      header: [t("common.group"), t("common.course"), t("common.teacher"), t("reports.billed"), `${t("reports.attendance")} %`],
+      rows: names.map((n) => [n, b.get(n)?.course ?? "", b.get(n)?.teacher ?? "", b.get(n)?.billed ?? 0, rate.get(n) ?? ""]),
     };
   },
   async staff(ctx) {
