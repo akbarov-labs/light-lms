@@ -118,5 +118,5 @@
 2026-10-17 — Search = UNION of single-column trigram lookups (names, student and guardian phones) — the old full-name expression index was never used.
 2026-10-17 — Leads board shows 100 cards per stage with the true count and "show more" — it silently dropped everything past 600.
 2026-10-17 — Raw report SQL uses scope twins in src/lib/queries/scope-sql.ts kept in step with studentScope/familyScope — Prisma can't express HAVING/UNION filters.
-2026-10-17 — error.tsx / loading.tsx / not-found.tsx at root, (admin) and t/ (+ global-error.tsx); with loading boundaries a redirect() inside a page reaches the browser as a streamed client redirect instead of a 307.
+2026-10-17 — error.tsx / not-found.tsx at root, (admin) and t/ (+ global-error.tsx). No route-level loading.tsx: it streamed every first load and delayed hydration, so an early click on a server-action form (setup wizard) became a plain POST that did not advance — navigation feedback is a pending spinner on the clicked nav link (useLinkStatus) instead.
 2026-10-17 — Environment variables are read through src/lib/env.ts (lazy getters): APP_URL had two different fallbacks and inconsistent trailing-slash handling.
