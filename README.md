@@ -103,7 +103,10 @@ npm run worker:dev                       # cron + bot
 | `npm test` | unit testlar (billing, oylik, Payme, telefon, sanalar, CSV, ruxsatlar) |
 | `npm run test:integration` | baza bilan testlar (`lms_test` bazasini o'zi yaratadi) |
 | `npm run typecheck` / `npm run lint` / `npm run build` | tekshiruvlar |
-| `npm run job:nightly` (`job:billing`, `job:reminders`, `job:teacher-reminders`, `job:daily-report`, `job:notifications`, `job:lessons`) | jobni qo'lda ishga tushirish; sana berish mumkin: `npm run job:nightly -- 2026-10-01` |
+| `npm run job:nightly` (`job:billing`, `job:reminders`, `job:teacher-reminders`, `job:daily-report`, `job:notifications`, `job:lessons`) | jobni qo'lda ishga tushirish; sana berish mumkin: `npm run job:nightly -- 2026-10-01`. Docker'da: `docker compose exec worker node run-job.mjs nightly`. Chiqish kodi 2 = shu ish allaqachon ishlayapti (ikki marta ishlamaydi) |
+| `npm run seed` | bo'sh bazaga demo markazni yozadi |
+
+Telefondan sinash (bir Wi-Fi tarmog'ida): `.env` da `WEB_BIND=0.0.0.0` — standart holatda ilova faqat shu kompyuterdan ochiladi (`127.0.0.1`).
 
 ### Worker jadvali (Asia/Tashkent)
 

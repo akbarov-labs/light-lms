@@ -102,3 +102,21 @@
 2026-10-17 — /api/health answers {ok:false} 503 without error text; the error is logged server-side.
 2026-10-17 — Payme allows parallel transactions per family, each with its own 12 h timeout (supersedes the 2026-10-12 −31099 line and HANDOFF §10's "busy" rule) — family_id is an accumulating wallet and "busy" locked families out for up to 12 h. Center.paymeKey is unique (a shared key routed payments to an arbitrary center; the migration keeps it on the oldest center).
 2026-10-17 — Optional Payme fiscal data per center (IKPU, package code, VAT %) adds a one-line receipt `detail` to CheckPerformTransaction (field names checked on developer.help.paycom.uz) — needed for fiscal receipts. SetFiscalData not implemented yet.
+2026-10-17 — Notification claim = status SENDING + lockedAt via FOR UPDATE SKIP LOCKED; rows stuck in SENDING > 10 min go back to PENDING — a crashed worker may re-send one message, which beats losing it.
+2026-10-17 — Telegram 429 honours retry_after without counting an attempt; other errors back off 30 s·2^n (max 1 h), FAILED after 5; 403 / chat not found fails the row and unlinks the chat — retries can't help.
+2026-10-17 — Job locks are transaction-scoped advisory locks held for the whole job (Prisma's pool makes session locks unsafe); lessons, billing and demo-reset share the nightly lock; cron uses noOverlap; a skipped manual run exits 2.
+2026-10-17 — Nightly steps run independently with per-group / per-enrollment isolation; any failed step or item raises the ops alert — one broken group must not skip billing for every center. Billing syncs run 4 at a time (small VPS pool size).
+2026-10-17 — Notifications are kept 90 days (sent) / 180 days (failed); AuditLog is kept forever — it is money trust.
+2026-10-17 — Worker image = esbuild bundle + Prisma client (≈110 MB vs ≈1 GB); migrate keeps the full tools image (prisma CLI + tsx for seed and operator scripts). Worker: graceful SIGTERM, heartbeat-file healthcheck, init: true. Base images pinned (node:22.23-alpine, postgres:16.14-alpine).
+2026-10-17 — Dev compose publishes web on ${WEB_BIND:-127.0.0.1} — the dev setup (known fallback secret, no proxy) must not be reachable from the network by default.
+2026-10-17 — Debtors list: families with SUM(ledger) < 0 found in SQL (branch scope + group/teacher/min filters combined — a teacher filter used to replace the branch scope), 50 per page; FIFO allocation runs only for the visible page; CSV export allocates in 500-family batches.
+2026-10-17 — Debt aging stays exact: debtor set from SQL, FIFO allocate() in 500-family batches, no SQL approximation — directed payments make FIFO-by-date in SQL inexact. Verified identical to the old code on 2k and 12k students.
+2026-10-17 — Revenue branch for a family-level payment = the payer's home branch, else the home branch of the family's student with the latest open enrollment (ties: earliest created, then lowest id) — deterministic, follows where the child studies now.
+2026-10-17 — Student/lead monthly stats use Asia/Tashkent day boundaries (createdAt is UTC) — a record at 00:00–05:00 on the 1st belonged to the previous month.
+2026-10-17 — Unknown enum / page query values are ignored (unfiltered list) rather than rejected — a bad link must not 500.
+2026-10-17 — Audit journal count stops 1 000 rows past the current page ("N+") and the query matches the partial index without billing.sync rows.
+2026-10-17 — Search = UNION of single-column trigram lookups (names, student and guardian phones) — the old full-name expression index was never used.
+2026-10-17 — Leads board shows 100 cards per stage with the true count and "show more" — it silently dropped everything past 600.
+2026-10-17 — Raw report SQL uses scope twins in src/lib/queries/scope-sql.ts kept in step with studentScope/familyScope — Prisma can't express HAVING/UNION filters.
+2026-10-17 — error.tsx / loading.tsx / not-found.tsx at root, (admin) and t/ (+ global-error.tsx); with loading boundaries a redirect() inside a page reaches the browser as a streamed client redirect instead of a 307.
+2026-10-17 — Environment variables are read through src/lib/env.ts (lazy getters): APP_URL had two different fallbacks and inconsistent trailing-slash handling.
