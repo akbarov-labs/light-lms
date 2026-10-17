@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit";
 import { addDays, fromISODate, toISODate, todayISO, type ISODate } from "@/lib/dates";
 import type { Prisma } from "@prisma/client";
 import { parseTermsHistory, syncEnrollment } from "@/lib/billing/sync";
+import { transferTerms } from "@/lib/billing/terms";
 import { UserError } from "@/lib/user-error";
 import { enqueue, familyChats } from "@/lib/notify";
 import { msg } from "@/lib/messages";
@@ -137,6 +138,14 @@ export async function transferEnrollment(actor: Actor, enrollmentId: string, toG
     if (target.capacity && (await openCount(tx, target.id)) >= target.capacity) throw new UserError("error.groupFull", { capacity: target.capacity });
 
     const asTrial = e.status === "TRIAL" || readSettings(target.center.settings).transferAsTrial;
+    // the price override belonged to the old group; the discount moves along with its history,
+    // so a discount scheduled from a later date keeps that date in the new group
+    const terms = transferTerms(parseTermsHistory(e.termsHistory), {
+      priceOverride: e.priceOverride,
+      discountPercent: e.discountPercent,
+      discountAmount: e.discountAmount,
+      discountUntil: e.discountUntil ? toISODate(e.discountUntil) : null,
+    });
     const created = await tx.enrollment.create({
       data: {
         studentId: e.studentId,
@@ -144,11 +153,11 @@ export async function transferEnrollment(actor: Actor, enrollmentId: string, toG
         startDate: fromISODate(moveDate),
         status: asTrial ? "TRIAL" : "ACTIVE",
         activatedAt: asTrial ? null : fromISODate(moveDate),
-        discountPercent: e.discountPercent,
-        discountAmount: e.discountAmount,
+        discountPercent: terms.current.discountPercent,
+        discountAmount: terms.current.discountAmount,
         discountUntil: e.discountUntil,
         discountReason: e.discountReason,
-        // the price override belonged to the old group; only the discount moves along
+        ...(terms.history.length > 0 ? { termsHistory: terms.history as unknown as Prisma.InputJsonValue } : {}),
       },
     });
     await tx.enrollment.update({

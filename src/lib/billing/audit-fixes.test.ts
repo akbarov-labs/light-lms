@@ -2,7 +2,8 @@
 // billing edge cases the audit listed as untested.
 import { describe, expect, it } from "vitest";
 import { computeExpected, deltaDate, planSync, round100 } from "./engine";
-import { FakeLedger, scenario } from "./testkit";
+import { transferTerms } from "./terms";
+import { FakeLedger, TTS, scenario } from "./testkit";
 
 // December 2026 on Mon/Wed/Fri: 2 4 7 9 11 14 16 18 21 23 25 28 30 = 13 lessons; from the 10th: 9.
 
@@ -73,5 +74,41 @@ describe("B3 — enrollment activated months ahead", () => {
     expect(first).toEqual([{ billingKey: "sub:e1:2027-01-01", type: "CHARGE", amount: -round100((600_000 * 9) / 13) }]);
     expect(ledger.sync(at("2026-11-20", "2027-01-19"))).toEqual([]);
     expect(ledger.sync(at("2026-12-31", "2027-03-01"))).toEqual([]);
+  });
+});
+
+describe("B4 — transfer keeps the dates of scheduled terms", () => {
+  // A: 50% discount scheduled from Nov 1 (setEnrollmentTerms wrote it into the current fields too).
+  const history = [
+    { from: "2000-01-01", priceOverride: 550_000, discountPercent: null, discountAmount: null, discountUntil: null },
+    { from: "2026-11-01", priceOverride: 550_000, discountPercent: 50, discountAmount: null, discountUntil: null },
+  ];
+  const current = { priceOverride: 550_000, discountPercent: 50, discountAmount: null, discountUntil: null };
+  // B: 800 000 on Tue/Thu/Sat; October has 14 lessons, 6 of them from the 20th
+  const groupB = (asOf: string, terms: ReturnType<typeof transferTerms>) =>
+    scenario({ slots: TTS, asOf, course: { price: 800_000 }, enrollment: { startDate: "2026-10-20", activatedAt: "2026-10-20", ...terms.current, terms: terms.history } });
+
+  it("October in group B is charged without the discount that starts in November", () => {
+    const moved = transferTerms(history, current);
+    expect(moved.current.priceOverride).toBeNull();
+    expect(moved.history.every((h) => h.priceOverride === null)).toBe(true);
+    const [oct] = computeExpected(groupB("2026-10-20", moved));
+    expect(oct.amount).toBe(342_900);
+    expect(oct.amount).toBe(round100((800_000 * 6) / 14));
+    const units = computeExpected(groupB("2026-11-01", moved));
+    expect(units.map((u) => u.amount)).toEqual([342_900, 400_000]);
+  });
+
+  it("a discount ending on a date keeps that end in the new group", () => {
+    const h = [{ from: "2000-01-01", priceOverride: null, discountPercent: 20, discountAmount: null, discountUntil: "2026-10-31" }];
+    const moved = transferTerms(h, { priceOverride: null, discountPercent: 20, discountAmount: null, discountUntil: "2026-10-31" });
+    const units = computeExpected(groupB("2026-11-01", moved));
+    expect(units.map((u) => u.amount)).toEqual([round100((640_000 * 6) / 14), 800_000]);
+  });
+
+  it("without history only the current discount moves (old behaviour kept)", () => {
+    const moved = transferTerms([], { priceOverride: 550_000, discountPercent: 10, discountAmount: null, discountUntil: null });
+    expect(moved.history).toEqual([]);
+    expect(computeExpected(groupB("2026-10-20", moved))[0].amount).toBe(round100((720_000 * 6) / 14));
   });
 });
