@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { addDays, fromISODate, monthRange, shiftMonth, todayISO, type ISODate } from "@/lib/dates";
-import { dailyReport, jobProblems, nightly, reminders, teacherReminders } from "@/worker/jobs";
+import { dailyReport, jobProblems, nightly, ownerReport, reminders, teacherReminders } from "@/worker/jobs";
 import { refreshFreezeStatuses } from "@/lib/services/enrollments";
 import { generateLessons } from "@/lib/services/lessons";
 
@@ -15,11 +15,11 @@ let courseId = "";
 let teacherId = "";
 let code = 9000;
 
-async function group(name: string, extra: { status?: "ACTIVE" | "PLANNED"; startDate?: ISODate } = {}) {
+async function group(name: string, extra: { status?: "ACTIVE" | "PLANNED"; startDate?: ISODate; branchId?: string } = {}) {
   const g = await db.group.create({
     data: {
       centerId,
-      branchId,
+      branchId: extra.branchId ?? branchId,
       courseId,
       teacherId,
       code: code++,
@@ -65,8 +65,14 @@ beforeAll(async () => {
   ).id;
 });
 
-// remove this file's center completely, so the other test files see the database as they left it
+const extraCenters: string[] = [];
+
+// remove this file's centers completely, so the other test files see the database as they left it
 afterAll(async () => {
+  for (const id of [...extraCenters, centerId]) await wipeCenter(id);
+});
+
+async function wipeCenter(centerId: string) {
   const enrollment = { group: { centerId } };
   await db.notification.deleteMany({ where: { centerId } });
   await db.auditLog.deleteMany({ where: { centerId } });
@@ -83,7 +89,7 @@ afterAll(async () => {
   await db.user.deleteMany({ where: { centerId } });
   await db.branch.deleteMany({ where: { centerId } });
   await db.center.delete({ where: { id: centerId } });
-});
+}
 
 describe("nightly isolation", () => {
   it("a broken group and a failing step do not stop billing", async () => {
@@ -154,9 +160,80 @@ describe("re-running jobs sends nothing twice", () => {
     expect(after.some((n) => n.chatId === "2001" && n.dedupeKey?.startsWith(`teacher:${teacherId}:${day}`))).toBe(true);
     expect(after.some((n) => n.chatId === "2004" && n.dedupeKey?.startsWith("report:"))).toBe(true);
 
-    expect(await reminders(day)).toEqual({ upcoming: 0, debts: 0 });
+    expect(await reminders(day)).toEqual({ upcoming: 0, debts: 0, centersFailed: 0, remindersFailed: 0 });
     expect((await teacherReminders(day)).sent).toBe(0);
     expect((await dailyReport(day)).sent).toBe(0);
     expect((await mine()).length).toBe(after.length);
+  });
+});
+
+describe("reminders, teacher reminders and the daily report are isolated per center / recipient", () => {
+  it("one center whose notifications cannot be queued does not stop the others", async () => {
+    const D = addDays(today, 2);
+    const uniq = String(Date.now()).slice(-6);
+    // center B: a debtor 7 days overdue, a teacher with a lesson on D, an owner — all linked in Telegram
+    const b = (await db.center.create({ data: { name: "Jobs test B", slug: `${SLUG}-b-${Date.now()}` } })).id;
+    extraCenters.push(b);
+    const bBranch = (await db.branch.create({ data: { centerId: b, name: "B main" } })).id;
+    const bCourse = (await db.course.create({ data: { centerId: b, name: "Math", pricingType: "SUBSCRIPTION", price: 100_000 } })).id;
+    const bTeacher = await db.user.create({ data: { centerId: b, phone: `998951${uniq}`, name: "B teacher", passwordHash: "x", role: "TEACHER", isTeacher: true, perms: [], telegramChatId: "7001" } });
+    const bOwner = await db.user.create({ data: { centerId: b, phone: `998952${uniq}`, name: "B owner", passwordHash: "x", role: "OWNER", perms: [], telegramChatId: "7002" } });
+    const bGroup = await db.group.create({ data: { centerId: b, branchId: bBranch, courseId: bCourse, teacherId: bTeacher.id, code: 1, name: "B group", startDate: fromISODate(addDays(today, -30)) } });
+    await db.lesson.create({ data: { groupId: bGroup.id, date: fromISODate(D), startTime: "10:00", endTime: "11:00", teacherId: bTeacher.id } });
+    const bFamily = await db.family.create({ data: { centerId: b, name: "B debtor" } });
+    await db.guardian.create({ data: { familyId: bFamily.id, name: "B debtor", phone: `998953${uniq}`, telegramChatId: "7003" } });
+    await db.ledgerEntry.create({ data: { centerId: b, familyId: bFamily.id, type: "CHARGE", amount: -50_000, method: "SYSTEM", description: "old", date: fromISODate(addDays(D, -7)) } });
+    // the same in this file's center (A), whose notification inserts will fail
+    const aGroup = await group("Isolation group");
+    await db.lesson.create({ data: { groupId: aGroup, date: fromISODate(D), startTime: "10:00", endTime: "11:00", teacherId } });
+    await db.user.create({ data: { centerId, phone: `998954${uniq}`, name: "A owner", passwordHash: "x", role: "OWNER", perms: [], telegramChatId: "7004" } });
+    const aFamily = await db.family.create({ data: { centerId, name: "A debtor" } });
+    await db.guardian.create({ data: { familyId: aFamily.id, name: "A debtor", phone: `998955${uniq}`, telegramChatId: "7005" } });
+    await db.ledgerEntry.create({ data: { centerId, familyId: aFamily.id, type: "CHARGE", amount: -50_000, method: "SYSTEM", description: "old", date: fromISODate(addDays(D, -7)) } });
+
+    const [r, t, d] = await withTrigger("Notification", `NEW."centerId" = '${centerId}'`, async () => [await reminders(D), await teacherReminders(D), await dailyReport(D)] as const);
+
+    expect(Number(r.remindersFailed)).toBeGreaterThanOrEqual(1);
+    expect(r.centersFailed).toBe(0);
+    expect(Number(t.teachersFailed)).toBe(1);
+    expect(Number(d.reportsFailed)).toBeGreaterThanOrEqual(1);
+    for (const res of [r, t, d]) expect(jobProblems(res)).toMatch(/Failed=/);
+    const bNotes = await db.notification.findMany({ where: { centerId: b }, select: { chatId: true, dedupeKey: true } });
+    expect(bNotes.some((n) => n.chatId === "7003" && n.dedupeKey === `debt-overdue:${bFamily.id}:${D}:7003`)).toBe(true);
+    expect(bNotes.some((n) => n.chatId === "7001" && n.dedupeKey === `teacher:${bTeacher.id}:${D}:7001`)).toBe(true);
+    expect(bNotes.some((n) => n.chatId === "7002" && n.dedupeKey === `report:${bOwner.id}:${D}:7002`)).toBe(true);
+    expect(await db.notification.count({ where: { centerId, chatId: { in: ["7004", "7005"] } } })).toBe(0);
+
+    // without the trigger the next run catches up for center A and reports no problems
+    const again = [await reminders(D), await teacherReminders(D), await dailyReport(D)];
+    for (const res of again) expect(jobProblems(res)).toBeNull();
+    expect(await db.notification.count({ where: { centerId, chatId: { in: ["7004", "7005"] } } })).toBe(2);
+  });
+});
+
+describe("owner report scope (F2)", () => {
+  it("a branch-limited manager counts only new and leaving students of their branches", async () => {
+    const other = (await db.branch.create({ data: { centerId, name: "Other" } })).id;
+    const gOther = await group("Other group", { branchId: other });
+    const gMain = await group("Main group 2");
+    // one new student per branch, each leaving its group today
+    for (const [g, b] of [
+      [gOther, other],
+      [gMain, branchId],
+    ]) {
+      const family = await db.family.create({ data: { centerId, name: "Leavers" } });
+      const s = await db.student.create({ data: { centerId, familyId: family.id, branchId: b, firstName: "New", lastName: "Leaver" } });
+      await db.enrollment.create({ data: { studentId: s.id, groupId: g, startDate: fromISODate(addDays(today, -10)), endDate: fromISODate(today), status: "LEFT" } });
+    }
+    const manager = await db.user.create({
+      data: { centerId, phone: `99896${String(Date.now()).slice(-7)}`, name: "Manager", passwordHash: "x", role: "MANAGER", perms: ["finance.view"], branches: { create: [{ branchId: other }] } },
+    });
+    const text = await ownerReport(manager.id, today);
+    expect(text).toMatch(/: \+1 · [^\n]*: −1\n/);
+    // the owner sees both branches (and the students of earlier tests)
+    const owner = await db.user.findFirstOrThrow({ where: { centerId, role: "OWNER" } });
+    const [, plus, minus] = /: \+(\d+) · [^\n]*: −(\d+)\n/.exec((await ownerReport(owner.id, today))!)!;
+    expect(Number(plus)).toBeGreaterThanOrEqual(2);
+    expect(Number(minus)).toBe(2);
   });
 });
