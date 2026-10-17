@@ -3,7 +3,7 @@ import { FakeLedger, scenario, withStatus } from "@/lib/billing/testkit";
 import { allocate, type AllocEntry } from "@/lib/billing/allocation";
 import { computeExpected } from "@/lib/billing/engine";
 import type { BillingInput } from "@/lib/billing/types";
-import { collectLessons, computeSalary, type LessonRow, type SalaryRule } from "./engine";
+import { collectLessons, computeSalary, pickExpenseBranch, type LessonRow, type SalaryRule } from "./engine";
 
 // One group, Mon/Wed/Fri, October 2026 = 13 lessons; two students at 600 000/month (46 153.8 per lesson each).
 function setup(opts: { trialSecond?: boolean; asOf?: string } = {}) {
@@ -161,6 +161,19 @@ describe("salary", () => {
     expect(bp.total).toBe(Math.round(per * 6 * 0.2));
     // archived on the 1st of the month: that month still counts
     expect(computeSalary({ rule: fixed, lessons: [], adjustments: [], payFromCollected: false, month: "2026-10", archivedOn: "2026-10-01" }).total).toBe(3_000_000);
+  });
+
+  it("salary expense branch: most lessons that month, tie → oldest branch, none → oldest home branch (L6)", () => {
+    const A = { id: "bA", createdAt: "2026-01-01T00:00:00Z" };
+    const B = { id: "bB", createdAt: "2025-06-01T00:00:00Z" };
+    const C = { id: "bC", createdAt: "2025-06-01T00:00:00Z" };
+    expect(pickExpenseBranch([{ ...A, lessons: 9 }, { ...B, lessons: 4 }], [B, A])).toBe("bA");
+    expect(pickExpenseBranch([{ ...A, lessons: 4 }, { ...B, lessons: 4 }], [A, B])).toBe("bB");
+    // same age: lowest id, whatever the input order
+    expect(pickExpenseBranch([{ ...C, lessons: 2 }, { ...B, lessons: 2 }], [])).toBe("bB");
+    expect(pickExpenseBranch([], [A, B])).toBe("bB");
+    expect(pickExpenseBranch([{ ...A, lessons: 0 }], [A, C, B])).toBe("bB");
+    expect(pickExpenseBranch([], [])).toBeNull();
   });
 
   it("bonuses and fines are added", () => {

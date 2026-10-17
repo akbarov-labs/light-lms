@@ -1,6 +1,6 @@
 // DB side of salaries: load a teacher's month, lock it, mark it paid (HANDOFF §8).
 import type { Prisma } from "@/generated/prisma/client";
-import { db } from "@/lib/db";
+import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { fromISODate, isMonth, minDate, monthRange, toISODate, todayISO } from "@/lib/dates";
 import { loadGroupInputs } from "@/lib/billing/sync";
@@ -9,7 +9,7 @@ import { allocationsFor } from "@/lib/services/wallet";
 import { UserError } from "@/lib/user-error";
 import { formatMoney } from "@/lib/money";
 import type { Actor } from "@/lib/services/enrollments";
-import { collectLessons, computeSalary, type HeldLesson, type SalaryResult, type SalaryRule } from "./engine";
+import { collectLessons, computeSalary, pickExpenseBranch, type HeldLesson, type SalaryResult, type SalaryRule } from "./engine";
 
 export const SALARY_CATEGORY = "Oylik / Salary";
 
@@ -97,6 +97,25 @@ export async function unlockPayslip(actor: Actor, teacherId: string, month: stri
   });
 }
 
+/** Branch of the salary expense: where the teacher held most lessons that month (see pickExpenseBranch). */
+export async function expenseBranch(tx: Tx, centerId: string, teacherId: string, month: string): Promise<string | null> {
+  const { start, end } = monthRange(month);
+  const [lessons, home] = await Promise.all([
+    tx.lesson.findMany({
+      where: { teacherId, status: "HELD", date: { gte: fromISODate(start), lte: fromISODate(end) }, group: { centerId } },
+      select: { group: { select: { branchId: true } } },
+    }),
+    tx.userBranch.findMany({ where: { userId: teacherId, branch: { centerId } }, select: { branch: { select: { id: true, createdAt: true } } } }),
+  ]);
+  const counts = new Map<string, number>();
+  for (const l of lessons) counts.set(l.group.branchId, (counts.get(l.group.branchId) ?? 0) + 1);
+  const branches = counts.size ? await tx.branch.findMany({ where: { id: { in: [...counts.keys()] } }, select: { id: true, createdAt: true } }) : [];
+  return pickExpenseBranch(
+    branches.map((b) => ({ id: b.id, createdAt: b.createdAt, lessons: counts.get(b.id) ?? 0 })),
+    home.map((h) => h.branch),
+  );
+}
+
 /** Mark a locked payslip paid and book it as an expense so profit is correct. */
 export async function markPayslipPaid(actor: Actor, teacherId: string, month: string) {
   assertMonth(month);
@@ -109,11 +128,11 @@ export async function markPayslipPaid(actor: Actor, teacherId: string, month: st
     // claim LOCKED → PAID first, so two clicks can never book the expense twice
     const claimed = await tx.payslip.updateMany({ where: { id: p.id, status: "LOCKED" }, data: { status: "PAID", paidAt: new Date(), paidById: actor.userId } });
     if (claimed.count === 0) throw new UserError("error.locked");
-    const branch = await tx.userBranch.findFirst({ where: { userId: teacherId }, select: { branchId: true } });
+    const branchId = await expenseBranch(tx, actor.centerId, teacherId, month);
     const expense = await tx.expense.create({
       data: {
         centerId: actor.centerId,
-        branchId: branch?.branchId ?? null,
+        branchId,
         category: SALARY_CATEGORY,
         amount: p.total,
         date: fromISODate(todayISO()),
