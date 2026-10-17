@@ -3,7 +3,7 @@
 import { demoMode } from "@/config/brand";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
-import { getCtx } from "@/lib/ctx";
+import { getCtxForPasswordChange } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { makeT } from "@/lib/i18n";
 import { dbAttemptStore } from "@/lib/auth/attempts-db";
@@ -15,7 +15,7 @@ import { issueSession } from "@/lib/auth/session-cookie";
 export type PasswordState = { error?: string; at?: number } | null;
 
 export async function changePasswordAction(_: PasswordState, fd: FormData): Promise<PasswordState> {
-  const ctx = await getCtx();
+  const ctx = await getCtxForPasswordChange();
   if (!ctx) redirect("/login");
   const t = ctx.t ?? makeT("uz");
   const user = await db.user.findUniqueOrThrow({ where: { id: ctx.userId } });
