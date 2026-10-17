@@ -16,8 +16,10 @@ export interface Period {
 
 /**
  * Money movements of the center in [from, to] (the payments page's rows without filters): PAYMENT,
- * REFUND and reversals of those, in the user's branch scope. Use as
+ * REFUND and reversals of those. Use as
  * `FROM "LedgerEntry" le LEFT JOIN "LedgerEntry" rv ON rv.id = le."reversesId" WHERE <this>`.
+ * The family scope is only a cheap superset pre-filter: every row attributed to a scoped branch
+ * belongs to a family with a student there. The exact branch filter is in `attributedMoneySql`.
  */
 function moneyWhereSql(ctx: Ctx, p: Partial<Period>): Prisma.Sql {
   const { from, to } = periodOrThisMonth(p);
@@ -28,32 +30,54 @@ function moneyWhereSql(ctx: Ctx, p: Partial<Period>): Prisma.Sql {
 }
 
 /**
- * Revenue by method and branch. Branch of a money row (audit B12): the paying student's home branch;
- * for a family-level payment (no student, or a student without a branch) the home branch of the
- * family's student with the most recent open enrollment, ties → earliest created student, then lowest
- * id. No such student → "-". Rows are summed per family first, so the rule runs once per family.
+ * CTEs ending in `a(method, month, branch, amount)`: money rows of the period, each attributed to one
+ * branch (audit B12): the paying student's home branch; for a family-level payment (no student, or a
+ * student without a branch) the home branch of the family's student with the most recent open
+ * enrollment, ties → earliest created student, then lowest id. No such student → "-". Rows are summed
+ * per family first, so the rule runs once per family.
+ *
+ * In a branch scope (switcher or branch-limited user) only rows attributed to those branches are
+ * kept — a sibling family studying in two branches is not counted in full by both, and the branch
+ * totals add up to the center total (plus "-").
  */
-export async function revenue(ctx: Ctx, p: Period) {
-  const rows = await db.$queryRaw<{ method: string; branch: string; total: bigint }[]>`
-    WITH m AS (
-      SELECT COALESCE(le.method::text, 'SYSTEM') AS method, s."branchId" AS sb, le."familyId", SUM(le.amount) AS amount
+function attributedMoneySql(ctx: Ctx, p: Partial<Period>): Prisma.Sql {
+  const ids = scopeBranchIds(ctx);
+  const inScope = !ids ? Prisma.sql`TRUE` : ids.length === 0 ? Prisma.sql`FALSE` : Prisma.sql`a0.branch IN (${Prisma.join(ids)})`;
+  return Prisma.sql`m AS (
+      SELECT COALESCE(le.method::text, 'SYSTEM') AS method, to_char(le.date, 'YYYY-MM') AS month, s."branchId" AS sb, le."familyId", SUM(le.amount) AS amount
       FROM "LedgerEntry" le
       LEFT JOIN "LedgerEntry" rv ON rv.id = le."reversesId"
       LEFT JOIN "Student" s ON s.id = le."studentId"
       WHERE ${moneyWhereSql(ctx, p)}
-      GROUP BY 1, 2, 3
+      GROUP BY 1, 2, 3, 4
     ), fb AS (
       SELECT DISTINCT ON (fs."familyId" COLLATE "C") fs."familyId", fs."branchId"
       FROM "Student" fs
       LEFT JOIN (
-        SELECT oe."studentId", MAX(oe."startDate") AS d FROM "Enrollment" oe WHERE oe."endDate" IS NULL GROUP BY oe."studentId"
+        SELECT oe."studentId", MAX(oe."startDate") AS d
+        FROM "Enrollment" oe JOIN "Student" os ON os.id = oe."studentId"
+        WHERE oe."endDate" IS NULL AND os."centerId" = ${ctx.centerId}
+          AND os."familyId" IN (SELECT "familyId" FROM m WHERE sb IS NULL)
+        GROUP BY oe."studentId"
       ) open ON open."studentId" = fs.id
       WHERE fs."centerId" = ${ctx.centerId} AND fs."branchId" IS NOT NULL
+        AND fs."familyId" IN (SELECT "familyId" FROM m WHERE sb IS NULL)
       -- byte-order ("C") sorting of the cuid keys: same result, several times faster than the locale collation
       ORDER BY fs."familyId" COLLATE "C", open.d DESC NULLS LAST, fs."createdAt" ASC, fs.id COLLATE "C" ASC
-    )
-    SELECT m.method, COALESCE(m.sb, fb."branchId", '-') AS branch, SUM(m.amount)::bigint AS total
-    FROM m LEFT JOIN fb ON m.sb IS NULL AND fb."familyId" = m."familyId"
+    ), a0 AS (
+      SELECT m.method, m.month, COALESCE(m.sb, fb."branchId", '-') AS branch, m.amount
+      FROM m LEFT JOIN fb ON m.sb IS NULL AND fb."familyId" = m."familyId"
+    ), a AS (
+      SELECT * FROM a0 WHERE ${inScope}
+    )`;
+}
+
+/** Revenue by method and branch (attribution and branch scope: see `attributedMoneySql`). */
+export async function revenue(ctx: Ctx, p: Period) {
+  const rows = await db.$queryRaw<{ method: string; branch: string; total: bigint }[]>`
+    WITH ${attributedMoneySql(ctx, p)}
+    SELECT method, branch, SUM(amount)::bigint AS total
+    FROM a
     GROUP BY 1, 2
     ORDER BY total DESC, 1, 2`;
   const byMethod = new Map<string, number>();
@@ -73,10 +97,9 @@ export async function revenueByMonth(ctx: Ctx, months = 6) {
   const now = todayISO().slice(0, 7);
   const first = shiftMonth(now, -(months - 1));
   const rows = await db.$queryRaw<{ month: string; total: bigint }[]>`
-    SELECT to_char(le.date, 'YYYY-MM') AS month, SUM(le.amount)::bigint AS total
-    FROM "LedgerEntry" le
-    LEFT JOIN "LedgerEntry" rv ON rv.id = le."reversesId"
-    WHERE ${moneyWhereSql(ctx, { from: monthRange(first).start, to: monthRange(now).end })}
+    WITH ${attributedMoneySql(ctx, { from: monthRange(first).start, to: monthRange(now).end })}
+    SELECT month, SUM(amount)::bigint AS total
+    FROM a
     GROUP BY 1`;
   const by = new Map(rows.map((r) => [r.month, Number(r.total)]));
   return Array.from({ length: months }, (_, i) => {
