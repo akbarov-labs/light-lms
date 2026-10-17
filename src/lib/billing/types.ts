@@ -67,6 +67,8 @@ export interface BillingLesson {
   id: string;
   date: ISODate;
   status: LessonStatus;
+  /** The slot date a rescheduled lesson came from (Lesson.origDate); null/absent when it sits on its slot. */
+  origDate?: ISODate | null;
 }
 
 export interface BillingSettings {
