@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { addDays, fromISODate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { enqueue, familyChats } from "@/lib/notify";
+import { syncEnrollment } from "@/lib/billing/sync";
+import { familyBalance } from "@/lib/services/wallet";
 import { attendanceText, balanceText, centerText, chatRoles, linkChat, paymentsText, scheduleText, teacherLessonsToday, teacherWeekText } from "@/worker/bot/data";
 
 const today = todayISO();
@@ -45,8 +47,9 @@ beforeAll(async () => {
   await db.student.create({ data: { centerId, familyId: fa.id, branchId: branch.id, firstName: "Laylo", lastName: "Karimova" } });
   const e = await db.enrollment.create({ data: { studentId: ali.id, groupId: group.id, startDate: fromISODate(addDays(today, -30)), activatedAt: fromISODate(addDays(today, -30)), status: "ACTIVE" } });
   await db.attendance.create({ data: { lessonId: lessonToday.id, studentId: ali.id, enrollmentId: e.id, status: "PRESENT", grade: 5 } });
-  await db.ledgerEntry.create({ data: { centerId, familyId: fa.id, studentId: ali.id, enrollmentId: e.id, type: "CHARGE", amount: -600_000, billingKey: `sub:${e.id}:test`, description: "Oktyabr", date: fromISODate(addDays(today, -30)) } });
   await db.ledgerEntry.create({ data: { centerId, familyId: fa.id, studentId: ali.id, type: "PAYMENT", amount: 200_000, method: "CASH", description: "Naqd", date: fromISODate(addDays(today, -20)) } });
+  // charges come from the engine, so the nightly billing sync of other test files finds nothing to post here
+  await syncEnrollment(e.id, { asOf: today });
 
   const fb = await db.family.create({ data: { centerId, name: "Saidovlar" } });
   await db.guardian.create({ data: { familyId: fb.id, name: "Nodira Saidova", phone: PHONE_B, isPrimary: true } });
@@ -81,8 +84,10 @@ describe("bot linking and roles", () => {
 describe("parent menus show only the linked family", () => {
   it("balance: family balance and per-group debt, never another family", async () => {
     await linkChat(CHAT_B, PHONE_B, "uz");
+    const balance = await familyBalance(familyA);
+    expect(balance).toBeLessThan(200_000); // the engine charged the subscription
     const a = await balanceText(CHAT_A, "uz");
-    expect(a.text).toContain(formatMoney(-400_000));
+    expect(a.text).toContain(formatMoney(balance));
     expect(a.text).toContain("Karimov Ali");
     expect(a.text).toContain("Karimova Laylo");
     expect(a.text).not.toContain("Bekzod");
