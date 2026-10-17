@@ -7,6 +7,7 @@ import { processNotifications } from "./notifications";
 import { resetDemo } from "./demo-reset";
 import { lockKeyFor, withJobLock } from "./job-lock";
 import { todayISO } from "@/lib/dates";
+import { telegramBotToken } from "@/lib/env";
 
 const [name, date] = process.argv.slice(2);
 const today = date ?? todayISO();
@@ -20,7 +21,7 @@ const jobs: Record<string, () => Promise<unknown>> = {
   "daily-report": () => dailyReport(today),
   "demo-reset": async () => ({ ...(await resetDemo()), ...(await nightly(today)) }),
   notifications: async () => {
-    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const token = telegramBotToken();
     if (!token) return "TELEGRAM_BOT_TOKEN empty — nothing sent";
     const { Bot } = await import("grammy");
     const bot = new Bot(token);

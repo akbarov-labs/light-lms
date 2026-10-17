@@ -1,6 +1,7 @@
 // Small security helpers shared by login, password reset, middleware and startup checks.
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { isHttpsDeployment } from "./secret";
+import { trustProxy } from "@/lib/env";
 
 export { checkAuthSecret, isHttpsDeployment, isLocalAppUrl, isPublicSecret, type SecretCheck } from "./secret";
 
@@ -12,7 +13,7 @@ export { checkAuthSecret, isHttpsDeployment, isLocalAppUrl, isPublicSecret, type
  * spoofed headers can't mint fresh rate-limit buckets).
  */
 export function clientIp(h: { get(name: string): string | null }, opts: { peer?: string | null; trustProxy?: boolean } = {}): string {
-  const trust = opts.trustProxy ?? process.env.TRUST_PROXY === "true";
+  const trust = opts.trustProxy ?? trustProxy();
   if (trust) {
     const xff = h.get("x-forwarded-for");
     if (xff) {

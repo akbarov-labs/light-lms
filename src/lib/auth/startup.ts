@@ -1,5 +1,6 @@
 // Startup guard shared by the web server (instrumentation.ts) and the worker.
 import { checkAuthSecret, isHttpsDeployment, isLocalAppUrl, isPublicSecret } from "./secret";
+import { rawAppUrl } from "@/lib/env";
 
 export type SecretVerdict = { action: "ok" } | { action: "warn" | "refuse"; message: string };
 
@@ -19,7 +20,7 @@ export function authSecretVerdict(secret: string | undefined, appUrl: string | u
 }
 
 export function assertStrongAuthSecret(who: string): void {
-  const v = authSecretVerdict(process.env.AUTH_SECRET, process.env.APP_URL);
+  const v = authSecretVerdict(process.env.AUTH_SECRET, rawAppUrl());
   if (v.action === "ok") return;
   if (v.action === "refuse") {
     const msg = `[${who}] ${v.message}. Refusing to start. Generate one with: openssl rand -base64 32`;

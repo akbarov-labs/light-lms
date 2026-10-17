@@ -4,6 +4,7 @@ import { formatMoney, parseMoney } from "@/lib/money";
 import { accentVars } from "@/lib/color";
 import { buildPayLink } from "@/lib/payments/payme";
 import { familyBalance } from "@/lib/services/wallet";
+import { appUrl as envAppUrl } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export default async function PayPage({ params, searchParams }: { params: Promis
   // "300 000,00" is 300 000 (never ×100); anything that is not a clean positive amount falls back to the debt
   const typed = parseMoney(sp.amount ?? "");
   const amount = typed !== null && typed > 0 ? typed : debt;
-  const appUrl = (process.env.APP_URL ?? "").replace(/\/$/, "");
+  const appUrl = envAppUrl();
   if (sp.go && amount >= 1000) {
     redirect(buildPayLink({ merchantId: family.center.paymeMerchantId, familyId, amountTiyin: amount * 100, returnUrl: `${appUrl}/pay/${familyId}`, lang: ru ? "ru" : "uz", test: family.center.paymeTestMode }));
   }

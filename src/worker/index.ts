@@ -13,6 +13,7 @@ import { demoMode } from "@/config/brand";
 import { resetDemo } from "./demo-reset";
 import { alertOps, opsAlertsEnabled } from "@/lib/ops-alert";
 import { backupCheck } from "./backup-check";
+import { telegramBotToken } from "@/lib/env";
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[worker]", ...a);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -104,7 +105,7 @@ async function main() {
   beat();
   timers.push(setInterval(beat, HEARTBEAT_MS));
 
-  const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  const token = telegramBotToken();
   let send: Sender | null = null;
   if (token) {
     const b = createBot(token);

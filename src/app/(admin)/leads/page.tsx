@@ -11,6 +11,7 @@ import { Badge, LinkButton, PageHeader, cx } from "@/components/ui";
 import { Input, Select } from "@/components/fields";
 import { Modal } from "@/components/client";
 import { LeadForm } from "./lead-form";
+import { appUrl as envAppUrl } from "@/lib/env";
 
 const STAGES: LeadStage[] = ["NEW", "CONTACTED", "TRIAL_BOOKED", "TRIAL_DONE", "ENROLLED", "LOST"];
 const LEADS_PER_COLUMN = 100;
@@ -52,7 +53,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
     db.user.findMany({ where: { centerId: ctx.centerId, role: { not: "TEACHER" } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   const today = todayISO();
-  const appUrl = (process.env.APP_URL ?? "").replace(/\/$/, "");
+  const appUrl = envAppUrl();
   return (
     <>
       <PageHeader

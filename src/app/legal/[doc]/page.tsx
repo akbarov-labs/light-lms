@@ -9,6 +9,7 @@ import { PLANS, PLAN_NAMES } from "@/lib/plans";
 import { formatPhone } from "@/lib/phone";
 import { LEGAL } from "../content";
 import { COPY } from "@/app/welcome/copy";
+import { mainSiteUrl, rawAppUrl } from "@/lib/env";
 
 type Doc = "offer" | "privacy";
 const isDoc = (v: string): v is Doc => v === "offer" || v === "privacy";
@@ -34,7 +35,7 @@ export default async function LegalPage({ params }: { params: Promise<{ doc: str
   const ru = lang === "ru";
   const L = BRAND.legal;
   const draft = !L.entity;
-  const site = (process.env.MAIN_SITE_URL || process.env.APP_URL || "").replace(/^https?:\/\//, "").replace(/\/$/, "") || BRAND.name;
+  const site = (mainSiteUrl() || rawAppUrl() || "").replace(/^https?:\/\//, "").replace(/\/$/, "") || BRAND.name;
   const plans = PLAN_NAMES.map((p) =>
     `${COPY[lang].pricing.plans[p]} — ${ru ? "до" : ""} ${money(PLANS[p].limit)} ${ru ? "учеников" : "tagacha o'quvchi"}, ${PLANS[p].monthlyPrice ? `${money(PLANS[p].monthlyPrice)} ${ru ? "сум/мес" : "so'm/oy"}` : ru ? "бесплатно" : "bepul"}`.replace("  ", " "),
   ).join("; ");

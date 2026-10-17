@@ -5,13 +5,14 @@ import { Card } from "@/components/ui";
 import { Checkbox, Field, FormGrid, Input, Select, Textarea } from "@/components/fields";
 import { ActionForm, SubmitButton } from "@/components/client";
 import { saveCenterAction } from "./actions";
+import { appUrl as envAppUrl } from "@/lib/env";
 
 export default async function CenterSettings() {
   const ctx = await requireStaff("settings");
   const { t } = ctx;
   const c = await db.center.findUniqueOrThrow({ where: { id: ctx.centerId } });
   const s = readSettings(c.settings);
-  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const appUrl = envAppUrl();
   return (
     <ActionForm action={saveCenterAction} className="space-y-5">
       <Card title={t("settings.center")}>

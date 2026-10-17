@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
 import { buildCsp, securityHeaders } from "@/lib/auth/headers";
+import { rawAppUrl } from "@/lib/env";
 
 const PUBLIC = [/^\/login/, /^\/signup/, /^\/welcome/, /^\/legal\//, /^\/demo$/, /^\/f\//, /^\/pay\//, /^\/api\/payme/, /^\/api\/health/, /^\/_next\//, /^\/favicon/];
 
@@ -8,7 +9,7 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   // Per-request nonce: Next adds it to its own scripts when it sees it in the request's CSP header.
   const nonce = btoa(crypto.randomUUID());
-  const https = (process.env.APP_URL ?? "").startsWith("https://") || req.headers.get("x-forwarded-proto") === "https";
+  const https = (rawAppUrl() ?? "").startsWith("https://") || req.headers.get("x-forwarded-proto") === "https";
   const csp = buildCsp(nonce, { dev: process.env.NODE_ENV !== "production", https });
 
   const pass = () => {

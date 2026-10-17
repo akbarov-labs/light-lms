@@ -13,10 +13,11 @@ import { ActionForm, SubmitButton } from "@/components/client";
 import { PricingFields } from "../courses/pricing-fields";
 import { dismissSetupAction, setupBranchAction, setupCourseAction, setupGroupAction, setupTeacherAction, skipStepAction } from "./actions";
 import { RoomsEditor, ScheduleFields } from "./wizard-fields";
+import { appUrl as envAppUrl } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
-const appUrl = () => process.env.APP_URL ?? "http://localhost:3000";
+const appUrl = envAppUrl;
 
 function Stepper({ ctx, o, active }: { ctx: Ctx; o: Onboarding; active: SetupStep | null }) {
   const { t } = ctx;
