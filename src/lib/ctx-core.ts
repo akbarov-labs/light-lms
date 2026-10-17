@@ -1,7 +1,7 @@
 // Context core: who is acting, which center/branches they may touch, which language.
 // Framework-free so the worker and bot can use it; ctx.ts adds the request (cookies) side.
 import { db } from "./db";
-import { allowedBranches, effectivePerms, type Perm, type RoleName } from "./perms";
+import { allowedBranches, DEFAULT_PERMS, effectivePerms, PERMS, type Perm, type RoleName } from "./perms";
 import { makeT, type Locale, type TFn } from "./i18n";
 import { readSettings, type CenterSettings } from "./settings";
 import { UserError } from "./user-error";
@@ -23,7 +23,7 @@ export interface Ctx {
   locale: Locale;
   t: TFn;
   can: (p: Perm) => boolean;
-  /** Listed in PLATFORM_ADMIN_PHONES: may open /platform (all centers). */
+  /** User.platformAdmin (set only by scripts/platform-admin.ts): may open /platform (all centers). */
   isPlatformAdmin: boolean;
 }
 
@@ -62,7 +62,7 @@ export function buildCtx(user: UserWithCenter, opts: { activeBranchId?: string |
     locale,
     t: makeT(locale),
     can: (p) => perms.has(p),
-    isPlatformAdmin: isPlatformAdmin(user.phone),
+    isPlatformAdmin: isPlatformAdmin(user),
   };
 }
 
@@ -126,9 +126,51 @@ export function staffInScope(ctx: Ctx, userBranchIds: string[]): boolean {
   return userBranchIds.length > 0 && userBranchIds.every((b) => ctx.branchIds!.includes(b));
 }
 
-/** A teacher whose salary this user may see/change: unscoped, or teaching in one of the user's branches. */
+/** Switches this actor may hand out: an owner any, everyone else only the ones they hold. */
+export function canGrant(actor: Pick<Ctx, "role" | "can">, p: Perm): boolean {
+  return actor.role === "OWNER" || actor.can(p);
+}
+
+/**
+ * Permissions to store for a staff member being saved by `actor`.
+ * `picked` = the form's checkboxes (null when the form did not send them → the role's defaults).
+ * Anything the actor can't grant is never added (also not via the defaults); switches the actor
+ * can't see that the user already had (`existing`) are kept as they were.
+ */
+export function staffPermsFor(actor: Pick<Ctx, "role" | "can">, role: RoleName, picked: Perm[] | null, existing: string[] = []): Perm[] {
+  if (role === "OWNER") return [...PERMS];
+  if (role === "TEACHER") return [];
+  const wanted = new Set(picked ?? DEFAULT_PERMS[role]);
+  const had = new Set(existing);
+  return PERMS.filter((p) => (canGrant(actor, p) ? wanted.has(p) : had.has(p)));
+}
+
+/**
+ * A teacher whose salary this user may change (rule, adjustment, lock/unlock/paid):
+ * - the target is a teacher (isTeacher or role TEACHER) of this center,
+ * - inside the user's branches (unscoped users: any),
+ * - and only an OWNER may touch their own salary — a manager with finance.view can't bonus/pay themselves (S8).
+ */
 export async function assertTeacherAccess(ctx: Ctx, teacherId: string): Promise<void> {
   const t = await db.user.findFirst({ where: { id: teacherId, centerId: ctx.centerId }, include: { branches: { select: { branchId: true } } } });
-  if (!t) throw new UserError("error.notFound");
+  if (!t || !(t.isTeacher || t.role === "TEACHER")) throw new UserError("error.notFound");
   if (ctx.branchIds && !t.branches.some((b) => ctx.branchIds!.includes(b.branchId))) throw new UserError("error.notFound");
+  if (t.id === ctx.userId && ctx.role !== "OWNER") throw new UserError("error.forbidden");
+}
+
+/**
+ * Form-supplied ids must belong to this center (S6): the course, the branch and an active staff
+ * assignee. An id the lead already has is kept even if that course/person was archived since.
+ */
+export async function assertLeadRefs(ctx: Ctx, f: { courseId?: string; branchId?: string; assignedToId?: string }, before?: { courseId: string | null; assignedToId: string | null } | null): Promise<void> {
+  if (f.branchId) {
+    assertBranch(ctx, f.branchId);
+    if (!(await db.branch.findFirst({ where: { id: f.branchId, centerId: ctx.centerId }, select: { id: true } }))) throw new UserError("error.notFound");
+  }
+  if (f.courseId && f.courseId !== before?.courseId) {
+    if (!(await db.course.findFirst({ where: { id: f.courseId, centerId: ctx.centerId }, select: { id: true } }))) throw new UserError("error.notFound");
+  }
+  if (f.assignedToId && f.assignedToId !== before?.assignedToId) {
+    if (!(await db.user.findFirst({ where: { id: f.assignedToId, centerId: ctx.centerId, archivedAt: null }, select: { id: true } }))) throw new UserError("error.notFound");
+  }
 }

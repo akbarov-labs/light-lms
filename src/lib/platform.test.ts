@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { isPlatformAdmin, platformAdminPhones } from "./platform";
+import { isPlatformAdmin } from "./platform";
 
 describe("platform admins", () => {
-  it("normalizes the env list", () => {
-    expect([...platformAdminPhones("+998 90 123 45 67, 901234568 ,bad")]).toEqual(["998901234567", "998901234568"]);
+  it("is the database flag only", () => {
+    expect(isPlatformAdmin({ platformAdmin: true })).toBe(true);
+    expect(isPlatformAdmin({ platformAdmin: false })).toBe(false);
+    expect(isPlatformAdmin({})).toBe(false);
+    expect(isPlatformAdmin(null)).toBe(false);
   });
-  it("matches only listed phones, nobody when unset", () => {
-    expect(isPlatformAdmin("998901234567", "998901234567")).toBe(true);
-    expect(isPlatformAdmin("998901234569", "998901234567")).toBe(false);
-    expect(isPlatformAdmin("998901234567", "")).toBe(false);
-    expect(isPlatformAdmin(null, "998901234567")).toBe(false);
+  it("an archived account loses it", () => {
+    expect(isPlatformAdmin({ platformAdmin: true, archivedAt: new Date() })).toBe(false);
   });
 });

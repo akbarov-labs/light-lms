@@ -1,6 +1,6 @@
 "use server";
 
-// Platform admin (PLATFORM_ADMIN_PHONES): switch a center off/on and change its plan.
+// Platform admin (User.platformAdmin, granted by scripts/platform-admin.ts): switch a center off/on and change its plan.
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { runAction, type ActionState } from "@/lib/action";

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireCtx } from "@/lib/ctx";
+import { requireCtxForPasswordChange } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { logoutAction } from "@/app/actions";
 import { AuthCard } from "../login/auth-card";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Parol" };
 
 export default async function PasswordPage() {
-  const ctx = await requireCtx();
+  const ctx = await requireCtxForPasswordChange();
   const { t } = ctx;
   const user = await db.user.findUniqueOrThrow({ where: { id: ctx.userId }, select: { mustChangePassword: true } });
   const forced = user.mustChangePassword;

@@ -8,6 +8,23 @@ export interface SecretCheck {
   problems: string[];
 }
 
+/** Missing, or a value printed in this repo (the dev compose fallback, .env.example): anyone can forge sessions. */
+export function isPublicSecret(secret: string | undefined): boolean {
+  const s = (secret ?? "").trim();
+  return !s || KNOWN_WEAK.has(s) || /change[-_]?me/i.test(s);
+}
+
+/** APP_URL points at this machine only (localhost / 127.0.0.1 / ::1), or is unset (npm run dev). */
+export function isLocalAppUrl(appUrl: string | undefined = process.env.APP_URL): boolean {
+  if (!appUrl) return true;
+  try {
+    const host = new URL(appUrl).hostname.replace(/^\[|\]$/g, "");
+    return host === "localhost" || host === "127.0.0.1" || host === "::1";
+  } catch {
+    return false;
+  }
+}
+
 /** AUTH_SECRET must be long, not a known example value and not trivially repetitive. */
 export function checkAuthSecret(secret: string | undefined): SecretCheck {
   const problems: string[] = [];

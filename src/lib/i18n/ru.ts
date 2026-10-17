@@ -99,6 +99,7 @@ export const ru: Record<DictKey, string> = {
   "common.end": "Окончание",
   "common.ok": "OK",
   "common.warning": "Внимание",
+  "common.reversed": "Отменён",
 
   "nav.dashboard": "Панель",
   "nav.today": "Сегодня",

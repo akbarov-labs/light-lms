@@ -3,22 +3,23 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { runAction, type ActionState } from "@/lib/action";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { formList, formObject, zBool, zDate, zId, zOptId, zOptInt, zOptStr, zPhone, zStr } from "@/lib/forms";
 import { UserError } from "@/lib/user-error";
 import { assertNotDemo } from "@/lib/demo-guard";
-import { DEFAULT_PERMS, PERMS, type Perm, type RoleName } from "@/lib/perms";
-import { readSettings } from "@/lib/settings";
+import { PERMS, type Perm, type RoleName } from "@/lib/perms";
+import { paymeFiscalSchema, readSettings, type PaymeFiscal } from "@/lib/settings";
 import { fromISODate } from "@/lib/dates";
 import { generateLessons } from "@/lib/services/lessons";
 import { syncGroup } from "@/lib/billing/sync";
-import { assertBranch, staffInScope, type Ctx } from "@/lib/ctx";
+import { assertBranch, staffInScope, staffPermsFor, type Ctx } from "@/lib/ctx";
 import { adminResetPassword, BCRYPT_ROUNDS, setPassword } from "@/lib/auth/password";
 import { MIN_PASSWORD } from "@/lib/auth/security";
 import { issueSession } from "@/lib/auth/session-cookie";
+import { unlinkIfPhoneChanged, unlinkRef } from "@/lib/telegram-links";
 
 // ---------------------------------------------------------------- center
 
@@ -40,7 +41,19 @@ const centerSchema = z.object({
   paymeMerchantId: zOptStr,
   paymeKey: zOptStr,
   paymeTestMode: zBool,
+  fiscalIkpu: zOptStr,
+  fiscalPackageCode: zOptStr,
+  fiscalVat: zOptStr,
 });
+
+/** All three fiscal fields empty → no fiscal receipt; otherwise they must form a valid PaymeFiscal. */
+function parseFiscal(f: { fiscalIkpu?: string; fiscalPackageCode?: string; fiscalVat?: string }): PaymeFiscal | null {
+  if (!f.fiscalIkpu && !f.fiscalPackageCode && !f.fiscalVat) return null;
+  const vat = f.fiscalVat === undefined ? NaN : Number(f.fiscalVat.replace(",", "."));
+  const r = paymeFiscalSchema.safeParse({ ikpu: (f.fiscalIkpu ?? "").replace(/\s/g, ""), packageCode: f.fiscalPackageCode ?? "", vatPercent: vat });
+  if (!r.success) throw new UserError("settings.paymeFiscalInvalid");
+  return r.data;
+}
 
 const NOTIFY = ["payment", "reminder", "debt", "absence", "trial", "teacherReminder", "dailyReport"] as const;
 
@@ -51,6 +64,10 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
     const clash = await db.center.findFirst({ where: { slug: f.slug, id: { not: ctx.centerId } } });
     if (clash) throw new UserError("settings.slugTaken");
     const before = await db.center.findUniqueOrThrow({ where: { id: ctx.centerId } });
+    // one Payme cashbox key = one center (unique index): Payme requests are routed by the key
+    const paymeKey = f.paymeKey === "-" ? null : (f.paymeKey ?? before.paymeKey);
+    if (paymeKey && (await db.center.findFirst({ where: { paymeKey, id: { not: ctx.centerId } }, select: { id: true } }))) throw new UserError("settings.paymeKeyTaken");
+    const paymeFiscal = parseFiscal(f);
     const old = readSettings(before.settings);
     const settings = {
       ...old,
@@ -67,34 +84,41 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
         return list.length ? [...new Set(list)] : old.expenseCategories;
       })(),
       notify: Object.fromEntries(NOTIFY.map((k) => [k, fd.get(`notify.${k}`) === "on"])) as typeof old.notify,
+      paymeFiscal,
     };
-    await db.$transaction(async (tx) => {
-      const after = await tx.center.update({
-        where: { id: ctx.centerId },
-        data: {
-          name: f.name,
-          slug: f.slug,
-          accentColor: f.accentColor,
-          logoUrl: f.logoUrl ?? null,
-          phone: f.phone ?? null,
-          locale: f.locale,
-          settings: settings as unknown as Prisma.InputJsonValue,
-          paymeMerchantId: f.paymeMerchantId ?? null,
-          // keep the stored key when the field is left empty (it is never shown back)
-          paymeKey: f.paymeKey === "-" ? null : (f.paymeKey ?? before.paymeKey),
-          paymeTestMode: f.paymeTestMode,
-        },
+    await db
+      .$transaction(async (tx) => {
+        const after = await tx.center.update({
+          where: { id: ctx.centerId },
+          data: {
+            name: f.name,
+            slug: f.slug,
+            accentColor: f.accentColor,
+            logoUrl: f.logoUrl ?? null,
+            phone: f.phone ?? null,
+            locale: f.locale,
+            settings: settings as unknown as Prisma.InputJsonValue,
+            paymeMerchantId: f.paymeMerchantId ?? null,
+            // keep the stored key when the field is left empty (it is never shown back)
+            paymeKey,
+            paymeTestMode: f.paymeTestMode,
+          },
+        });
+        await audit(tx, {
+          centerId: ctx.centerId,
+          userId: ctx.userId,
+          entity: "Center",
+          entityId: ctx.centerId,
+          action: "settings",
+          before: { ...before, paymeKey: before.paymeKey ? "***" : null },
+          after: { ...after, paymeKey: after.paymeKey ? "***" : null },
+        });
+      })
+      .catch((e: unknown) => {
+        // lost a race with another center saving the same key (unique index)
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && String(e.meta?.target ?? "").includes("paymeKey")) throw new UserError("settings.paymeKeyTaken");
+        throw e;
       });
-      await audit(tx, {
-        centerId: ctx.centerId,
-        userId: ctx.userId,
-        entity: "Center",
-        entityId: ctx.centerId,
-        action: "settings",
-        before: { ...before, paymeKey: before.paymeKey ? "***" : null },
-        after: { ...after, paymeKey: after.paymeKey ? "***" : null },
-      });
-    });
     revalidatePath("/", "layout");
     return { message: ctx.t("common.saved") };
   });
@@ -227,9 +251,7 @@ export async function saveStaffAction(_: ActionState, fd: FormData): Promise<Act
     assertNotDemo();
     const f = staffSchema.parse(formObject(fd));
     if (!canManageRole(ctx, f.role)) throw new UserError("settings.cannotEditOwner");
-    const perms = formList(fd, "perms").filter((p): p is Perm => (PERMS as readonly string[]).includes(p));
-    // A manager can only hand out switches they have themselves.
-    const grantable = perms.filter((p) => ctx.role === "OWNER" || ctx.can(p));
+    const picked = fd.has("permsTouched") ? formList(fd, "perms").filter((p): p is Perm => (PERMS as readonly string[]).includes(p)) : null;
     const branchIds = formList(fd, "branchIds");
     const branches = await db.branch.findMany({ where: { id: { in: branchIds }, centerId: ctx.centerId }, select: { id: true } });
     for (const b of branches) assertBranch(ctx, b.id);
@@ -239,31 +261,34 @@ export async function saveStaffAction(_: ActionState, fd: FormData): Promise<Act
     if (taken && taken.id !== f.id) throw new UserError("error.phoneTaken");
 
     await db.$transaction(async (tx) => {
+      const u = f.id ? await tx.user.findFirst({ where: { id: f.id, centerId: ctx.centerId }, include: { branches: true } }) : null;
+      if (f.id && !u) throw new UserError("error.notFound");
       const data = {
         name: f.name,
         phone: f.phone,
         role: f.role,
         isTeacher: f.role === "TEACHER" ? true : f.isTeacher,
-        perms: f.role === "OWNER" ? [...PERMS] : f.role === "TEACHER" ? [] : fd.has("permsTouched") ? grantable : DEFAULT_PERMS[f.role],
+        // a manager/admin can only hand out switches they hold — the role defaults included (S2)
+        perms: staffPermsFor(ctx, f.role, picked, u?.perms),
       };
       let userId: string;
-      if (f.id) {
-        const u = await tx.user.findFirst({ where: { id: f.id, centerId: ctx.centerId }, include: { branches: true } });
-        if (!u) throw new UserError("error.notFound");
+      if (u) {
         if (!canManageRole(ctx, u.role as RoleName)) throw new UserError("settings.cannotEditOwner");
         // a branch manager edits only staff who work entirely inside their branches
         if (!staffInScope(ctx, u.branches.map((b) => b.branchId))) throw new UserError("error.forbidden");
         if (u.id === ctx.userId && f.role !== u.role) throw new UserError("settings.cannotEditOwner");
         await tx.user.update({ where: { id: u.id }, data });
+        // new phone: the chat linked to the old one loses the teacher menu and /parol codes (S3)
+        await unlinkIfPhoneChanged(tx, "STAFF", u.id, u.phone, f.phone);
         // a password typed by an admin is a reset: old sessions end, the user picks their own next time
         if (f.password) await setPassword(tx, { id: u.id, phone: f.phone }, f.password, { mustChange: u.id !== ctx.userId });
         await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: u.id, action: "update", before: { ...u, passwordHash: undefined }, after: { ...data, branchIds, passwordChanged: !!f.password } });
         userId = u.id;
       } else {
         if (!f.password) throw new UserError("settings.passwordShort");
-        const u = await tx.user.create({ data: { ...data, centerId: ctx.centerId, passwordHash: await bcrypt.hash(f.password, BCRYPT_ROUNDS), mustChangePassword: true } });
-        await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: u.id, action: "create", after: { ...data, branchIds } });
-        userId = u.id;
+        const created = await tx.user.create({ data: { ...data, centerId: ctx.centerId, passwordHash: await bcrypt.hash(f.password, BCRYPT_ROUNDS), mustChangePassword: true } });
+        await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: created.id, action: "create", after: { ...data, branchIds } });
+        userId = created.id;
       }
       // replace only the branch assignments this user controls
       await tx.userBranch.deleteMany({ where: { userId, ...(ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) } });
@@ -286,6 +311,8 @@ export async function toggleStaffArchiveAction(_: ActionState, fd: FormData): Pr
     if (!staffInScope(ctx, u.branches.map((b) => b.branchId))) throw new UserError("error.forbidden");
     await db.$transaction(async (tx) => {
       await tx.user.update({ where: { id }, data: { archivedAt: u.archivedAt ? null : new Date() } });
+      // archived staff lose the bot (after a restore they re-link by sharing their contact)
+      if (!u.archivedAt) await unlinkRef(tx, "STAFF", id);
       await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: id, action: u.archivedAt ? "restore" : "archive" });
     });
     revalidatePath("/settings/staff");

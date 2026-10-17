@@ -74,15 +74,15 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
             </thead>
             <tbody>
               {rows.map((r) => (
-                <Tr key={r.id} className={r.reversedBy ? "opacity-50" : ""}>
+                <Tr key={r.id} muted={!!r.reversedBy}>
                   <Td className="whitespace-nowrap text-xs">{formatDate(toISODate(r.date))}</Td>
                   <Td className="text-xs">{r.receiptNo ? <Link href={`/r/${r.id}`} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{r.receiptNo}</Link> : "—"}</Td>
                   <Td>
                     <Link href={`/families/${r.family.id}`} className="font-medium text-zinc-900 hover:underline hover:decoration-zinc-400">{r.student ? `${r.student.lastName} ${r.student.firstName}` : r.family.name}</Link>
-                    <div className="text-xs text-zinc-500">{r.type !== "PAYMENT" && <Badge tone={r.type === "REFUND" ? "amber" : "red"}>{t(`ledger.${r.type}`)}</Badge>} {r.description}</div>
+                    <div className="text-xs text-zinc-500">{r.type !== "PAYMENT" && <Badge tone={r.type === "REFUND" ? "amber" : "red"}>{t(`ledger.${r.type}`)}</Badge>}{r.reversedBy && <Badge>{t("common.reversed")}</Badge>} {r.description}</div>
                   </Td>
                   <Td>{r.method ? t(`method.${r.method}`) : "—"}</Td>
-                  <Td className={cx("whitespace-nowrap text-right font-medium", r.amount < 0 ? "text-red-600" : "text-emerald-700")}>{formatMoney(r.amount)}</Td>
+                  <Td className={cx("whitespace-nowrap text-right font-medium", r.reversedBy ? "line-through" : r.amount < 0 ? "text-red-600" : "text-emerald-700")}>{formatMoney(r.amount)}</Td>
                   <Td className="text-xs">{r.createdById ? users.get(r.createdById) : "Payme"}</Td>
                 </Tr>
               ))}

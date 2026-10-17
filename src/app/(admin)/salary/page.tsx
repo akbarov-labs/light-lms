@@ -42,8 +42,8 @@ export default async function SalaryPage({ searchParams }: { searchParams: Promi
           <thead><tr><Th>{t("common.teacher")}</Th><Th>{t("salary.model")}</Th><Th className="text-right">{t("salary.lessonsHeld")}</Th><Th className="text-right">{t("salary.live")}</Th><Th>{t("common.status")}</Th><Th className="text-right">{t("salary.lockedTotal")}</Th></tr></thead>
           <tbody>
             {rows.map(({ u, result, rule, slip }) => (
-              <Tr key={u.id} className={u.archivedAt ? "opacity-50" : ""}>
-                <Td><Link href={`/salary/${u.id}?month=${month}`} className="font-medium text-zinc-900 hover:underline hover:decoration-zinc-400">{u.name}</Link></Td>
+              <Tr key={u.id} muted={!!u.archivedAt}>
+                <Td><Link href={`/salary/${u.id}?month=${month}`} className="font-medium text-zinc-900 hover:underline hover:decoration-zinc-400">{u.name}</Link>{u.archivedAt && <> <Badge>{t("settings.archived")}</Badge></>}</Td>
                 <Td className="text-xs">{rule ? `${t(`salary.${rule.model}`)}${rule.percent ? ` · ${rule.percent}%` : ""}` : <span className="text-amber-700">{t("salary.noRule")}</span>}</Td>
                 <Td className="text-right">{result.lessonsHeld}</Td>
                 <Td className="whitespace-nowrap text-right font-medium">{formatMoney(result.total)}</Td>

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { formatDate, monthRange, toISODate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { listExpenses } from "@/lib/queries/expenses";
-import { Card, EmptyState, LinkButton, PageHeader, Stat, Table, Td, Th, Tr } from "@/components/ui";
+import { Badge, Card, EmptyState, LinkButton, PageHeader, Stat, Table, Td, Th, Tr, cx } from "@/components/ui";
 import { Field, FormGrid, Input, Select } from "@/components/fields";
 import { ActionForm, Modal, ModalForm, SubmitButton } from "@/components/client";
 import { addExpenseAction, reverseExpenseAction } from "./actions";
@@ -78,12 +78,12 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
             <thead><tr><Th>{t("common.date")}</Th><Th>{t("expenses.category")}</Th><Th>{t("common.branch")}</Th><Th>{t("common.note")}</Th><Th className="text-right">{t("common.amount")}</Th><Th>{t("common.createdBy")}</Th><Th /></tr></thead>
             <tbody>
               {rows.map((r) => (
-                <Tr key={r.id} className={r.reversedAt ? "opacity-50 line-through" : ""}>
+                <Tr key={r.id} muted={!!r.reversedAt}>
                   <Td className="whitespace-nowrap text-xs">{formatDate(toISODate(r.date))}</Td>
-                  <Td>{r.category}</Td>
+                  <Td>{r.category}{r.reversedAt && <> <Badge>{t("common.reversed")}</Badge></>}</Td>
                   <Td className="text-xs">{r.branch?.name ?? t("expenses.centerWide")}</Td>
                   <Td className="text-xs">{r.note}</Td>
-                  <Td className="whitespace-nowrap text-right font-medium">{formatMoney(r.amount)}</Td>
+                  <Td className={cx("whitespace-nowrap text-right font-medium", r.reversedAt && "line-through")}>{formatMoney(r.amount)}</Td>
                   <Td className="text-xs">{users.get(r.createdById) ?? "—"}</Td>
                   <Td className="text-right">
                     {!r.reversedAt && canReverse && (

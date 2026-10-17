@@ -1,6 +1,7 @@
 // Bot data access: linking chats to people and the read models behind each menu button.
 import type { LinkKind } from "@prisma/client";
 import { db } from "@/lib/db";
+import { validLinks } from "@/lib/telegram-links";
 import { addDays, formatDate, fromISODate, toISODate, todayISO, weekdayOf } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { esc } from "@/lib/messages";
@@ -56,12 +57,15 @@ export async function setChatLocale(chatId: string, locale: Locale) {
   await db.user.updateMany({ where: { telegramChatId: chatId }, data: { locale } });
 }
 
+/**
+ * What this chat may do right now. Re-checked on every update (validLinks): a staff member who was
+ * archived, a person whose phone changed, or anyone of a disabled center gets nothing.
+ */
 export async function chatRoles(chatId: string) {
-  const links = await db.telegramLink.findMany({ where: { chatId } });
-  const staffIds = links.filter((l) => l.kind === "STAFF").map((l) => l.refId);
-  const staff = await db.user.findMany({ where: { id: { in: staffIds }, archivedAt: null } });
+  const links = await validLinks(chatId);
+  const staff = await db.user.findMany({ where: { id: { in: links.staffIds }, archivedAt: null, center: { disabledAt: null } } });
   return {
-    family: links.some((l) => l.kind === "GUARDIAN" || l.kind === "STUDENT"),
+    family: links.guardianIds.length > 0 || links.studentIds.length > 0,
     teacher: staff.find((s) => s.isTeacher || s.role === "TEACHER") ?? null,
     owner: staff.find((s) => s.role === "OWNER" || s.role === "MANAGER") ?? null,
   };
@@ -69,12 +73,13 @@ export async function chatRoles(chatId: string) {
 
 /** Students this chat may see: children of linked guardians' families + linked students. */
 export async function chatStudents(chatId: string) {
-  const links = await db.telegramLink.findMany({ where: { chatId, kind: { in: ["GUARDIAN", "STUDENT"] } } });
-  const guardians = await db.guardian.findMany({ where: { id: { in: links.filter((l) => l.kind === "GUARDIAN").map((l) => l.refId) } }, select: { familyId: true } });
+  const links = await validLinks(chatId);
+  const guardians = await db.guardian.findMany({ where: { id: { in: links.guardianIds } }, select: { familyId: true } });
   return db.student.findMany({
     where: {
       status: "ACTIVE",
-      OR: [{ familyId: { in: guardians.map((g) => g.familyId) } }, { id: { in: links.filter((l) => l.kind === "STUDENT").map((l) => l.refId) } }],
+      center: { disabledAt: null },
+      OR: [{ familyId: { in: guardians.map((g) => g.familyId) } }, { id: { in: links.studentIds } }],
     },
     include: {
       center: { select: { id: true, name: true, phone: true, paymeMerchantId: true, paymeKey: true } },

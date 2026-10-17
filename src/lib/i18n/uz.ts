@@ -98,6 +98,7 @@ export const uz = {
   "common.end": "Tugashi",
   "common.ok": "OK",
   "common.warning": "Diqqat",
+  "common.reversed": "Bekor qilingan",
 
   "nav.dashboard": "Boshqaruv paneli",
   "nav.today": "Bugun",

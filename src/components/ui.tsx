@@ -78,7 +78,7 @@ export function Table({ children, className }: { children: ReactNode; className?
   return (
     // focusable so keyboard users can scroll a table that is wider than a phone
     <div tabIndex={0} className={cx("overflow-x-auto focus-visible:-outline-offset-2", className)}>
-      <table className="w-full min-w-full border-collapse text-sm">{children}</table>
+      <table className="w-full min-w-full border-collapse text-sm text-zinc-700">{children}</table>
     </div>
   );
 }
@@ -91,13 +91,14 @@ export function Th({ children, className, ...rest }: ComponentProps<"th">) {
 }
 export function Td({ children, className, ...rest }: ComponentProps<"td">) {
   return (
-    <td {...rest} className={cx("px-3 py-2.5 align-middle text-zinc-700 first:pl-4 last:pr-4", className)}>
+    <td {...rest} className={cx("px-3 py-2.5 align-middle first:pl-4 last:pr-4", className)}>
       {children}
     </td>
   );
 }
-export function Tr({ children, className }: { children: ReactNode; className?: string }) {
-  return <tr className={cx("border-b border-zinc-100 transition-colors last:border-0 hover:bg-zinc-50/70", className)}>{children}</tr>;
+/** `muted` marks a closed row (archived, ended, reversed): body text drops to zinc-500, never an opacity fade (that fails contrast). */
+export function Tr({ children, className, muted }: { children: ReactNode; className?: string; muted?: boolean }) {
+  return <tr className={cx("border-b border-zinc-100 transition-colors last:border-0 hover:bg-zinc-50/70", muted && "text-zinc-500", className)}>{children}</tr>;
 }
 
 /** Right-aligned money cell content; debts read red, credits green when asked. */
