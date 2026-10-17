@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { familyScope, type Ctx } from "@/lib/ctx-core";
 import { fromISODate, monthRange, todayISO, isISODate } from "@/lib/dates";

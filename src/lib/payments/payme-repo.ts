@@ -1,5 +1,5 @@
 // Prisma-backed PaymeRepo. Perform and cancel post ledger rows in the same DB transaction.
-import type { PaymeTransaction } from "@prisma/client";
+import type { PaymeTransaction } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { postPayment, reverseEntry } from "@/lib/services/payments";

@@ -1,7 +1,7 @@
 // SQL twins of the Prisma scope helpers in ctx-core (studentScope / familyScope), for raw report queries.
 // Keep them in step with ctx-core: a student is in scope by home branch OR any enrollment in a scoped branch.
 // Written as uncorrelated IN (…) sets so Postgres hashes them once instead of probing per row.
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { scopeBranchIds, type Ctx } from "@/lib/ctx-core";
 
 /** Students enrolled (ever) in a group of these branches. */

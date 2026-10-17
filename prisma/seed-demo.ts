@@ -1,7 +1,7 @@
 // Demo center (HANDOFF §13). Deterministic: a seeded PRNG drives every choice; dates are relative to
 // "today" so the demo always looks current. Billing, payments and salaries go through the real services,
 // so the demo data is exactly what the app itself would have produced.
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../src/generated/prisma/client";
 import bcrypt from "bcryptjs";
 import { db } from "../src/lib/db";
 import { DEFAULT_PERMS, PERMS } from "../src/lib/perms";

@@ -1,7 +1,7 @@
 // Student search: every word must match a first or last name; 3+ digits also match student/guardian phones.
 // Each column is matched with its own (I)LIKE '%term%' so the per-column GIN trigram indexes
 // (Student.firstName/lastName/phone, Guardian.phone — migration 20261017000100) can serve it (audit P4).
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 
 export interface ParsedSearch {
   /** Words with at least one non-digit: each must match firstName or lastName. */

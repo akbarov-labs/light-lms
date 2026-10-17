@@ -1,7 +1,7 @@
 // Telegram chat links: who a chat speaks for. A link is only valid while the person still has the
 // phone the chat proved (contact share), is active, and their center is enabled.
 // Unlink in the SAME transaction as the change that breaks the link (phone change, staff archived).
-import type { LinkKind } from "@prisma/client";
+import type { LinkKind } from "@/generated/prisma/client";
 import { db, type Tx } from "./db";
 import { normalizePhone } from "./phone";
 

@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
+import { isUniqueViolation } from "@/lib/db-errors";
 import { runAction, type ActionState } from "@/lib/action";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
@@ -116,7 +117,7 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
       })
       .catch((e: unknown) => {
         // lost a race with another center saving the same key (unique index)
-        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && String(e.meta?.target ?? "").includes("paymeKey")) throw new UserError("settings.paymeKeyTaken");
+        if (isUniqueViolation(e, "paymeKey")) throw new UserError("settings.paymeKeyTaken");
         throw e;
       });
     revalidatePath("/", "layout");

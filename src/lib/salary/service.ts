@@ -1,5 +1,5 @@
 // DB side of salaries: load a teacher's month, lock it, mark it paid (HANDOFF §8).
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { fromISODate, minDate, monthRange, toISODate, todayISO } from "@/lib/dates";

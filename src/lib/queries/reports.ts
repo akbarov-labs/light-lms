@@ -1,6 +1,6 @@
 // Report queries (HANDOFF §8 "Reports"). Revenue counts only real money (PAYMENT, REFUND and
 // their reversals) — never charges or credits. Sums are done by Postgres (audit P2).
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { scopeBranchIds, studentScope, type Ctx } from "@/lib/ctx-core";
 import { diffDays, fromISODate, monthRange, shiftMonth, toISODate, todayISO } from "@/lib/dates";

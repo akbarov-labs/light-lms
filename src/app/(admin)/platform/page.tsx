@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
 import { requireCtx } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatDate, formatDateTime } from "@/lib/dates";

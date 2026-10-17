@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import type { Course } from "@prisma/client";
+import type { Course } from "@/generated/prisma/client";
 import { requireStaff, type Ctx } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/money";

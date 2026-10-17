@@ -1,7 +1,7 @@
 // Debtors (HANDOFF §7 "Debtors list"), audit P1: which families owe and how much is decided in SQL
 // (SUM(ledger) per family, scoped and filtered, sorted, paginated); the FIFO allocation that gives
 // "days overdue" runs only for the families being shown, in bounded batches.
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import type { Ctx } from "@/lib/ctx-core";
 import { diffDays, toISODate, todayISO } from "@/lib/dates";
