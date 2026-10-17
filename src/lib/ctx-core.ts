@@ -1,7 +1,7 @@
 // Context core: who is acting, which center/branches they may touch, which language.
 // Framework-free so the worker and bot can use it; ctx.ts adds the request (cookies) side.
 import { db } from "./db";
-import { allowedBranches, effectivePerms, type Perm, type RoleName } from "./perms";
+import { allowedBranches, DEFAULT_PERMS, effectivePerms, PERMS, type Perm, type RoleName } from "./perms";
 import { makeT, type Locale, type TFn } from "./i18n";
 import { readSettings, type CenterSettings } from "./settings";
 import { UserError } from "./user-error";
@@ -124,6 +124,25 @@ export function familyScope(ctx: Ctx): object {
 export function staffInScope(ctx: Ctx, userBranchIds: string[]): boolean {
   if (!ctx.branchIds) return true;
   return userBranchIds.length > 0 && userBranchIds.every((b) => ctx.branchIds!.includes(b));
+}
+
+/** Switches this actor may hand out: an owner any, everyone else only the ones they hold. */
+export function canGrant(actor: Pick<Ctx, "role" | "can">, p: Perm): boolean {
+  return actor.role === "OWNER" || actor.can(p);
+}
+
+/**
+ * Permissions to store for a staff member being saved by `actor`.
+ * `picked` = the form's checkboxes (null when the form did not send them → the role's defaults).
+ * Anything the actor can't grant is never added (also not via the defaults); switches the actor
+ * can't see that the user already had (`existing`) are kept as they were.
+ */
+export function staffPermsFor(actor: Pick<Ctx, "role" | "can">, role: RoleName, picked: Perm[] | null, existing: string[] = []): Perm[] {
+  if (role === "OWNER") return [...PERMS];
+  if (role === "TEACHER") return [];
+  const wanted = new Set(picked ?? DEFAULT_PERMS[role]);
+  const had = new Set(existing);
+  return PERMS.filter((p) => (canGrant(actor, p) ? wanted.has(p) : had.has(p)));
 }
 
 /** A teacher whose salary this user may see/change: unscoped, or teaching in one of the user's branches. */

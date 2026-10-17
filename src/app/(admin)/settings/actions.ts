@@ -10,12 +10,12 @@ import { audit } from "@/lib/audit";
 import { formList, formObject, zBool, zDate, zId, zOptId, zOptInt, zOptStr, zPhone, zStr } from "@/lib/forms";
 import { UserError } from "@/lib/user-error";
 import { assertNotDemo } from "@/lib/demo-guard";
-import { DEFAULT_PERMS, PERMS, type Perm, type RoleName } from "@/lib/perms";
+import { PERMS, type Perm, type RoleName } from "@/lib/perms";
 import { readSettings } from "@/lib/settings";
 import { fromISODate } from "@/lib/dates";
 import { generateLessons } from "@/lib/services/lessons";
 import { syncGroup } from "@/lib/billing/sync";
-import { assertBranch, staffInScope, type Ctx } from "@/lib/ctx";
+import { assertBranch, staffInScope, staffPermsFor, type Ctx } from "@/lib/ctx";
 import { adminResetPassword, BCRYPT_ROUNDS, setPassword } from "@/lib/auth/password";
 import { MIN_PASSWORD } from "@/lib/auth/security";
 import { issueSession } from "@/lib/auth/session-cookie";
@@ -227,9 +227,7 @@ export async function saveStaffAction(_: ActionState, fd: FormData): Promise<Act
     assertNotDemo();
     const f = staffSchema.parse(formObject(fd));
     if (!canManageRole(ctx, f.role)) throw new UserError("settings.cannotEditOwner");
-    const perms = formList(fd, "perms").filter((p): p is Perm => (PERMS as readonly string[]).includes(p));
-    // A manager can only hand out switches they have themselves.
-    const grantable = perms.filter((p) => ctx.role === "OWNER" || ctx.can(p));
+    const picked = fd.has("permsTouched") ? formList(fd, "perms").filter((p): p is Perm => (PERMS as readonly string[]).includes(p)) : null;
     const branchIds = formList(fd, "branchIds");
     const branches = await db.branch.findMany({ where: { id: { in: branchIds }, centerId: ctx.centerId }, select: { id: true } });
     for (const b of branches) assertBranch(ctx, b.id);
@@ -239,17 +237,18 @@ export async function saveStaffAction(_: ActionState, fd: FormData): Promise<Act
     if (taken && taken.id !== f.id) throw new UserError("error.phoneTaken");
 
     await db.$transaction(async (tx) => {
+      const u = f.id ? await tx.user.findFirst({ where: { id: f.id, centerId: ctx.centerId }, include: { branches: true } }) : null;
+      if (f.id && !u) throw new UserError("error.notFound");
       const data = {
         name: f.name,
         phone: f.phone,
         role: f.role,
         isTeacher: f.role === "TEACHER" ? true : f.isTeacher,
-        perms: f.role === "OWNER" ? [...PERMS] : f.role === "TEACHER" ? [] : fd.has("permsTouched") ? grantable : DEFAULT_PERMS[f.role],
+        // a manager/admin can only hand out switches they hold — the role defaults included (S2)
+        perms: staffPermsFor(ctx, f.role, picked, u?.perms),
       };
       let userId: string;
-      if (f.id) {
-        const u = await tx.user.findFirst({ where: { id: f.id, centerId: ctx.centerId }, include: { branches: true } });
-        if (!u) throw new UserError("error.notFound");
+      if (u) {
         if (!canManageRole(ctx, u.role as RoleName)) throw new UserError("settings.cannotEditOwner");
         // a branch manager edits only staff who work entirely inside their branches
         if (!staffInScope(ctx, u.branches.map((b) => b.branchId))) throw new UserError("error.forbidden");
@@ -261,9 +260,9 @@ export async function saveStaffAction(_: ActionState, fd: FormData): Promise<Act
         userId = u.id;
       } else {
         if (!f.password) throw new UserError("settings.passwordShort");
-        const u = await tx.user.create({ data: { ...data, centerId: ctx.centerId, passwordHash: await bcrypt.hash(f.password, BCRYPT_ROUNDS), mustChangePassword: true } });
-        await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: u.id, action: "create", after: { ...data, branchIds } });
-        userId = u.id;
+        const created = await tx.user.create({ data: { ...data, centerId: ctx.centerId, passwordHash: await bcrypt.hash(f.password, BCRYPT_ROUNDS), mustChangePassword: true } });
+        await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: created.id, action: "create", after: { ...data, branchIds } });
+        userId = created.id;
       }
       // replace only the branch assignments this user controls
       await tx.userBranch.deleteMany({ where: { userId, ...(ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) } });
