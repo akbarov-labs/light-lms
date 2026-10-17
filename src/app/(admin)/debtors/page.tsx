@@ -7,7 +7,8 @@ import { formatDate } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
 import { listDebtors } from "@/lib/queries/debtors";
-import { Badge, Card, EmptyState, LinkButton, PageHeader, Stat, Table, Td, Th, Tr, cx } from "@/components/ui";
+import { pageParam, strParam } from "@/lib/queries/params";
+import { Badge, Card, EmptyState, LinkButton, PageHeader, Pagination, Stat, Table, Td, Th, Tr, cx } from "@/components/ui";
 import { Input, Select } from "@/components/fields";
 import { ActionForm } from "@/components/client";
 import { CheckedCountSubmit } from "@/components/checked-submit";
@@ -18,20 +19,21 @@ export default async function DebtorsPage({ searchParams }: { searchParams: Prom
   const ctx = await requireStaff();
   if (!ctx.can("payments.take") && !ctx.can("finance.view")) redirect("/forbidden");
   const { t } = ctx;
-  const [rows, groups, teachers] = await Promise.all([
-    listDebtors(ctx, sp),
+  const filters = { groupId: strParam(sp.groupId), teacherId: strParam(sp.teacherId), min: strParam(sp.min) };
+  const [{ rows, total, totalDebt, page, pages }, groups, teachers] = await Promise.all([
+    listDebtors(ctx, filters, { page: pageParam(sp.page) }),
     db.group.findMany({ where: { centerId: ctx.centerId, status: { in: ["ACTIVE", "PLANNED"] }, ...(ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) }, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
     db.user.findMany({ where: { centerId: ctx.centerId, archivedAt: null, OR: [{ isTeacher: true }, { role: "TEACHER" }] }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
-  const total = rows.reduce((s, r) => s + r.debt, 0);
-  const qs = new URLSearchParams(Object.entries(sp).filter(([, v]) => v) as [string, string][]).toString();
+  const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v)) as Record<string, string>;
+  const qs = new URLSearchParams(params).toString();
   const canRemind = ctx.can("payments.take");
   return (
     <>
       <PageHeader title={t("nav.debtors")} actions={ctx.can("export") && <LinkButton variant="secondary" href={`/api/export/debtors?${qs}`}>{t("common.export")}</LinkButton>} />
       <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Stat label={t("debtors.total")} value={formatMoney(total)} tone={total > 0 ? "red" : undefined} />
-        <Stat label={t("debtors.count")} value={rows.length} />
+        <Stat label={t("debtors.total")} value={formatMoney(totalDebt)} tone={totalDebt > 0 ? "red" : undefined} />
+        <Stat label={t("debtors.count")} value={total} />
       </div>
       <form className="mb-4 flex flex-wrap items-center gap-2 *:w-full *:min-w-0 sm:*:w-auto">
         <Select name="groupId" aria-label={t("common.group")} defaultValue={sp.groupId ?? ""}>
@@ -47,7 +49,7 @@ export default async function DebtorsPage({ searchParams }: { searchParams: Prom
       </form>
       <Card pad={false}>
         {rows.length === 0 ? (
-          sp.groupId || sp.teacherId || sp.min ? (
+          qs ? (
             <EmptyState action={<LinkButton variant="secondary" size="sm" href="/debtors">{t("empty.clear")}</LinkButton>}>{t("empty.filtered")}</EmptyState>
           ) : (
             <EmptyState icon={<CircleCheck className="h-6 w-6 text-emerald-600" strokeWidth={1.5} />} title={t("empty.debtorsTitle")}>{t("empty.debtors")}</EmptyState>
@@ -82,6 +84,7 @@ export default async function DebtorsPage({ searchParams }: { searchParams: Prom
             </Table>
           </ActionForm>
         )}
+        <Pagination page={page} pages={pages} params={params} path="/debtors" t={t} />
       </Card>
     </>
   );

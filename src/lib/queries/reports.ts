@@ -1,52 +1,88 @@
 // Report queries (HANDOFF §8 "Reports"). Revenue counts only real money (PAYMENT, REFUND and
-// their reversals) — never charges or credits.
+// their reversals) — never charges or credits. Sums are done by Postgres (audit P2).
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { familyScope, scopeBranchIds, studentScope, type Ctx } from "@/lib/ctx-core";
+import { scopeBranchIds, studentScope, type Ctx } from "@/lib/ctx-core";
 import { diffDays, fromISODate, monthRange, shiftMonth, toISODate, todayISO } from "@/lib/dates";
-import { allocationsFor } from "@/lib/services/wallet";
-import { paymentWhere } from "./payments";
 import { expenseWhere } from "./expenses";
+import { ALLOC_BATCH, allocateFamilies, debtorFamilies } from "./debtors";
+import { familyScopeSql } from "./scope-sql";
+import { periodOrThisMonth, zonedRange } from "./period";
 
 export interface Period {
   from: string;
   to: string;
 }
 
+/**
+ * Money movements of the center in [from, to] (the payments page's rows without filters): PAYMENT,
+ * REFUND and reversals of those, in the user's branch scope. Use as
+ * `FROM "LedgerEntry" le LEFT JOIN "LedgerEntry" rv ON rv.id = le."reversesId" WHERE <this>`.
+ */
+function moneyWhereSql(ctx: Ctx, p: Partial<Period>): Prisma.Sql {
+  const { from, to } = periodOrThisMonth(p);
+  return Prisma.sql`le."centerId" = ${ctx.centerId}
+    AND le.date >= ${from}::date AND le.date <= ${to}::date
+    AND (le.type IN ('PAYMENT', 'REFUND') OR (le.type = 'REVERSAL' AND rv.type IN ('PAYMENT', 'REFUND')))
+    AND ${familyScopeSql(ctx, 'le."familyId"')}`;
+}
+
+/**
+ * Revenue by method and branch. Branch of a money row (audit B12): the paying student's home branch;
+ * for a family-level payment (no student, or a student without a branch) the home branch of the
+ * family's student with the most recent open enrollment, ties → earliest created student, then lowest
+ * id. No such student → "-". Rows are summed per family first, so the rule runs once per family.
+ */
 export async function revenue(ctx: Ctx, p: Period) {
-  const rows = await db.ledgerEntry.findMany({
-    where: paymentWhere(ctx, { from: p.from, to: p.to }),
-    select: {
-      amount: true,
-      method: true,
-      type: true,
-      student: { select: { branchId: true } },
-      family: { select: { students: { select: { branchId: true }, take: 1 } } },
-    },
-  });
+  const rows = await db.$queryRaw<{ method: string; branch: string; total: bigint }[]>`
+    WITH m AS (
+      SELECT COALESCE(le.method::text, 'SYSTEM') AS method, s."branchId" AS sb, le."familyId", SUM(le.amount) AS amount
+      FROM "LedgerEntry" le
+      LEFT JOIN "LedgerEntry" rv ON rv.id = le."reversesId"
+      LEFT JOIN "Student" s ON s.id = le."studentId"
+      WHERE ${moneyWhereSql(ctx, p)}
+      GROUP BY 1, 2, 3
+    ), fb AS (
+      SELECT DISTINCT ON (fs."familyId" COLLATE "C") fs."familyId", fs."branchId"
+      FROM "Student" fs
+      LEFT JOIN (
+        SELECT oe."studentId", MAX(oe."startDate") AS d FROM "Enrollment" oe WHERE oe."endDate" IS NULL GROUP BY oe."studentId"
+      ) open ON open."studentId" = fs.id
+      WHERE fs."centerId" = ${ctx.centerId} AND fs."branchId" IS NOT NULL
+      -- byte-order ("C") sorting of the cuid keys: same result, several times faster than the locale collation
+      ORDER BY fs."familyId" COLLATE "C", open.d DESC NULLS LAST, fs."createdAt" ASC, fs.id COLLATE "C" ASC
+    )
+    SELECT m.method, COALESCE(m.sb, fb."branchId", '-') AS branch, SUM(m.amount)::bigint AS total
+    FROM m LEFT JOIN fb ON m.sb IS NULL AND fb."familyId" = m."familyId"
+    GROUP BY 1, 2
+    ORDER BY total DESC, 1, 2`;
   const byMethod = new Map<string, number>();
   const byBranch = new Map<string, number>();
   let total = 0;
   for (const r of rows) {
-    total += r.amount;
-    const m = r.method ?? "SYSTEM";
-    byMethod.set(m, (byMethod.get(m) ?? 0) + r.amount);
-    const b = r.student?.branchId ?? r.family.students[0]?.branchId ?? "-";
-    byBranch.set(b, (byBranch.get(b) ?? 0) + r.amount);
+    const v = Number(r.total);
+    total += v;
+    byMethod.set(r.method, (byMethod.get(r.method) ?? 0) + v);
+    byBranch.set(r.branch, (byBranch.get(r.branch) ?? 0) + v);
   }
   return { total, byMethod, byBranch };
 }
 
+/** Money per calendar month for the last `months` months (this month last), in one query. */
 export async function revenueByMonth(ctx: Ctx, months = 6) {
   const now = todayISO().slice(0, 7);
-  const out: { month: string; total: number }[] = [];
-  for (let i = months - 1; i >= 0; i--) {
-    const m = shiftMonth(now, -i);
-    const r = monthRange(m);
-    const agg = await db.ledgerEntry.aggregate({ where: paymentWhere(ctx, { from: r.start, to: r.end }), _sum: { amount: true } });
-    out.push({ month: m, total: agg._sum.amount ?? 0 });
-  }
-  return out;
+  const first = shiftMonth(now, -(months - 1));
+  const rows = await db.$queryRaw<{ month: string; total: bigint }[]>`
+    SELECT to_char(le.date, 'YYYY-MM') AS month, SUM(le.amount)::bigint AS total
+    FROM "LedgerEntry" le
+    LEFT JOIN "LedgerEntry" rv ON rv.id = le."reversesId"
+    WHERE ${moneyWhereSql(ctx, { from: monthRange(first).start, to: monthRange(now).end })}
+    GROUP BY 1`;
+  const by = new Map(rows.map((r) => [r.month, Number(r.total)]));
+  return Array.from({ length: months }, (_, i) => {
+    const month = shiftMonth(first, i);
+    return { month, total: by.get(month) ?? 0 };
+  });
 }
 
 export async function expenseTotals(ctx: Ctx, p: Period) {
@@ -93,24 +129,23 @@ export async function billedByGroup(ctx: Ctx, p: Period) {
   return [...byGroup.values()].sort((a, b) => b.billed - a.billed);
 }
 
-/** Total debt and aging buckets by the date each unpaid charge was posted. */
+/**
+ * Total debt and aging buckets by the date each unpaid charge was posted (FIFO allocation, HANDOFF §7).
+ * Which families owe is decided in SQL; only their ledgers are read, ALLOC_BATCH families at a time.
+ */
 export async function debtAging(ctx: Ctx) {
-  const neg = await db.ledgerEntry.groupBy({ by: ["familyId"], where: { centerId: ctx.centerId }, _sum: { amount: true }, having: { amount: { _sum: { lt: 0 } } } });
-  let ids = neg.map((n) => n.familyId);
-  if (ctx.branchIds || ctx.activeBranchId) {
-    const visible = await db.family.findMany({ where: { id: { in: ids }, ...familyScope(ctx) }, select: { id: true } });
-    ids = visible.map((v) => v.id);
-  }
-  const allocs = await allocationsFor(ids);
+  const ids = (await debtorFamilies(ctx)).map((d) => d.familyId);
   const today = todayISO();
   const buckets = [0, 0, 0];
   let total = 0;
-  for (const a of allocs.values()) {
-    for (const u of a.units) {
-      if (u.due <= 0) continue;
-      const age = diffDays(today, u.firstDate);
-      buckets[age <= 30 ? 0 : age <= 60 ? 1 : 2] += u.due;
-      total += u.due;
+  for (let i = 0; i < ids.length; i += ALLOC_BATCH) {
+    for (const a of (await allocateFamilies(ids.slice(i, i + ALLOC_BATCH))).values()) {
+      for (const u of a.units) {
+        if (u.due <= 0) continue;
+        const age = diffDays(today, u.firstDate);
+        buckets[age <= 30 ? 0 : age <= 60 ? 1 : 2] += u.due;
+        total += u.due;
+      }
     }
   }
   return { total, buckets, families: ids.length };
@@ -123,7 +158,8 @@ export async function studentStats(ctx: Ctx, p: Period) {
   const to = fromISODate(p.to);
   const [active, newStudents, left, started] = await Promise.all([
     db.student.count({ where: { centerId: ctx.centerId, status: "ACTIVE", ...studentScope(ctx), enrollments: { some: { endDate: null, status: { in: ["ACTIVE", "FROZEN"] }, ...groupScope } } } }),
-    db.student.count({ where: { centerId: ctx.centerId, createdAt: { gte: from, lt: new Date(to.getTime() + 86_400_000) }, ...studentScope(ctx) } }),
+    // createdAt is a timestamp: whole days in the center timezone, not UTC (audit B13)
+    db.student.count({ where: { centerId: ctx.centerId, createdAt: zonedRange(p.from, p.to), ...studentScope(ctx) } }),
     db.enrollment.findMany({ where: { status: "LEFT", endDate: { gte: from, lte: to }, group: { centerId: ctx.centerId, ...(ids ? { branchId: { in: ids } } : {}) } }, select: { leftReason: true } }),
     db.enrollment.findMany({
       where: { startDate: { gte: from, lte: to }, group: { centerId: ctx.centerId, ...(ids ? { branchId: { in: ids } } : {}) }, transferredFrom: { none: {} } },
@@ -142,7 +178,7 @@ export async function studentStats(ctx: Ctx, p: Period) {
 export async function leadFunnel(ctx: Ctx, p: Period) {
   const ids = scopeBranchIds(ctx);
   const leads = await db.lead.findMany({
-    where: { centerId: ctx.centerId, createdAt: { gte: fromISODate(p.from), lt: new Date(fromISODate(p.to).getTime() + 86_400_000) }, ...(ids ? { OR: [{ branchId: { in: ids } }, { branchId: null }] } : {}) },
+    where: { centerId: ctx.centerId, createdAt: zonedRange(p.from, p.to), ...(ids ? { OR: [{ branchId: { in: ids } }, { branchId: null }] } : {}) },
     select: { stage: true, source: true, lostReason: true, assignedTo: { select: { name: true } } },
   });
   const count = <K extends string>(f: (l: (typeof leads)[number]) => K) => {

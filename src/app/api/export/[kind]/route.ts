@@ -1,15 +1,15 @@
 // CSV export for every list (HANDOFF §5 "Export"). Same filters and scoping as the pages.
 import type { NextRequest } from "next/server";
-import type { Prisma } from "@prisma/client";
-import { branchWhere, getCtx, studentScope, type Ctx } from "@/lib/ctx";
+import { branchWhere, getCtx, type Ctx } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatDate, formatDateTime, toISODate, todayISO } from "@/lib/dates";
 import { slotSummary } from "@/lib/format";
 import { csvResponse, toCsv, type Cell } from "@/lib/csv";
-import { studentSearch } from "@/lib/search";
+import { inOrder, studentIds } from "@/lib/queries/students";
 import { balancesFor } from "@/lib/services/wallet";
 import { listPayments } from "@/lib/queries/payments";
-import { listDebtors } from "@/lib/queries/debtors";
+import { listAllDebtors } from "@/lib/queries/debtors";
+import { groupStatusWhere, strParam } from "@/lib/queries/params";
 import { listExpenses } from "@/lib/queries/expenses";
 import { liveSalary } from "@/lib/salary/service";
 import { auditWhere } from "@/lib/queries/audit";
@@ -21,14 +21,17 @@ type Exporter = (ctx: Ctx, sp: Record<string, string | undefined>) => Promise<{ 
 const exporters: Record<string, Exporter> = {
   async students(ctx, sp) {
     const status = sp.status === "ARCHIVED" ? "ARCHIVED" : sp.status === "all" ? undefined : "ACTIVE";
-    const where: Prisma.StudentWhereInput = {
-      AND: [{ centerId: ctx.centerId }, studentScope(ctx), studentSearch(sp.q), status ? { status } : {}, sp.groupId ? { enrollments: { some: { groupId: sp.groupId, endDate: null } } } : {}],
-    };
-    const students = await db.student.findMany({
-      where,
-      include: { enrollments: { where: { endDate: null }, include: { group: { select: { name: true, code: true } } } }, family: { include: { guardians: true } }, branch: true },
-      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-    });
+    // same filters as the students page (incl. "with debt"), resolved in SQL; rows loaded in batches
+    const { ids } = await studentIds(ctx, { q: strParam(sp.q), status, groupId: strParam(sp.groupId), debt: sp.debt === "1" });
+    const students = [];
+    for (let i = 0; i < ids.length; i += 1000) {
+      const chunk = ids.slice(i, i + 1000);
+      const rows = await db.student.findMany({
+        where: { id: { in: chunk } },
+        include: { enrollments: { where: { endDate: null }, include: { group: { select: { name: true, code: true } } } }, family: { include: { guardians: true } }, branch: true },
+      });
+      students.push(...inOrder(chunk, rows));
+    }
     const bal = ctx.can("finance.view") || ctx.can("payments.take") ? await balancesFor([...new Set(students.map((s) => s.familyId))]) : null;
     const { t } = ctx;
     return {
@@ -41,7 +44,7 @@ const exporters: Record<string, Exporter> = {
   },
   async groups(ctx, sp) {
     const groups = await db.group.findMany({
-      where: { centerId: ctx.centerId, ...branchWhere(ctx), ...(sp.status && sp.status !== "all" && sp.status !== "current" ? { status: sp.status as "ACTIVE" } : sp.status === "all" ? {} : { status: { in: ["ACTIVE", "PLANNED"] } }), ...(sp.teacherId ? { teacherId: sp.teacherId } : {}), ...(sp.courseId ? { courseId: sp.courseId } : {}) },
+      where: { centerId: ctx.centerId, ...branchWhere(ctx), ...(groupStatusWhere(sp.status)), ...(sp.teacherId ? { teacherId: sp.teacherId } : {}), ...(sp.courseId ? { courseId: sp.courseId } : {}) },
       include: { course: true, teacher: true, room: true, branch: true, slots: true, _count: { select: { enrollments: { where: { endDate: null, status: { in: ["TRIAL", "ACTIVE", "FROZEN"] } } } } } },
       orderBy: { code: "asc" },
     });
@@ -70,7 +73,7 @@ const exporters: Record<string, Exporter> = {
   },
   async debtors(ctx, sp) {
     if (!ctx.can("payments.take") && !ctx.can("finance.view")) return null;
-    const rows = await listDebtors(ctx, sp);
+    const rows = await listAllDebtors(ctx, { groupId: strParam(sp.groupId), teacherId: strParam(sp.teacherId), min: strParam(sp.min) });
     const { t } = ctx;
     return {
       header: [t("common.students"), t("common.groups"), t("common.debt"), t("debtors.daysOverdue"), t("debtors.lastPayment"), t("common.phone"), "Telegram"],

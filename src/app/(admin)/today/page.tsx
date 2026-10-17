@@ -37,7 +37,8 @@ export default async function TodayPage() {
           take: 30,
         })
       : Promise.resolve([]),
-    ctx.can("payments.take") ? listDebtors(ctx, {}) : Promise.resolve([]),
+    // only the 10 biggest debts are shown here; the count covers all of them
+    ctx.can("payments.take") ? listDebtors(ctx, {}, { pageSize: 10 }) : Promise.resolve({ rows: [], total: 0 }),
   ]);
   return (
     <>
@@ -108,11 +109,11 @@ export default async function TodayPage() {
           </Card>
         )}
         {ctx.can("payments.take") && (
-          <Card pad={false} title={`${t("today.debtors")} (${debtors.length})`} actions={<Link href="/debtors" className="inline-flex items-center gap-1 text-[13px] text-zinc-600 hover:text-zinc-900">{t("today.allDebtors")}<ChevronRight className="h-3.5 w-3.5" aria-hidden /></Link>}>
-            {debtors.length === 0 ? <EmptyState compact>{t("empty.todayDebtors")}</EmptyState> : (
+          <Card pad={false} title={`${t("today.debtors")} (${debtors.total})`} actions={<Link href="/debtors" className="inline-flex items-center gap-1 text-[13px] text-zinc-600 hover:text-zinc-900">{t("today.allDebtors")}<ChevronRight className="h-3.5 w-3.5" aria-hidden /></Link>}>
+            {debtors.rows.length === 0 ? <EmptyState compact>{t("empty.todayDebtors")}</EmptyState> : (
               <Table>
                 <tbody>
-                  {debtors.slice(0, 10).map((d) => (
+                  {debtors.rows.map((d) => (
                     <Tr key={d.familyId}>
                       <Td>{d.students.map((s) => <Link key={s.id} href={`/students/${s.id}`} className="block font-medium hover:underline hover:decoration-zinc-400">{s.name}</Link>)}</Td>
                       <Td className="tnum whitespace-nowrap text-right">
