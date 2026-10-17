@@ -1,12 +1,12 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
-import type { Prisma } from "@prisma/client";
-import { requireStaff, studentScope } from "@/lib/ctx";
+import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatMoney } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
 import { enrollmentTone, fullName } from "@/lib/format";
-import { studentSearch } from "@/lib/search";
+import { inOrder, studentIds } from "@/lib/queries/students";
+import { pageParam, strParam } from "@/lib/queries/params";
 import { balancesFor } from "@/lib/services/wallet";
 import { Badge, Card, EmptyState, LinkButton, PageHeader, Pagination, Table, Td, Th, Tr, cx } from "@/components/ui";
 import { Input, Select } from "@/components/fields";
@@ -17,38 +17,23 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const ctx = await requireStaff();
   const { t } = ctx;
-  const page = Math.max(1, Number(sp.page) || 1);
+  const page = pageParam(sp.page);
   const status = sp.status === "ARCHIVED" ? "ARCHIVED" : sp.status === "all" ? undefined : "ACTIVE";
-
-  let debtFamilies: string[] | null = null;
-  if (sp.debt === "1") {
-    const rows = await db.ledgerEntry.groupBy({ by: ["familyId"], where: { centerId: ctx.centerId }, _sum: { amount: true }, having: { amount: { _sum: { lt: 0 } } } });
-    debtFamilies = rows.map((r) => r.familyId);
-  }
-  const where: Prisma.StudentWhereInput = {
-    AND: [
-      { centerId: ctx.centerId },
-      studentScope(ctx),
-      studentSearch(sp.q),
-      status ? { status } : {},
-      sp.groupId ? { enrollments: { some: { groupId: sp.groupId, endDate: null } } } : {},
-      debtFamilies ? { familyId: { in: debtFamilies } } : {},
-    ],
-  };
-  const [students, total, groups] = await Promise.all([
-    db.student.findMany({
-      where,
+  const filters = { q: strParam(sp.q), status, groupId: strParam(sp.groupId), debt: sp.debt === "1" } as const;
+  const [{ ids, total }, groups] = await Promise.all([
+    studentIds(ctx, filters, { skip: (page - 1) * PAGE, take: PAGE }),
+    db.group.findMany({ where: { centerId: ctx.centerId, status: { in: ["ACTIVE", "PLANNED"] }, ...(ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) }, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
+  ]);
+  const students = inOrder(
+    ids,
+    await db.student.findMany({
+      where: { id: { in: ids } },
       include: {
         enrollments: { where: { endDate: null }, include: { group: { select: { id: true, name: true, code: true } } } },
         family: { select: { guardians: { where: { isPrimary: true }, select: { phone: true }, take: 1 } } },
       },
-      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-      skip: (page - 1) * PAGE,
-      take: PAGE,
     }),
-    db.student.count({ where }),
-    db.group.findMany({ where: { centerId: ctx.centerId, status: { in: ["ACTIVE", "PLANNED"] }, ...(ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) }, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
-  ]);
+  );
   const balances = ctx.can("finance.view") || ctx.can("payments.take") ? await balancesFor([...new Set(students.map((s) => s.familyId))]) : null;
   const exportQs = new URLSearchParams(Object.entries(sp).filter(([k, v]) => v && k !== "page") as [string, string][]).toString();
   return (
