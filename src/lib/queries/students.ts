@@ -1,6 +1,6 @@
 // Student list filtering in SQL: search (trigram-indexed), status, group, "has debt" — one statement,
 // no id lists passed back and forth (audit P1 "students?debt=1", P4). Pages then load the rows by id.
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import type { Ctx } from "@/lib/ctx-core";
 import { studentSearchSql } from "@/lib/search";

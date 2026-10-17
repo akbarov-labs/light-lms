@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
 import { runAction, type ActionState } from "@/lib/action";
 import { actionCtx } from "@/lib/ctx";
 import { db, type Tx } from "@/lib/db";

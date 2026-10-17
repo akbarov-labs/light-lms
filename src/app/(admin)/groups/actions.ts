@@ -10,7 +10,7 @@ import { formObject, zDate, zId, zOptDate, zOptId, zOptInt, zOptMoney, zStr } fr
 import { UserError } from "@/lib/user-error";
 import { assertBranch, type Ctx } from "@/lib/ctx";
 import { fromISODate, monthRange, shiftMonth, toISODate, todayISO } from "@/lib/dates";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
 import { validSlot, type WeeklySlot } from "@/lib/schedule";
 import { assertNoGroupClash, generateLessons, rebuildFutureLessons, trimLessonsAfter } from "@/lib/services/lessons";
 import { parseGroupPrices, syncGroup } from "@/lib/billing/sync";

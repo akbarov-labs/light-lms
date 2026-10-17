@@ -1,14 +1,16 @@
 // lms-light data model. See HANDOFF.md §6.
 // Money = integer UZS. Balance is always SUM(LedgerEntry.amount), never a stored total.
 
+// Prisma 7: a TypeScript client generated into src/generated/prisma (not committed; `npm install`
+// runs `prisma generate`). No native query engine: the client talks to Postgres via @prisma/adapter-pg.
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
+// the connection URL is read in prisma.config.ts (CLI) and src/lib/db.ts (client)
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum Role {

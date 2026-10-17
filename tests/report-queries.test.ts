@@ -1,7 +1,7 @@
 // Report/list queries on hand-built fixtures (audit P1, P2, P4, P5, B12, B13, B14). Run: npm run test:integration
 // Two private centers so the expected numbers don't depend on the demo seed or on other test files.
 import { beforeAll, describe, expect, it } from "vitest";
-import type { LedgerType, PaymentMethod } from "@prisma/client";
+import type { LedgerType, PaymentMethod } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { addDays, monthRange, shiftMonth, todayISO, fromISODate } from "@/lib/dates";
 import { buildCtx, loadUser, type Ctx } from "@/lib/ctx-core";

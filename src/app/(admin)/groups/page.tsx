@@ -1,6 +1,6 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
 import { branchWhere, requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatDate, toISODate } from "@/lib/dates";

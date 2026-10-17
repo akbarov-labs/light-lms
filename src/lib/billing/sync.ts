@@ -1,5 +1,5 @@
 // DB side of the billing engine: load an enrollment, compute expected units, post the deltas.
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
 import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { fromISODate, toISODate, todayISO, type ISODate } from "@/lib/dates";

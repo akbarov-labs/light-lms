@@ -1,4 +1,4 @@
-// Security response headers. Edge-safe (imported by middleware): no Node APIs here.
+// Security response headers. Imported by the proxy (src/proxy.ts) for every response.
 
 /** Payme checkout is the only off-site form/redirect target (public pay page). */
 const PAYME = "https://checkout.paycom.uz https://checkout.test.paycom.uz";

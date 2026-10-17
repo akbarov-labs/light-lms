@@ -1,5 +1,5 @@
 // Payments, reversals, refunds — HANDOFF §7. Ledger rows are never edited or deleted.
-import type { PaymentMethod } from "@prisma/client";
+import type { PaymentMethod } from "@/generated/prisma/client";
 import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { fromISODate, todayISO, type ISODate } from "@/lib/dates";

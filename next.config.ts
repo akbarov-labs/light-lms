@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: process.cwd(),
   poweredByHeader: false,
   serverExternalPackages: ["@prisma/client", "bcryptjs"],
-  // security headers (CSP with a per-request nonce, HSTS) are set in src/middleware.ts
+  // security headers (CSP with a per-request nonce, HSTS) are set in src/proxy.ts
 };
 
 export default nextConfig;

@@ -1,6 +1,6 @@
 "use server";
 
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { normalizePhone } from "@/lib/phone";
 import { makeT, isLocale } from "@/lib/i18n";

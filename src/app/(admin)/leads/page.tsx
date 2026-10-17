@@ -1,6 +1,6 @@
 import { Check, MessageSquare, Plus } from "lucide-react";
 import Link from "next/link";
-import type { LeadStage, Prisma } from "@prisma/client";
+import type { LeadStage, Prisma } from "@/generated/prisma/client";
 import { requireStaff } from "@/lib/ctx";
 import { pageParam, strParam } from "@/lib/queries/params";
 import { db } from "@/lib/db";

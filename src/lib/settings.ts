@@ -35,7 +35,8 @@ export const centerSettingsSchema = z.object({
       teacherReminder: z.boolean().default(true),
       dailyReport: z.boolean().default(true),
     })
-    .default({}),
+    // prefault: {} is parsed, so every nested default applies (zod 4 .default() would return {} as is)
+    .prefault({}),
   // a broken value must not reset every other setting to its default
   paymeFiscal: paymeFiscalSchema.nullable().default(null).catch(null),
 });

@@ -1,7 +1,7 @@
 // Audit journal queries. The journal hides the high-volume `billing.sync` rows unless asked; the
 // page query is shaped for the partial index AuditLog(centerId, createdAt) WHERE action <> 'billing.sync'
 // (audit P5): the predicate is a literal (a bound parameter can't prove a partial index applies).
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import type { Ctx } from "@/lib/ctx-core";
 import { isISODate } from "@/lib/dates";

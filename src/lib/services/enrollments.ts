@@ -3,7 +3,7 @@
 import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { addDays, fromISODate, toISODate, todayISO, type ISODate } from "@/lib/dates";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
 import { loadBillingInput, parseTermsHistory, syncEnrollment } from "@/lib/billing/sync";
 import { wholeCourseExhausted } from "@/lib/billing/engine";
 import { transferTerms } from "@/lib/billing/terms";

@@ -136,9 +136,12 @@ test.describe("staff", () => {
 
     await page.goto("/");
     await settle(page);
-    await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
     const dialog = page.getByRole("dialog");
-    await expect(dialog).toBeVisible();
+    // the shortcut listener exists only after hydration; pressing again just reopens the palette
+    await expect(async () => {
+      await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
+      await expect(dialog).toBeVisible({ timeout: 1_000 });
+    }).toPass();
     await dialog.getByRole("textbox").fill("Hamidov");
     await expect(dialog.getByRole("option").first()).toBeVisible();
     await page.keyboard.press("Enter");

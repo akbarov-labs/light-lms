@@ -1,5 +1,5 @@
 // Bot data access: linking chats to people and the read models behind each menu button.
-import type { LinkKind } from "@prisma/client";
+import type { LinkKind } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { validLinks } from "@/lib/telegram-links";
 import { addDays, formatDate, fromISODate, toISODate, todayISO, weekdayOf } from "@/lib/dates";

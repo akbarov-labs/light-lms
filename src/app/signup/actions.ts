@@ -3,7 +3,7 @@
 import bcrypt from "bcryptjs";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { Prisma } from "@prisma/client";
+import { isUniqueViolation } from "@/lib/db-errors";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { isLocale, LANG_COOKIE, makeT, type Locale } from "@/lib/i18n";
@@ -78,7 +78,7 @@ export async function signupAction(_: SignupState, fd: FormData): Promise<Signup
     const taken = await db.center.findMany({ where: { slug: { startsWith: base } }, select: { slug: true } });
     created = await create(uniqueSlug(base, taken.map((c) => c.slug)));
   } catch (e) {
-    if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e;
+    if (!isUniqueViolation(e)) throw e;
     // lost a race: the phone was just registered, or another signup took the same slug
     if (await db.user.findUnique({ where: { phone }, select: { id: true } })) return fail(t("signup.phoneTaken"));
     created = await create(`${base}-${now.getTime().toString(36)}`);

@@ -1,4 +1,4 @@
-import type { Group, GroupSlot } from "@prisma/client";
+import type { Group, GroupSlot } from "@/generated/prisma/client";
 import type { Ctx } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { toISODate, todayISO } from "@/lib/dates";
