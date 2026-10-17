@@ -1,4 +1,4 @@
-// Small security helpers shared by login, password reset, middleware and startup checks.
+// Small security helpers shared by login, password reset, the proxy and startup checks.
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { isHttpsDeployment } from "./secret";
 import { trustProxy } from "@/lib/env";

@@ -20,7 +20,7 @@ const NONE: Loaded = { ctx: null, disabled: false, mustChange: false };
 /**
  * Session → context. `disabled` = a valid session whose center a platform admin switched off.
  * `mustChange` = the user must set a new password first (session `pwc` claim or the DB flag):
- * only the change-password page/action may use such a context (S9) — the middleware alone is
+ * only the change-password page/action may use such a context (S9) — the proxy alone is
  * not enough, because a server action can be POSTed from any path, /password included.
  */
 const loadCtx = cache(async (): Promise<Loaded> => {
