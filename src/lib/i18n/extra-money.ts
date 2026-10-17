@@ -1,6 +1,34 @@
 // Strings added by the audit fixes (docs/AUDIT-2026-10-17.md), money track. Spread into uz.ts / ru.ts.
 export const moneyUz = {
+  "money.badAmount": "Summa noto'g'ri. Tiyinlar qabul qilinmaydi (masalan: 300 000 yoki 300 000,00)",
+  "money.largeConfirm": "Summa {amount} — to'g'riligini tekshirdim",
+  "money.largeNeedsConfirm": "Summa {limit} dan katta. Summani tekshiring va tasdiqlash belgisini qo'ying.",
+  "money.refundOverBalance": "Oila balansida qaytarish uchun {available} bor. Ko'proq qaytarish uchun \"Balansdan ortiq qaytarish\" belgisini qo'ying va sababini yozing.",
+  "money.refundForce": "Balansdan ortiq qaytarish (oila qarzdor bo'lib qoladi)",
+  "money.refundForceReason": "Balansdan ortiq qaytarish uchun sabab majburiy",
+  "money.wholeCourseFull": "Kursning rejalashtirilgan darslari tugagan — yangi o'quvchini qo'shib bo'lmaydi. Guruhga tugash sanasini kiriting yoki kurs davomiyligini oshiring.",
+  "money.payslipNotPositive": "Oylik summasi {total}. Nol yoki manfiy oylikni to'langan deb belgilab bo'lmaydi — jarima va bonuslarni tekshiring.",
+  "money.ruleMidMonth": "Oylik oy boshidagi qoida bo'yicha hisoblanadi: bu qoida {date} dan amal qiladi.",
+  "money.import.exists": "allaqachon mavjud — o'tkazib yuborildi",
+  "money.import.skipped": "Allaqachon mavjud (o'tkazib yuborildi): {n}.",
+  "money.import.badDebtSince": "qarz sanasi noto'g'ri (kk.oo.yyyy yoki yyyy-oo-kk)",
+  "money.import.futureDebtSince": "qarz sanasi kelajakda bo'lishi mumkin emas",
+  "money.import.debtSinceHint": "Ixtiyoriy 7-ustun — qarz qaysi sanadan (kk.oo.yyyy): qarzdorlik kunlari shu sanadan hisoblanadi. Faylni qayta import qilish mavjud o'quvchilar, guruhlar va boshlang'ich qoldiqni takrorlamaydi.",
 } as const;
 
 export const moneyRu: Record<keyof typeof moneyUz, string> = {
+  "money.badAmount": "Неверная сумма. Тийины не принимаются (например: 300 000 или 300 000,00)",
+  "money.largeConfirm": "Сумма {amount} — я проверил(а), что она верна",
+  "money.largeNeedsConfirm": "Сумма больше {limit}. Проверьте сумму и поставьте отметку подтверждения.",
+  "money.refundOverBalance": "На балансе семьи для возврата доступно {available}. Чтобы вернуть больше, отметьте «Вернуть больше баланса» и укажите причину.",
+  "money.refundForce": "Вернуть больше баланса (у семьи появится долг)",
+  "money.refundForceReason": "Для возврата больше баланса причина обязательна",
+  "money.wholeCourseFull": "Запланированные уроки курса закончились — нового ученика добавить нельзя. Укажите дату окончания группы или увеличьте длительность курса.",
+  "money.payslipNotPositive": "Сумма зарплаты {total}. Нулевую или отрицательную зарплату нельзя отметить выплаченной — проверьте штрафы и бонусы.",
+  "money.ruleMidMonth": "Зарплата считается по правилу на начало месяца: это правило будет действовать с {date}.",
+  "money.import.exists": "уже есть — пропущено",
+  "money.import.skipped": "Уже есть (пропущено): {n}.",
+  "money.import.badDebtSince": "неверная дата долга (дд.мм.гггг или гггг-мм-дд)",
+  "money.import.futureDebtSince": "дата долга не может быть в будущем",
+  "money.import.debtSinceHint": "Необязательный 7-й столбец — с какой даты долг (дд.мм.гггг): дни просрочки считаются от неё. Повторный импорт того же файла не дублирует учеников, группы и начальный остаток.",
 };

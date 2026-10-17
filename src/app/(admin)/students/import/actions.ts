@@ -39,7 +39,8 @@ export async function importStudentsAction(_: ActionState, fd: FormData): Promis
         errors.push(t("import.row", { n, msg: t("import.noGroup", { code }) }));
         continue;
       }
-      const balance = balanceRaw ? parseMoney(balanceRaw.replace(/^[−–]/, "-")) : 0;
+      // parseMoney: "-300 000,00" → −300 000 (zero decimals only), Unicode minus included
+      const balance = balanceRaw ? parseMoney(balanceRaw) : 0;
       if (balance === null) {
         errors.push(t("import.row", { n, msg: t("import.badBalance") }));
         continue;
