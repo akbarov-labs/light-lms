@@ -151,3 +151,20 @@ export async function assertTeacherAccess(ctx: Ctx, teacherId: string): Promise<
   if (!t) throw new UserError("error.notFound");
   if (ctx.branchIds && !t.branches.some((b) => ctx.branchIds!.includes(b.branchId))) throw new UserError("error.notFound");
 }
+
+/**
+ * Form-supplied ids must belong to this center (S6): the course, the branch and an active staff
+ * assignee. An id the lead already has is kept even if that course/person was archived since.
+ */
+export async function assertLeadRefs(ctx: Ctx, f: { courseId?: string; branchId?: string; assignedToId?: string }, before?: { courseId: string | null; assignedToId: string | null } | null): Promise<void> {
+  if (f.branchId) {
+    assertBranch(ctx, f.branchId);
+    if (!(await db.branch.findFirst({ where: { id: f.branchId, centerId: ctx.centerId }, select: { id: true } }))) throw new UserError("error.notFound");
+  }
+  if (f.courseId && f.courseId !== before?.courseId) {
+    if (!(await db.course.findFirst({ where: { id: f.courseId, centerId: ctx.centerId }, select: { id: true } }))) throw new UserError("error.notFound");
+  }
+  if (f.assignedToId && f.assignedToId !== before?.assignedToId) {
+    if (!(await db.user.findFirst({ where: { id: f.assignedToId, centerId: ctx.centerId, archivedAt: null }, select: { id: true } }))) throw new UserError("error.notFound");
+  }
+}

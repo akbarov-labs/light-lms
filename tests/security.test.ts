@@ -3,7 +3,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { setPlatformAdmin } from "@/lib/platform";
-import { buildCtx, loadUser } from "@/lib/ctx-core";
+import { assertLeadRefs, buildCtx, loadUser } from "@/lib/ctx-core";
+import { UserError } from "@/lib/user-error";
 import { unlinkChat, unlinkIfPhoneChanged, unlinkRef } from "@/lib/telegram-links";
 import { createResetCodeForChat } from "@/lib/auth/password";
 import { chatRoles, chatStudents, linkChat } from "@/worker/bot/data";
@@ -50,6 +51,32 @@ describe("S1 platform admin is a database flag", () => {
     expect((await ctxOf(u.id)).isPlatformAdmin).toBe(false);
     expect(await db.auditLog.count({ where: { entityId: u.id, action: { in: ["platform.grant", "platform.revoke"] } } })).toBe(2);
     await expect(setPlatformAdmin("998900000099", true)).rejects.toThrow();
+  });
+});
+
+describe("S6 lead references stay inside the center", () => {
+  it("another center's course, branch or staff, or an archived assignee, are refused", async () => {
+    const owner = await staff("998977780501", { role: "OWNER" });
+    const ctx = await ctxOf(owner.id);
+    const other = await db.center.upsert({ where: { slug: "sec-other" }, update: {}, create: { name: "Other", slug: "sec-other" } });
+    const foreignCourse = await db.course.create({ data: { centerId: other.id, name: "Foreign", pricingType: "SUBSCRIPTION", price: 100_000 } });
+    const foreignBranch = await db.branch.create({ data: { centerId: other.id, name: "Foreign branch" } });
+    const foreignStaff = await db.user.upsert({
+      where: { phone: "998977780502" },
+      update: {},
+      create: { centerId: other.id, phone: "998977780502", name: "Foreign", role: "ADMIN", perms: [], passwordHash: "x" },
+    });
+    const ownCourse = await db.course.create({ data: { centerId, name: "Own", pricingType: "SUBSCRIPTION", price: 100_000 } });
+    const archived = await staff("998977780503");
+    await db.user.update({ where: { id: archived.id }, data: { archivedAt: new Date() } });
+
+    await expect(assertLeadRefs(ctx, { courseId: foreignCourse.id })).rejects.toThrow(UserError);
+    await expect(assertLeadRefs(ctx, { branchId: foreignBranch.id })).rejects.toThrow(UserError);
+    await expect(assertLeadRefs(ctx, { assignedToId: foreignStaff.id })).rejects.toThrow(UserError);
+    await expect(assertLeadRefs(ctx, { assignedToId: archived.id })).rejects.toThrow(UserError);
+    await expect(assertLeadRefs(ctx, { courseId: ownCourse.id, branchId, assignedToId: owner.id })).resolves.toBeUndefined();
+    // a lead that already points at the archived person can still be edited
+    await expect(assertLeadRefs(ctx, { assignedToId: archived.id }, { courseId: null, assignedToId: archived.id })).resolves.toBeUndefined();
   });
 });
 

@@ -6,7 +6,7 @@ import type { Prisma } from "@prisma/client";
 import { runAction, type ActionState } from "@/lib/action";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { assertBranch, type Ctx } from "@/lib/ctx";
+import { assertBranch, assertLeadRefs, type Ctx } from "@/lib/ctx";
 import { formObject, zId, zOptDate, zOptId, zOptStr, zPhone, zStr, zTags } from "@/lib/forms";
 import { UserError } from "@/lib/user-error";
 import { fromISODate } from "@/lib/dates";
@@ -36,7 +36,8 @@ const leadSchema = z.object({
 export async function saveLeadAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction("leads", async (ctx) => {
     const f = leadSchema.parse(formObject(fd));
-    if (f.branchId) assertBranch(ctx, f.branchId);
+    const existing = f.id ? await loadLead(ctx, f.id) : null;
+    await assertLeadRefs(ctx, f, existing);
     const data = {
       name: f.name,
       phone: f.phone,
@@ -48,10 +49,9 @@ export async function saveLeadAction(_: ActionState, fd: FormData): Promise<Acti
       tags: f.tags,
     };
     await db.$transaction(async (tx) => {
-      if (f.id) {
-        const before = await loadLead(ctx, f.id);
-        const after = await tx.lead.update({ where: { id: f.id }, data });
-        await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Lead", entityId: f.id, action: "update", before, after });
+      if (existing) {
+        const after = await tx.lead.update({ where: { id: existing.id }, data });
+        await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Lead", entityId: existing.id, action: "update", before: existing, after });
       } else {
         const lead = await tx.lead.create({ data: { ...data, centerId: ctx.centerId, assignedToId: data.assignedToId ?? ctx.userId } });
         if (f.note) await tx.leadNote.create({ data: { leadId: lead.id, text: f.note, createdById: ctx.userId } });
