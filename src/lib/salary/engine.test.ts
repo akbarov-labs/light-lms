@@ -104,6 +104,23 @@ describe("salary", () => {
     expect(run("2026-11", ["pkg:e1:1:1", "pkg:e1:1:2"]).studentLessons).toBe(0);
   });
 
+  it("archived teacher: no fixed/base pay for months after leaving; held lessons still paid", () => {
+    const { lessons, enrollmentsByGroup } = setup();
+    const held = collectLessons({ teacherId: "T", month: "2026-10", lessons, enrollmentsByGroup, payTrial: false, paidKeys: new Set() });
+    const fixed = rule({ model: "FIXED", fixedAmount: 3_000_000 });
+    // archived in September → nothing fixed for October
+    const after = computeSalary({ rule: fixed, lessons: [], adjustments: [], payFromCollected: false, month: "2026-10", archivedOn: "2026-09-20" });
+    expect(after).toMatchObject({ base: 0, total: 0 });
+    expect(after.warnings).toContain("archived");
+    // the month they leave in is still paid in full
+    expect(computeSalary({ rule: fixed, lessons: [], adjustments: [], payFromCollected: false, month: "2026-09", archivedOn: "2026-09-20" }).total).toBe(3_000_000);
+    // base + %: the percent of lessons actually held stays
+    const bp = computeSalary({ rule: rule({ model: "BASE_PLUS_PERCENT", fixedAmount: 1_000_000, percent: 20 }), lessons: held, adjustments: [], payFromCollected: false, month: "2026-10", archivedOn: "2026-09-30" });
+    expect(bp.total).toBe(Math.round(per * 6 * 0.2));
+    // archived on the 1st of the month: that month still counts
+    expect(computeSalary({ rule: fixed, lessons: [], adjustments: [], payFromCollected: false, month: "2026-10", archivedOn: "2026-10-01" }).total).toBe(3_000_000);
+  });
+
   it("bonuses and fines are added", () => {
     const r = computeSalary({ rule: rule({ model: "FIXED", fixedAmount: 2_000_000 }), lessons: [], adjustments: [{ amount: 300_000, reason: "bonus" }, { amount: -50_000, reason: "kechikish" }], payFromCollected: false });
     expect(r.total).toBe(2_250_000);

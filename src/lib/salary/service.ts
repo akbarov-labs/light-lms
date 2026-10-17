@@ -21,8 +21,9 @@ export async function ruleFor(teacherId: string, month: string) {
 
 export async function liveSalary(centerId: string, teacherId: string, month: string): Promise<{ result: SalaryResult; lessons: HeldLesson[] }> {
   const { start, end } = monthRange(month);
-  const [center, rule, rows, adjustments] = await Promise.all([
+  const [center, teacher, rule, rows, adjustments] = await Promise.all([
     db.center.findUniqueOrThrow({ where: { id: centerId }, select: { settings: true } }),
+    db.user.findUnique({ where: { id: teacherId }, select: { archivedAt: true } }),
     ruleFor(teacherId, month),
     db.lesson.findMany({
       where: { teacherId, status: "HELD", date: { gte: fromISODate(start), lte: fromISODate(end) }, group: { centerId } },
@@ -52,6 +53,9 @@ export async function liveSalary(centerId: string, teacherId: string, month: str
     lessons,
     adjustments: adjustments.map((a) => ({ id: a.id, amount: a.amount, reason: a.reason })),
     payFromCollected: settings.payFromCollected,
+    month,
+    // archived = left the center: no fixed/base pay for the months after (Tashkent calendar day)
+    archivedOn: teacher?.archivedAt ? todayISO(teacher.archivedAt) : null,
   });
   return { result, lessons };
 }
