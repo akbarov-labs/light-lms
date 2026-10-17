@@ -13,6 +13,7 @@ import { Input, Select } from "@/components/fields";
 import { ActionForm } from "@/components/client";
 import { CheckedCountSubmit } from "@/components/checked-submit";
 import { remindAction } from "./actions";
+import { listTeachers } from "@/lib/queries/staff";
 
 export default async function DebtorsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
@@ -23,7 +24,7 @@ export default async function DebtorsPage({ searchParams }: { searchParams: Prom
   const [{ rows, total, totalDebt, page, pages }, groups, teachers] = await Promise.all([
     listDebtors(ctx, filters, { page: pageParam(sp.page) }),
     db.group.findMany({ where: { centerId: ctx.centerId, status: { in: ["ACTIVE", "PLANNED"] }, ...(ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) }, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
-    db.user.findMany({ where: { centerId: ctx.centerId, archivedAt: null, OR: [{ isTeacher: true }, { role: "TEACHER" }] }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    listTeachers(ctx.centerId),
   ]);
   const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v)) as Record<string, string>;
   const qs = new URLSearchParams(params).toString();

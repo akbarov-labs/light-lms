@@ -14,6 +14,7 @@ import { PricingFields } from "../courses/pricing-fields";
 import { dismissSetupAction, setupBranchAction, setupCourseAction, setupGroupAction, setupTeacherAction, skipStepAction } from "./actions";
 import { RoomsEditor, ScheduleFields } from "./wizard-fields";
 import { appUrl as envAppUrl } from "@/lib/env";
+import { listTeachers } from "@/lib/queries/staff";
 
 export const dynamic = "force-dynamic";
 
@@ -196,7 +197,7 @@ async function GroupStep({ ctx, o }: { ctx: Ctx; o: Onboarding }) {
   const [courses, branches, teachers] = await Promise.all([
     db.course.findMany({ where: { centerId: ctx.centerId, archivedAt: null }, orderBy: { createdAt: "asc" }, select: { id: true, name: true, lessonMinutes: true } }),
     db.branch.findMany({ where: { centerId: ctx.centerId, archivedAt: null }, orderBy: { createdAt: "asc" }, include: { rooms: { where: { archivedAt: null }, orderBy: { name: "asc" } } } }),
-    db.user.findMany({ where: { centerId: ctx.centerId, archivedAt: null, OR: [{ isTeacher: true }, { role: "TEACHER" }], id: { not: ctx.userId } }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    listTeachers(ctx.centerId, { exceptId: ctx.userId }),
   ]);
   if (courses.length === 0) {
     return (

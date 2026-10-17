@@ -8,6 +8,7 @@ import { groupTone, slotSummary } from "@/lib/format";
 import { enumParam, GROUP_STATUSES, groupCodeParam, groupStatusWhere, pageParam, strParam } from "@/lib/queries/params";
 import { Badge, Card, EmptyState, LinkButton, PageHeader, Pagination, Table, Td, Th, Tr } from "@/components/ui";
 import { Input, Select } from "@/components/fields";
+import { listTeachers } from "@/lib/queries/staff";
 
 const PAGE = 30;
 
@@ -43,7 +44,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
       take: PAGE,
     }),
     db.group.count({ where }),
-    db.user.findMany({ where: { centerId: ctx.centerId, archivedAt: null, OR: [{ isTeacher: true }, { role: "TEACHER" }] }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    listTeachers(ctx.centerId),
     db.course.findMany({ where: { centerId: ctx.centerId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   return (

@@ -7,6 +7,7 @@ import { Field, FormGrid, Input, Select } from "@/components/fields";
 import { ActionForm, SubmitButton } from "@/components/client";
 import { SlotsEditor } from "./slots-editor";
 import { createGroupAction, updateGroupAction } from "./actions";
+import { listTeachers } from "@/lib/queries/staff";
 
 export async function GroupForm({ ctx, group }: { ctx: Ctx; group?: Group & { slots: GroupSlot[] } }) {
   const { t } = ctx;
@@ -14,7 +15,7 @@ export async function GroupForm({ ctx, group }: { ctx: Ctx; group?: Group & { sl
   const [courses, branches, teachers, rooms] = await Promise.all([
     db.course.findMany({ where: { centerId: ctx.centerId, OR: [{ archivedAt: null }, ...(group ? [{ id: group.courseId }] : [])] }, orderBy: { name: "asc" } }),
     db.branch.findMany({ where: { centerId: ctx.centerId, archivedAt: null, ...branchFilter }, orderBy: { name: "asc" } }),
-    db.user.findMany({ where: { centerId: ctx.centerId, archivedAt: null, OR: [{ isTeacher: true }, { role: "TEACHER" }] }, orderBy: { name: "asc" } }),
+    listTeachers(ctx.centerId),
     db.room.findMany({ where: { archivedAt: null, branch: { centerId: ctx.centerId, archivedAt: null, ...(ctx.branchIds ? { id: { in: ctx.branchIds } } : {}) } }, include: { branch: true }, orderBy: [{ branch: { name: "asc" } }, { name: "asc" }] }),
   ]);
   const days = [1, 2, 3, 4, 5, 6, 7].map((d) => t(`common.weekday.${d}` as "common.weekday.1"));

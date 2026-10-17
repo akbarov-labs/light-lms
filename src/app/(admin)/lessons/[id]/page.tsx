@@ -10,6 +10,7 @@ import { Field, FormGrid, Input, Select } from "@/components/fields";
 import { ActionForm, Modal, ModalForm, SubmitButton } from "@/components/client";
 import { AttendanceForm } from "@/components/attendance-form";
 import { cancelLessonAction, rescheduleLessonAction, restoreLessonAction, saveAttendanceAction, substituteAction } from "../actions";
+import { listTeachers } from "@/lib/queries/staff";
 
 export default async function LessonPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -23,7 +24,7 @@ export default async function LessonPage({ params }: { params: Promise<{ id: str
   const date = toISODate(lesson.date);
   const [rows, teachers, rooms] = await Promise.all([
     lessonRoster(id),
-    db.user.findMany({ where: { centerId: ctx.centerId, archivedAt: null, OR: [{ isTeacher: true }, { role: "TEACHER" }] }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    listTeachers(ctx.centerId),
     db.room.findMany({ where: { branchId: lesson.group.branchId, archivedAt: null }, orderBy: { name: "asc" } }),
   ]);
   const canEdit = ctx.can("groups.edit");

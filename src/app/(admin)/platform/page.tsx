@@ -13,6 +13,7 @@ import { Field, Input, Select, Textarea } from "@/components/fields";
 import { Modal, ModalForm, SubmitButton } from "@/components/client";
 import { buttonClass } from "@/components/ui";
 import { setCenterDisabledAction, setCenterPlanAction } from "./actions";
+import { pageParam } from "@/lib/queries/params";
 
 export const dynamic = "force-dynamic";
 const PAGE = 50;
@@ -36,7 +37,7 @@ export default async function PlatformPage({ searchParams }: { searchParams: Pro
         }
       : {}),
   };
-  const page = Math.max(1, Number(sp.page) || 1);
+  const page = pageParam(sp.page);
   const [total, centers, active, lastActivity, allCenters] = await Promise.all([
     db.center.count({ where }),
     db.center.findMany({
