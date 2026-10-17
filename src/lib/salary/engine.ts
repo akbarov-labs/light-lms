@@ -91,15 +91,35 @@ export function collectLessons(p: {
       for (const ge of p.enrollmentsByGroup.get(l.groupId) ?? []) {
         const v = lessonValue(ge.input, l.id, p.payTrial);
         if (!v) continue;
-        students.push({ enrollmentId: ge.input.enrollment.id, studentName: ge.studentName, value: v.value, key: v.key, trial: v.trial, paid: v.key ? p.paidKeys.has(v.key) : false });
+        // with installments the lesson's installment AND every earlier one must be paid
+        const paid = v.keys.length > 0 && v.keys.every((k) => p.paidKeys.has(k));
+        students.push({ enrollmentId: ge.input.enrollment.id, studentName: ge.studentName, value: v.value, key: v.key, trial: v.trial, paid });
       }
       return { lessonId: l.id, date: l.date, groupId: l.groupId, groupName: l.groupName, students };
     });
 }
 
-export function computeSalary(p: { rule: SalaryRule | null; lessons: HeldLesson[]; adjustments: Adjustment[]; payFromCollected: boolean }): SalaryResult {
+/**
+ * Does the fixed/base part apply to this month? Not for a month that starts after the teacher was
+ * archived (the month they leave in is still paid in full; no pro-rating).
+ */
+export function basePayApplies(month: string, archivedOn: ISODate | null | undefined): boolean {
+  return !archivedOn || monthRange(month).start <= archivedOn;
+}
+
+export function computeSalary(p: {
+  rule: SalaryRule | null;
+  lessons: HeldLesson[];
+  adjustments: Adjustment[];
+  payFromCollected: boolean;
+  /** With `archivedOn`: no fixed/base pay for months starting after the archive day. */
+  month?: string;
+  archivedOn?: ISODate | null;
+}): SalaryResult {
   const warnings: string[] = [];
   if (!p.rule) warnings.push("noRule");
+  const baseApplies = !p.month || basePayApplies(p.month, p.archivedOn);
+  if (!baseApplies) warnings.push("archived");
   const model = p.rule?.model ?? null;
   const percent = (p.rule?.percent ?? 0) / 100;
   const byGroup = new Map<string, SalaryLine>();
@@ -119,7 +139,7 @@ export function computeSalary(p: { rule: SalaryRule | null; lessons: HeldLesson[
     if (model === "PER_LESSON") amount = (p.rule?.perLesson ?? 0) * line.lessonsHeld;
     return { ...line, earnedBase: Math.round(line.earnedBase), amount };
   });
-  const base = model === "FIXED" || model === "BASE_PLUS_PERCENT" ? (p.rule?.fixedAmount ?? 0) : 0;
+  const base = baseApplies && (model === "FIXED" || model === "BASE_PLUS_PERCENT") ? (p.rule?.fixedAmount ?? 0) : 0;
   const adjustmentsTotal = p.adjustments.reduce((s, a) => s + a.amount, 0);
   const total = base + lines.reduce((s, l) => s + l.amount, 0) + adjustmentsTotal;
   return { model, base, lines, adjustments: p.adjustments, adjustmentsTotal, lessonsHeld: p.lessons.length, total, warnings };

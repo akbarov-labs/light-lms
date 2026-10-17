@@ -350,7 +350,7 @@ describe("package", () => {
 
 describe("planSync", () => {
   it("posts nothing when ledger matches", () => {
-    const units = [{ key: "k", enrollmentId: "e", amount: 100, start: "2026-10-01", period: null, description: "x" }];
+    const units = [{ key: "k", enrollmentId: "e", amount: 100, start: "2026-10-01", due: "2026-10-01", period: null, description: "x" }];
     expect(planSync(units, [{ billingKey: "k", type: "CHARGE", amount: -100 }])).toEqual([]);
   });
   it("ignores payments", () => {

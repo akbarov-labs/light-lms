@@ -1,0 +1,215 @@
+// DB regression tests for the money findings of docs/AUDIT-2026-10-17.md. Run: npm run test:integration
+// Builds its own small center (no demo seed), so it does not depend on the order of test files.
+import { beforeAll, describe, expect, it } from "vitest";
+import { db } from "@/lib/db";
+import { addDays, fromISODate, monthRange, shiftMonth, todayISO, toISODate } from "@/lib/dates";
+import { buildCtx, loadUser, type Ctx } from "@/lib/ctx-core";
+import { generateLessons } from "@/lib/services/lessons";
+import { importStudents, OPENING_PERIOD } from "@/app/(admin)/students/import/import-core";
+import { addAdjustment, liveSalary, lockPayslip, markPayslipPaid } from "@/lib/salary/service";
+import { UserError } from "@/lib/user-error";
+import { refund, takePayment } from "@/lib/services/payments";
+import { familyAllocation, familyBalance } from "@/lib/services/wallet";
+import { activateEnrollment, enrollStudent, setEnrollmentTerms, transferEnrollment } from "@/lib/services/enrollments";
+import { loadBillingInput, parseTermsHistory } from "@/lib/billing/sync";
+import { computeExpected } from "@/lib/billing/engine";
+
+const today = todayISO();
+let ctx: Ctx;
+let centerId = "";
+let branchId = "";
+let teacherId = "";
+let groupCode = 0;
+
+const phone = () => `9989${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`;
+
+async function makeGroup(opts: { name: string; price?: number; pricingType?: "SUBSCRIPTION" | "PACKAGE"; packageLessons?: number | null; installments?: number; durationMonths?: number | null; startDate?: string; endDate?: string | null }) {
+  const course = await db.course.create({
+    data: { centerId, name: `${opts.name} course`, pricingType: opts.pricingType ?? "SUBSCRIPTION", price: opts.price ?? 600_000, lessonsPerWeek: 3, packageLessons: opts.packageLessons ?? null, installments: opts.installments ?? 1, durationMonths: opts.durationMonths ?? null },
+  });
+  const c = await db.center.update({ where: { id: centerId }, data: { groupSeq: { increment: 1 } }, select: { groupSeq: true } });
+  const g = await db.group.create({
+    data: {
+      centerId,
+      branchId,
+      courseId: course.id,
+      teacherId,
+      code: c.groupSeq,
+      name: opts.name,
+      startDate: fromISODate(opts.startDate ?? addDays(today, -40)),
+      endDate: opts.endDate ? fromISODate(opts.endDate) : null,
+      slots: { create: [1, 3, 5].map((weekday) => ({ weekday, startTime: "09:00", endTime: "10:30" })) },
+    },
+  });
+  await generateLessons(g.id, { today });
+  return { group: g, course };
+}
+
+beforeAll(async () => {
+  const center = await db.center.create({ data: { name: "Money audit", slug: `money-audit-${Date.now().toString(36)}`, plan: "PRO" } });
+  centerId = center.id;
+  branchId = (await db.branch.create({ data: { centerId, name: "Asosiy" } })).id;
+  const owner = await db.user.create({ data: { centerId, phone: phone(), name: "Owner", passwordHash: "x", role: "OWNER" } });
+  const teacher = await db.user.create({ data: { centerId, phone: phone(), name: "Teacher", passwordHash: "x", role: "TEACHER", isTeacher: true, branches: { create: { branchId } } } });
+  teacherId = teacher.id;
+  ctx = buildCtx((await loadUser(owner.id))!);
+  groupCode = (await makeGroup({ name: "GE import" })).group.code;
+});
+
+describe("B5/B11 — student import is idempotent and dates the old debt", () => {
+  const csv = () =>
+    [
+      "Familiya,Ism,Telefon,Ota-ona telefoni,Guruh,Balans,qarz_sanasi",
+      `Karimov,Ali,901112233,935551122,${groupCode},"-300 000,00",15.08.2026`,
+      `Karimova,Laylo,,935551122,${groupCode},0,`,
+      `Saidov,Bobur,,,${groupCode},-150000,`,
+      "Toshev,Anvar,,,,0,",
+    ].join("\n");
+
+  const counts = async () => ({
+    students: await db.student.count({ where: { centerId } }),
+    enrollments: await db.enrollment.count({ where: { group: { centerId } } }),
+    openings: await db.ledgerEntry.count({ where: { centerId, period: OPENING_PERIOD } }),
+    families: await db.family.count({ where: { centerId } }),
+  });
+
+  it("first import creates everything; the opening debt is dated from qarz_sanasi", async () => {
+    const dry = await importStudents(ctx, csv(), true);
+    expect(dry.errors).toEqual([]);
+    expect(dry.created).toBe(4);
+    expect(await counts()).toEqual({ students: 0, enrollments: 0, openings: 0, families: 0 });
+
+    const res = await importStudents(ctx, csv(), false);
+    expect(res.errors).toEqual([]);
+    expect(res.created).toBe(4);
+    expect(await counts()).toEqual({ students: 4, enrollments: 3, openings: 2, families: 3 });
+    const ali = await db.student.findFirstOrThrow({ where: { centerId, firstName: "Ali" } });
+    const opening = await db.ledgerEntry.findFirstOrThrow({ where: { studentId: ali.id, period: OPENING_PERIOD } });
+    expect(opening).toMatchObject({ type: "CHARGE", amount: -300_000 });
+    expect(toISODate(opening.date)).toBe("2026-08-15");
+    const bobur = await db.student.findFirstOrThrow({ where: { centerId, firstName: "Bobur" } });
+    const b = await db.ledgerEntry.findFirstOrThrow({ where: { studentId: bobur.id, period: OPENING_PERIOD } });
+    expect(toISODate(b.date)).toBe(today);
+  });
+
+  it("importing the same file again creates no new row; the dry run says so", async () => {
+    const before = await counts();
+    const dry = await importStudents(ctx, csv(), true);
+    expect(dry.created).toBe(0);
+    expect(dry.existing).toBe(4);
+    expect(dry.message).toContain(ctx.t("money.import.exists"));
+    const res = await importStudents(ctx, csv(), false);
+    expect(res.errors).toEqual([]);
+    expect(res.created).toBe(0);
+    expect(res.existing).toBe(4);
+    expect(await counts()).toEqual(before);
+    // names match without case; a new group for a known student only adds the enrollment
+    const other = await makeGroup({ name: "GE import 2" });
+    const again = await importStudents(ctx, `KARIMOV,ali,901112233,935551122,${other.group.code},-300000`, false);
+    expect(again.errors).toEqual([]);
+    expect(await counts()).toEqual({ ...before, enrollments: before.enrollments + 1 });
+  });
+
+  it("a future or broken debt date is refused", async () => {
+    const res = await importStudents(ctx, [`Yangi,Odam,901234000,,${groupCode},-1000,${addDays(today, 3)}`, `Yangi,Ikki,901234001,,${groupCode},-1000,31.02.2026`].join("\n"), true);
+    expect(res.errors).toHaveLength(2);
+    expect(res.errors[0]).toContain(ctx.t("money.import.futureDebtSince"));
+    expect(res.errors[1]).toContain(ctx.t("money.import.badDebtSince"));
+  });
+});
+
+describe("B7 — refunds are capped at the family's credit", () => {
+  it("refuses more than the credit; force + reason refunds it and the gap shows as debt", async () => {
+    const fam = await db.family.create({ data: { centerId, name: "Refund oilasi" } });
+    const actor = { userId: ctx.userId, centerId };
+    await takePayment(actor, { familyId: fam.id, amount: 600_000, method: "CASH" });
+    await db.ledgerEntry.create({ data: { centerId, familyId: fam.id, type: "CHARGE", amount: -200_000, method: "SYSTEM", description: "test", date: fromISODate(today) } });
+    const over = await refund(actor, { familyId: fam.id, amount: 500_000, method: "CASH", reason: null }).catch((e: unknown) => e);
+    expect((over as UserError).key).toBe("money.refundOverBalance");
+    const noReason = await refund(actor, { familyId: fam.id, amount: 500_000, method: "CASH", reason: " ", force: true }).catch((e: unknown) => e);
+    expect((noReason as UserError).key).toBe("money.refundForceReason");
+    // within the credit: fine
+    await refund(actor, { familyId: fam.id, amount: 400_000, method: "CASH", reason: null });
+    expect(await familyBalance(fam.id)).toBe(0);
+    // forced: allowed, audited, and the family now owes it
+    await refund(actor, { familyId: fam.id, amount: 100_000, method: "CASH", reason: "xato to'lov", force: true });
+    const a = await familyAllocation(fam.id);
+    expect(a.balance).toBe(-100_000);
+    expect(a.totalDebt).toBe(100_000);
+    expect(a.oldestUnpaidDate).toBe(today);
+    expect(await db.auditLog.count({ where: { centerId, action: "refund.overBalance" } })).toBe(1);
+  });
+});
+
+async function newStudent(name: string) {
+  const fam = await db.family.create({ data: { centerId, name: `${name} oilasi` } });
+  return db.student.create({ data: { centerId, familyId: fam.id, branchId, firstName: name, lastName: "Test" } });
+}
+
+describe("B4/B8 — enrollments", () => {
+  const actor = () => ({ userId: ctx.userId, centerId });
+
+  it("transfer keeps a discount scheduled from next month out of this month in the new group", async () => {
+    const a = await makeGroup({ name: "Transfer A", price: 600_000 });
+    const b = await makeGroup({ name: "Transfer B", price: 800_000 });
+    const s = await newStudent("Transfer");
+    const id = await enrollStudent(actor(), { studentId: s.id, groupId: a.group.id, startDate: addDays(today, -10), trial: false });
+    const nextMonth = monthRange(shiftMonth(today.slice(0, 7), 1)).start;
+    await setEnrollmentTerms(actor(), id, { priceOverride: 550_000, discountPercent: 50, discountAmount: null, discountUntil: null, discountReason: "aka-uka" }, nextMonth);
+    const newId = await transferEnrollment(actor(), id, b.group.id, today);
+    const created = await db.enrollment.findUniqueOrThrow({ where: { id: newId } });
+    const history = parseTermsHistory(created.termsHistory);
+    expect(history.map((h) => [h.from, h.priceOverride, h.discountPercent])).toEqual([
+      ["2000-01-01", null, null],
+      [nextMonth, null, 50],
+    ]);
+    const { input } = await loadBillingInput(db, newId, today);
+    const plain = computeExpected({ ...input, enrollment: { ...input.enrollment, terms: [], discountPercent: null } });
+    const [thisMonth] = computeExpected(input);
+    expect(thisMonth.amount).toBe(plain[0].amount);
+    expect(thisMonth.amount).toBeGreaterThan(0);
+    // and the posted ledger matches
+    const posted = await db.ledgerEntry.aggregate({ where: { enrollmentId: newId, type: { in: ["CHARGE", "CREDIT"] } }, _sum: { amount: true } });
+    expect(-(posted._sum.amount ?? 0)).toBe(thisMonth.amount);
+  });
+
+  it("refuses a late joiner once an open-ended whole course has used up its estimated lessons", async () => {
+    // 1 month × 3/week ≈ 13 lessons, the group has been running for 60 days
+    const g = await makeGroup({ name: "PY open", pricingType: "PACKAGE", price: 2_400_000, durationMonths: 1, startDate: addDays(today, -60) });
+    const s = await newStudent("Late");
+    const err = await enrollStudent(actor(), { studentId: s.id, groupId: g.group.id, startDate: today, trial: false }).catch((e: unknown) => e);
+    expect((err as UserError).key).toBe("money.wholeCourseFull");
+    expect(await db.enrollment.count({ where: { studentId: s.id } })).toBe(0);
+    // a trial is free and allowed; activating it is refused the same way
+    const trialId = await enrollStudent(actor(), { studentId: s.id, groupId: g.group.id, startDate: today, trial: true });
+    const err2 = await activateEnrollment(actor(), trialId, today).catch((e: unknown) => e);
+    expect((err2 as UserError).key).toBe("money.wholeCourseFull");
+    expect((await db.enrollment.findUniqueOrThrow({ where: { id: trialId } })).status).toBe("TRIAL");
+  });
+});
+
+describe("B6/B9 — salary", () => {
+  const actor = () => ({ userId: ctx.userId, centerId });
+
+  it("an archived teacher gets no fixed pay for the months after leaving", async () => {
+    const t = await db.user.create({ data: { centerId, phone: phone(), name: "Gone", passwordHash: "x", role: "TEACHER", isTeacher: true, archivedAt: new Date("2026-09-20T10:00:00Z") } });
+    await db.salaryRule.create({ data: { teacherId: t.id, model: "FIXED", fixedAmount: 3_000_000, validFrom: fromISODate("2026-01-01") } });
+    expect((await liveSalary(centerId, t.id, "2026-09")).result.total).toBe(3_000_000);
+    const oct = (await liveSalary(centerId, t.id, "2026-10")).result;
+    expect(oct.total).toBe(0);
+    expect(oct.warnings).toContain("archived");
+  });
+
+  it("a payslip of zero or less cannot be marked paid (no negative expense)", async () => {
+    const t = await db.user.create({ data: { centerId, phone: phone(), name: "Fined", passwordHash: "x", role: "TEACHER", isTeacher: true } });
+    await db.salaryRule.create({ data: { teacherId: t.id, model: "PER_LESSON", perLesson: 50_000, validFrom: fromISODate("2026-01-01") } });
+    await addAdjustment(actor(), t.id, "2026-09", -200_000, "jarima");
+    await lockPayslip(actor(), t.id, "2026-09");
+    const expenses = await db.expense.count({ where: { centerId } });
+    const err = await markPayslipPaid(actor(), t.id, "2026-09").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UserError);
+    expect((err as UserError).key).toBe("money.payslipNotPositive");
+    expect(await db.expense.count({ where: { centerId } })).toBe(expenses);
+    expect((await db.payslip.findUniqueOrThrow({ where: { teacherId_month: { teacherId: t.id, month: "2026-09" } } })).status).toBe("LOCKED");
+  });
+});

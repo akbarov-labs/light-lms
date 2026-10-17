@@ -47,6 +47,13 @@ export interface Allocation {
   totalDebt: number;
 }
 
+/** Debt unit for money paid out beyond the family's credit (see allocate). */
+export const OVERDRAW_KEY = "wallet:overdraw";
+
+/**
+ * Invariant (property-tested): unallocated − totalDebt = balance, and never both > 0 —
+ * balance ≥ 0 ⇒ totalDebt = 0 and unallocated = balance; balance < 0 ⇒ totalDebt = −balance.
+ */
 export function allocate(entries: AllocEntry[]): Allocation {
   const byId = new Map(entries.map((e) => [e.id, e]));
   const units = new Map<string, UnitStatus>();
@@ -72,8 +79,12 @@ export function allocate(entries: AllocEntry[]): Allocation {
     else pool += amount;
   };
 
+  // last day money left the wallet (refund, reversed payment): when an overdraw becomes debt
+  let lastOut: ISODate | null = null;
+  let lastDate: ISODate | null = null;
   for (const e of entries) {
     balance += e.amount;
+    if (!lastDate || e.date > lastDate) lastDate = e.date;
     // A reversal behaves like the entry it reverses, with the opposite sign.
     const kind = e.type === "REVERSAL" ? (e.reversesId ? byId.get(e.reversesId) : undefined) : e;
     const kindType = kind?.type ?? "PAYMENT";
@@ -86,12 +97,12 @@ export function allocate(entries: AllocEntry[]): Allocation {
     } else {
       // PAYMENT, REFUND, keyless CREDIT, or their reversals: money in/out of the wallet
       addMoney(kindType === "CREDIT" ? null : enrollmentId, e.amount);
+      if (e.amount < 0 && (!lastOut || e.date > lastOut)) lastOut = e.date;
     }
   }
 
-  const list = [...units.values()].sort((a, b) =>
-    a.firstDate === b.firstDate ? a.key.localeCompare(b.key) : a.firstDate.localeCompare(b.firstDate),
-  );
+  const byDate = (a: UnitStatus, b: UnitStatus) => (a.firstDate === b.firstDate ? a.key.localeCompare(b.key) : a.firstDate.localeCompare(b.firstDate));
+  const list = [...units.values()].sort(byDate);
   for (const u of list) {
     if (u.charged <= 0) {
       pool += -u.charged;
@@ -115,6 +126,15 @@ export function allocate(entries: AllocEntry[]): Allocation {
     pool += left;
   }
   for (const u of list) pool = pay(u, pool);
+
+  // More money went out than came in (a refund above the credit): that gap is debt too, so
+  // totalDebt = −balance whenever the balance is negative and the family gets reminders.
+  if (pool < 0) {
+    const firstDate = lastOut ?? lastDate ?? "1970-01-01";
+    list.push({ key: OVERDRAW_KEY, enrollmentId: null, charged: -pool, paid: 0, due: -pool, firstDate, description: "Balansdan ortiq qaytarildi" });
+    list.sort(byDate);
+    pool = 0;
+  }
 
   const enrollments = new Map<string, EnrollmentBalance>();
   let totalDebt = 0;

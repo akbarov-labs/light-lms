@@ -5,7 +5,7 @@
 // returning only the difference. Re-running it posts nothing new (idempotent, self-healing).
 
 import { addDays, addMonthsAnchored, parts, type ISODate } from "@/lib/dates";
-import { countSlotDates, isChargeable, isFrozenOn, enrollmentCovers } from "./lessons";
+import { countSlotDates, isChargeable, isFrozenOn, enrollmentCovers, slotDates } from "./lessons";
 import { nextPeriod, periodContaining, periodLabel, type Period } from "./periods";
 import type { BillingInput, BillingLesson, EnrollmentTerms, ExpectedUnit, LedgerDelta, PostedEntry } from "./types";
 
@@ -88,7 +88,7 @@ function lessonsIn(lessons: BillingLesson[], p: Period): BillingLesson[] {
  * is pro-rated instead of charging a full month for half a month (DECISIONS.md).
  */
 export function scheduledInPeriod(input: BillingInput, p: Period): number {
-  let n = lessonsIn(input.lessons, p).length;
+  let n = lessonsIn(input.lessons, p).length + notGeneratedIn(input, p).length;
   const { startDate, endDate, slotWeekdays } = input.group;
   if (p.start < startDate) {
     const to = p.end < startDate ? p.end : prevDay(startDate);
@@ -99,6 +99,31 @@ export function scheduledInPeriod(input: BillingInput, p: Period): number {
     n += countSlotDates(slotWeekdays, from, p.end, input.holidays);
   }
   return n;
+}
+
+/**
+ * Slot dates of the period that are not generated yet: inside the group's own start/end, after
+ * the last generated lesson and after `asOf` (a past day without a lesson really had none).
+ * Lessons are generated ~60 days ahead, so this only matters for a period that starts later —
+ * an enrollment or activation dated months ahead. Counting them in both the numerator and the
+ * denominator makes the first charge final instead of growing as lessons get generated.
+ */
+function notGeneratedIn(input: BillingInput, p: Period): ISODate[] {
+  const g = input.group;
+  if (g.generating === false) return [];
+  const last = input.lessons.reduce((m, l) => (l.date > m ? l.date : m), "");
+  let from = p.start > g.startDate ? p.start : g.startDate;
+  const after = last > input.asOf ? last : input.asOf;
+  if (from <= after) from = nextDay(after);
+  const to = g.endDate && g.endDate < p.end ? g.endDate : p.end;
+  return slotDates(g.slotWeekdays, from, to, input.holidays);
+}
+
+/** A not-yet-generated slot date the enrollment would pay for (same rules as a real lesson). */
+function chargeableDate(e: BillingInput["enrollment"], date: ISODate): boolean {
+  if (date < e.startDate || !e.activatedAt || date < e.activatedAt) return false;
+  if (e.endDate && date > e.endDate) return false;
+  return !isFrozenOn(e, date);
 }
 
 const prevDay = (d: ISODate) => addDays(d, -1);
@@ -119,9 +144,9 @@ function subscriptionUnits(input: BillingInput): ExpectedUnit[] {
     p = nextPeriod(p, anchor)
   ) {
     const scheduled = scheduledInPeriod(input, p);
-    const chargeable = lessonsIn(input.lessons, p).filter((l) =>
-      isChargeable(l, e, input.settings, input.excusedLessonIds),
-    ).length;
+    const chargeable =
+      lessonsIn(input.lessons, p).filter((l) => isChargeable(l, e, input.settings, input.excusedLessonIds)).length +
+      notGeneratedIn(input, p).filter((d) => chargeableDate(e, d)).length;
     const price = unitPrice(input, p.start);
     let amount = 0;
     if (scheduled > 0) amount = chargeable >= scheduled ? price : round100((price * chargeable) / scheduled);
@@ -130,6 +155,8 @@ function subscriptionUnits(input: BillingInput): ExpectedUnit[] {
       enrollmentId: e.id,
       amount,
       start: p.start,
+      // prepaid on the period's first day, or on the activation day when that is later
+      due: e.activatedAt > p.start ? e.activatedAt : p.start,
       period: p.start.slice(0, 7),
       description: `${periodLabel(p)} · ${groupLabel(input)} · ${chargeable}/${scheduled} dars`,
     });
@@ -154,17 +181,37 @@ interface PackageInfo {
  */
 export function courseLessonsFrom(input: BillingInput, from: ISODate): number {
   const g = input.group;
-  if (!g.endDate) {
-    const perWeek = input.course.lessonsPerWeek ?? g.slotWeekdays.length;
-    // fixed estimate: the count must not drift as lessons get generated ahead
-    const estimate = Math.max(1, Math.round((input.course.durationMonths ?? 1) * perWeek * 4.33));
-    const before = input.lessons.filter((l) => l.date >= g.startDate && l.date < from).length;
-    return Math.max(1, estimate - before);
-  }
+  if (!g.endDate) return Math.max(1, estimatedLessonsLeft(input, from));
   const generated = input.lessons.filter((l) => l.date >= from && l.date <= g.endDate!).length;
   const last = input.lessons.reduce((m, l) => (l.date > m ? l.date : m), "");
   const tailFrom = last && last >= from ? nextDay(last) : from;
   return Math.max(1, generated + countSlotDates(g.slotWeekdays, tailFrom, g.endDate, input.holidays));
+}
+
+/**
+ * Group without an end date: lessons of the course estimate (duration × lessons per week × 4.33)
+ * left from `from`. Can be ≤ 0 once the estimate is used up.
+ */
+function estimatedLessonsLeft(input: BillingInput, from: ISODate): number {
+  const g = input.group;
+  const perWeek = input.course.lessonsPerWeek ?? g.slotWeekdays.length;
+  // fixed estimate: the count must not drift as lessons get generated ahead
+  const estimate = Math.max(1, Math.round((input.course.durationMonths ?? 1) * perWeek * 4.33));
+  const before = input.lessons.filter((l) => l.date >= g.startDate && l.date < from).length;
+  return estimate - before;
+}
+
+/**
+ * A late joiner to a whole-course package of a group without an end date, after the estimated
+ * lessons are used up: there is nothing left to sell (the engine would charge "1 dars" for the
+ * rest of the course). Enrolling/activating such a student is refused (DECISIONS.md).
+ */
+export function wholeCourseExhausted(input: BillingInput): boolean {
+  const c = input.course;
+  if (c.pricingType !== "PACKAGE" || (c.packageLessons ?? 0) > 0 || input.group.endDate) return false;
+  const activated = input.enrollment.activatedAt;
+  if (!activated || activated <= input.group.startDate) return false;
+  return estimatedLessonsLeft(input, activated) <= 0;
 }
 
 /** Number of lessons in the whole course. */
@@ -240,11 +287,13 @@ function packageUnits(input: BillingInput): ExpectedUnit[] {
         amount = amounts[j - 1];
       }
       if (!due && !closed) continue;
+      const unitStart = j === 1 ? start : addMonthsAnchored(start, j - 1);
       out.push({
         key,
         enrollmentId: e.id,
         amount,
-        start: j === 1 ? start : addMonthsAnchored(start, j - 1),
+        start: unitStart,
+        due: unitStart,
         period: null,
         description: `${what} · ${groupLabel(input)} · ${N} dars${inst > 1 ? ` · to'lov ${j}/${inst}` : ""}`,
       });
@@ -283,15 +332,21 @@ export function planSync(expected: ExpectedUnit[], posted: PostedEntry[]): Ledge
       key: u.key,
       type: diff > 0 ? "CHARGE" : "CREDIT",
       amount: -diff,
+      due: u.due,
       period: u.period,
       description: isFirst ? u.description : `Qayta hisob · ${u.description}`,
     });
   }
   for (const [key, owed] of postedOwed) {
     if (seen.has(key) || owed === 0) continue;
-    deltas.push({ key, type: owed > 0 ? "CREDIT" : "CHARGE", amount: owed, period: null, description: "Qayta hisob · bekor qilindi" });
+    deltas.push({ key, type: owed > 0 ? "CREDIT" : "CHARGE", amount: owed, due: null, period: null, description: "Qayta hisob · bekor qilindi" });
   }
   return deltas;
+}
+
+/** Ledger date of a delta: today, or the unit's due date when that is later (prepaid on the due day). */
+export function deltaDate(delta: Pick<LedgerDelta, "due">, asOf: ISODate): ISODate {
+  return delta.due && delta.due > asOf ? delta.due : asOf;
 }
 
 export interface LessonValue {
@@ -299,6 +354,11 @@ export interface LessonValue {
   value: number;
   /** Billing unit the lesson belongs to (for "pay only from collected money"). */
   key: string | null;
+  /**
+   * Every unit that must be fully paid for the lesson to count with "pay only from collected
+   * money": the lesson's own unit and, with installments, all earlier installments of its package.
+   */
+  keys: string[];
   trial: boolean;
 }
 
@@ -319,10 +379,10 @@ export function lessonValue(input: BillingInput, lessonId: string, payTrial: boo
     if (input.course.pricingType === "SUBSCRIPTION") {
       const p = periodContaining(lesson.date, 1);
       const scheduled = scheduledInPeriod(input, p);
-      return scheduled > 0 ? { value: coursePriceAt(input.course, lesson.date) / scheduled, key: null, trial: true } : null;
+      return scheduled > 0 ? { value: coursePriceAt(input.course, lesson.date) / scheduled, key: null, keys: [], trial: true } : null;
     }
     const size = input.course.packageLessons || wholeCourseLessons(input);
-    return { value: coursePriceAt(input.course, lesson.date) / size, key: null, trial: true };
+    return { value: coursePriceAt(input.course, lesson.date) / size, key: null, keys: [], trial: true };
   }
 
   if (!isChargeable(lesson, e, input.settings, input.excusedLessonIds)) return null;
@@ -331,7 +391,8 @@ export function lessonValue(input: BillingInput, lessonId: string, payTrial: boo
     const p = periodContaining(lesson.date, anchorDay(input));
     const scheduled = scheduledInPeriod(input, p);
     if (scheduled === 0) return null;
-    return { value: unitPrice(input, p.start) / scheduled, key: `sub:${e.id}:${p.start}`, trial: false };
+    const key = `sub:${e.id}:${p.start}`;
+    return { value: unitPrice(input, p.start) / scheduled, key, keys: [key], trial: false };
   }
 
   const info = packageInfo(input);
@@ -343,5 +404,14 @@ export function lessonValue(input: BillingInput, lessonId: string, payTrial: boo
   const start = pkgIndex === 1 ? e.activatedAt! : chargeable[(pkgIndex - 1) * info.size - 1].date;
   const price = packagePrice(input, info, start);
   const inst = Math.max(1, input.course.installments || 1);
-  return { value: price / info.size, key: inst > 1 ? `pkg:${e.id}:${pkgIndex}:1` : `pkg:${e.id}:${pkgIndex}`, trial: false };
+  if (inst === 1) {
+    const key = `pkg:${e.id}:${pkgIndex}`;
+    return { value: price / info.size, key, keys: [key], trial: false };
+  }
+  // Installment j covers the lessons from packageStart + (j−1) months; a lesson is "collected"
+  // only when its installment and every earlier one of the package are fully paid.
+  let j = 1;
+  while (j < inst && addMonthsAnchored(start, j) <= lesson.date) j++;
+  const keys = Array.from({ length: j }, (_, x) => `pkg:${e.id}:${pkgIndex}:${x + 1}`);
+  return { value: price / info.size, key: keys[j - 1], keys, trial: false };
 }

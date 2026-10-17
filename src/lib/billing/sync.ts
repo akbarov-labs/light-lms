@@ -4,7 +4,7 @@ import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { fromISODate, toISODate, todayISO, type ISODate } from "@/lib/dates";
 import { readSettings } from "@/lib/settings";
-import { computeExpected, planSync } from "./engine";
+import { computeExpected, deltaDate, planSync } from "./engine";
 import type { BillingInput, EnrollmentTerms, LedgerDelta } from "./types";
 
 const enrollmentInclude = {
@@ -86,6 +86,7 @@ export function buildInput(p: {
       endDate: d(g.endDate),
       priceOverride: g.priceOverride,
       slotWeekdays: g.slots.map((s) => s.weekday),
+      generating: g.status === "ACTIVE" || g.status === "PLANNED",
       prices: parseGroupPrices(g.priceHistory),
     },
     enrollment: {
@@ -193,7 +194,8 @@ async function syncInTx(tx: Tx, enrollmentId: string, asOf: ISODate, userId: str
       billingKey: x.key,
       period: x.period,
       description: x.description,
-      date: fromISODate(asOf),
+      // a unit due later (activation months ahead) is dated when it is due, so "days overdue" starts then
+      date: fromISODate(deltaDate(x, asOf)),
       createdById: userId,
     })),
   });
