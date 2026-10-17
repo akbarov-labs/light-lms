@@ -6,7 +6,8 @@ export type SetupStep = (typeof SETUP_STEPS)[number];
 export type StepState = "done" | "skipped";
 
 const schema = z.object({
-  steps: z.record(z.enum(SETUP_STEPS), z.enum(["done", "skipped"])).default({}),
+  // partialRecord: a record keyed by an enum is exhaustive in zod 4
+  steps: z.partialRecord(z.enum(SETUP_STEPS), z.enum(["done", "skipped"])).default({}),
   courseId: z.string().optional(),
   groupId: z.string().optional(),
   teacherId: z.string().optional(),
