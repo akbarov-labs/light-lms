@@ -11,6 +11,12 @@ describe("onboarding progress", () => {
     expect(doneCount(o)).toBe(0);
   });
 
+  it("reads a partial steps map from the JSON column", () => {
+    expect(readOnboarding({ steps: { branch: "done" }, courseId: "c1" })).toEqual({ steps: { branch: "done" }, courseId: "c1" });
+    expect(readOnboarding({ steps: { branch: "maybe" } })).toEqual({ steps: {} });
+    expect(readOnboarding({ steps: { nope: "done" } })).toEqual({ steps: {} });
+  });
+
   it("tolerates junk in the JSON column", () => {
     expect(readOnboarding("nope")).toEqual({ steps: {} });
     expect(readOnboarding(null).steps).toEqual({});

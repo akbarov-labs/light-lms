@@ -1,0 +1,48 @@
+import { describe, expect, it } from "vitest";
+import { readSettings } from "./settings";
+
+const notifyAll = { payment: true, reminder: true, debt: true, absence: true, trial: true, teacherReminder: true, dailyReport: true };
+const defaults = {
+  trialLessons: 1,
+  excusedAbsenceCredit: false,
+  payTeacherForTrial: false,
+  payFromCollected: false,
+  gradeScale: "5",
+  reminderDaysBefore: 3,
+  lessonsAheadDays: 60,
+  transferAsTrial: false,
+  expenseCategories: ["Ijara / Rent", "Kommunal / Utilities", "Reklama / Ads", "Oylik / Salary", "Jihozlar / Equipment", "Ofis / Office", "Boshqa / Other"],
+  notify: notifyAll,
+  paymeFiscal: null,
+};
+
+describe("readSettings (Center.settings JSON)", () => {
+  it("fills every default, including the nested notify object, from nothing", () => {
+    expect(readSettings(undefined)).toEqual(defaults);
+    expect(readSettings(null)).toEqual(defaults);
+    expect(readSettings({})).toEqual(defaults);
+  });
+
+  it("fills nested notify defaults when notify is partial or empty", () => {
+    expect(readSettings({ notify: {} }).notify).toEqual(notifyAll);
+    expect(readSettings({ notify: { debt: false } }).notify).toEqual({ ...notifyAll, debt: false });
+  });
+
+  it("keeps stored values and drops unknown keys", () => {
+    const s = readSettings({ trialLessons: 0, gradeScale: "100", payFromCollected: true, legacy: 1 });
+    expect(s).toEqual({ ...defaults, trialLessons: 0, gradeScale: "100", payFromCollected: true });
+  });
+
+  it("an invalid value resets everything to defaults", () => {
+    expect(readSettings({ trialLessons: 99, payFromCollected: true })).toEqual(defaults);
+    expect(readSettings({ notify: { payment: "yes" } })).toEqual(defaults);
+    expect(readSettings("junk")).toEqual(defaults);
+  });
+
+  it("a broken paymeFiscal becomes null without touching other settings", () => {
+    const s = readSettings({ trialLessons: 2, paymeFiscal: { ikpu: "123" } });
+    expect(s).toEqual({ ...defaults, trialLessons: 2, paymeFiscal: null });
+    const fiscal = { ikpu: "10305001001000000", packageCode: "1515645", vatPercent: 12 };
+    expect(readSettings({ paymeFiscal: fiscal }).paymeFiscal).toEqual(fiscal);
+  });
+});
