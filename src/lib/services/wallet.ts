@@ -41,7 +41,11 @@ export async function allocationsFor(familyIds: string[], tx: Tx = db): Promise<
     orderBy: [{ date: "asc" }, { createdAt: "asc" }],
   });
   const by = new Map<string, typeof entries>();
-  for (const e of entries) by.set(e.familyId, [...(by.get(e.familyId) ?? []), e]);
+  for (const e of entries) {
+    const list = by.get(e.familyId);
+    if (list) list.push(e);
+    else by.set(e.familyId, [e]);
+  }
   for (const id of familyIds) out.set(id, allocate((by.get(id) ?? []).map((e) => ({ ...e, date: toISODate(e.date) }))));
   return out;
 }
