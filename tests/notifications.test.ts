@@ -24,6 +24,11 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await db.notification.deleteMany({ where: { centerId } });
+  // the queue is global: park rows other test files queued so every batch here sees only this file's rows
+  await db.notification.updateMany({
+    where: { centerId: { not: centerId }, status: { in: ["PENDING", "SENDING"] } },
+    data: { status: "PENDING", lockedAt: null, nextAttemptAt: new Date(Date.now() + 365 * 86_400_000) },
+  });
 });
 
 describe("notification queue", () => {
@@ -123,7 +128,7 @@ describe("notification queue", () => {
   });
 
   it("400 chat not found unlinks; other 400s fail without retry and keep the link", async () => {
-    await db.telegramLink.createMany({ data: [{ chatId: "1006", kind: "GUARDIAN", refId: "g-1006", phone: "998900000106" }, { chatId: "1007", kind: "GUARDIAN", refId: "g-1007", phone: "998900000107" }] });
+    await db.telegramLink.createMany({ data: [{ chatId: "1006", kind: "GUARDIAN", refId: "g-1006", phone: "998900000106" }, { chatId: "1007", kind: "GUARDIAN", refId: "g-1007", phone: "998900000107" }], skipDuplicates: true });
     await queue("1006", 1);
     await queue("1007", 1);
     const r = await processNotifications(

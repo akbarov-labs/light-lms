@@ -53,15 +53,18 @@ interface Claimed {
 export async function reclaimStale(minutes = STALE_LOCK_MIN): Promise<number> {
   return db.$executeRaw`
     UPDATE "Notification" SET status = 'PENDING', "lockedAt" = NULL
-    WHERE status = 'SENDING' AND "lockedAt" < now() - make_interval(mins => ${minutes}::int)`;
+    WHERE status = 'SENDING' AND "lockedAt" < ${new Date(Date.now() - minutes * 60_000)}`;
 }
 
+// Times are compared on this process's clock, the same clock Prisma uses for the @default(now()) of
+// nextAttemptAt when a row is queued (a database clock a few ms behind would skip fresh rows).
 async function claim(limit: number): Promise<Claimed[]> {
+  const now = new Date();
   const rows = await db.$queryRaw<Claimed[]>`
-    UPDATE "Notification" SET status = 'SENDING', "lockedAt" = now()
+    UPDATE "Notification" SET status = 'SENDING', "lockedAt" = ${now}
     WHERE id IN (
       SELECT id FROM "Notification"
-      WHERE status = 'PENDING' AND "nextAttemptAt" <= now()
+      WHERE status = 'PENDING' AND "nextAttemptAt" <= ${now}
       ORDER BY "createdAt"
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED

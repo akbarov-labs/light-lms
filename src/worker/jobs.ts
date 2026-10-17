@@ -5,32 +5,94 @@ import { generateAllLessons } from "@/lib/services/lessons";
 import { refreshFreezeStatuses } from "@/lib/services/enrollments";
 import { loadBillingInput, syncEnrollment } from "@/lib/billing/sync";
 import { computeExpected } from "@/lib/billing/engine";
+import type { Allocation } from "@/lib/billing/allocation";
 import { nextPeriodStart, periodContaining } from "@/lib/billing/periods";
 import { readSettings } from "@/lib/settings";
 import { enqueue, familyChats, staffChat } from "@/lib/notify";
 import { msg, esc } from "@/lib/messages";
-import { familyAllocation, familyBalance } from "@/lib/services/wallet";
+import { allocationsFor, balancesFor } from "@/lib/services/wallet";
 import { payLinkForFamily } from "@/lib/payments/links";
 import { buildCtx, loadUser } from "@/lib/ctx-core";
 import { debtAging, revenue } from "@/lib/queries/reports";
 import { formatMoney } from "@/lib/money";
 import { purgeOldAttempts } from "@/lib/auth/attempts-db";
+import { purgeOldNotifications } from "./notifications";
 
 export type JobResult = Record<string, number | string>;
 
-/** 00:30 — lessons ahead, group statuses, freeze statuses, billing for every billable enrollment. */
+/** Parallel syncs in the nightly billing run. Small on purpose: each one holds a pool connection. */
+export const BILLING_CONCURRENCY = 4;
+
+/** Run `fn` over `items` with at most `limit` in flight (no dependency needed for a simple pool). */
+export async function forEachLimit<T>(items: readonly T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const lane = async () => {
+    while (next < items.length) await fn(items[next++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+}
+
+/** Short error text for a job result: the last line of the message (Prisma puts the cause there). */
+const errText = (e: unknown) => {
+  const lines = (e instanceof Error ? e.message : String(e)).split("\n").map((l) => l.trim()).filter(Boolean);
+  return (lines[lines.length - 1] ?? "error").slice(0, 200);
+};
+
+/**
+ * 00:30 — lessons ahead, group statuses, freeze statuses, billing for every billable enrollment, housekeeping.
+ * Every step runs on its own: one that throws is logged and listed in `failedSteps`, the next ones still run
+ * (billing must not be skipped because one group has a broken schedule).
+ */
 export async function nightly(today: ISODate = todayISO()): Promise<JobResult> {
-  const activated = await db.group.updateMany({ where: { status: "PLANNED", startDate: { lte: fromISODate(today) } }, data: { status: "ACTIVE" } });
-  const lessons = await generateAllLessons(today);
-  const finished = await db.group.updateMany({ where: { status: "ACTIVE", endDate: { lt: fromISODate(today) } }, data: { status: "FINISHED" } });
-  const freezes = await refreshFreezeStatuses(today);
-  const billing = await billingSync(today);
-  const purged = await purgeOldAttempts();
-  return { groupsActivated: activated.count, lessons, groupsFinished: finished.count, freezeStatus: freezes, ...billing, loginAttemptsPurged: purged.attempts, resetCodesPurged: purged.resets };
+  const out: JobResult = {};
+  const failed: string[] = [];
+  const step = async (name: string, fn: () => Promise<JobResult>) => {
+    try {
+      Object.assign(out, await fn());
+    } catch (e) {
+      failed.push(name);
+      out[`${name}Error`] = errText(e);
+      console.error(`[nightly] step ${name} failed:`, e);
+    }
+  };
+  await step("activateGroups", async () => ({
+    groupsActivated: (await db.group.updateMany({ where: { status: "PLANNED", startDate: { lte: fromISODate(today) } }, data: { status: "ACTIVE" } })).count,
+  }));
+  await step("lessons", async () => {
+    const r = await generateAllLessons(today);
+    return { lessons: r.created, lessonsFailed: r.failed };
+  });
+  await step("finishGroups", async () => ({
+    groupsFinished: (await db.group.updateMany({ where: { status: "ACTIVE", endDate: { lt: fromISODate(today) } }, data: { status: "FINISHED" } })).count,
+  }));
+  await step("freezes", async () => {
+    const r = await refreshFreezeStatuses(today);
+    return { freezeStatus: r.changed, freezeFailed: r.failed };
+  });
+  await step("billing", () => billingSync(today));
+  await step("loginAttempts", async () => {
+    const p = await purgeOldAttempts();
+    return { loginAttemptsPurged: p.attempts, resetCodesPurged: p.resets };
+  });
+  await step("notificationRetention", async () => {
+    const p = await purgeOldNotifications();
+    return { notificationsPurgedSent: p.sent, notificationsPurgedFailed: p.failed };
+  });
+  if (failed.length) out.failedSteps = failed.join(",");
+  return out;
+}
+
+/** What in a job result deserves an ops alert: failed steps or items that could not be processed. */
+export function jobProblems(res: JobResult): string | null {
+  const parts: string[] = [];
+  if (res.failedSteps) parts.push(`failed steps: ${res.failedSteps}`);
+  for (const [k, v] of Object.entries(res)) if (/Failed$/.test(k) && typeof v === "number" && v > 0) parts.push(`${k}=${v}`);
+  return parts.length ? parts.join("; ") : null;
 }
 
 /** Sync every open enrollment (and ones closed in the last 60 days); notify families that fell into debt. */
 export async function billingSync(today: ISODate = todayISO()): Promise<JobResult> {
+  const t0 = Date.now();
   const enrollments = await db.enrollment.findMany({
     where: { OR: [{ endDate: null }, { endDate: { gte: fromISODate(addDays(today, -60)) } }] },
     select: { id: true, student: { select: { familyId: true, centerId: true } } },
@@ -38,7 +100,8 @@ export async function billingSync(today: ISODate = todayISO()): Promise<JobResul
   let entries = 0;
   let failed = 0;
   const charged = new Map<string, string>();
-  for (const e of enrollments) {
+  // each sync is its own transaction with a per-enrollment lock, so running a few at once is safe
+  await forEachLimit(enrollments, BILLING_CONCURRENCY, async (e) => {
     try {
       const deltas = await syncEnrollment(e.id, { asOf: today });
       entries += deltas.length;
@@ -47,12 +110,22 @@ export async function billingSync(today: ISODate = todayISO()): Promise<JobResul
       failed++;
       console.error(`[billing] enrollment ${e.id}:`, err);
     }
-  }
+  });
+  const syncMs = Date.now() - t0;
   let debtNotices = 0;
+  const centers = new Map<string, { name: string; notifyDebt: boolean } | null>();
+  const centerOf = async (id: string) => {
+    if (!centers.has(id)) {
+      const c = await db.center.findUnique({ where: { id }, select: { name: true, settings: true } });
+      centers.set(id, c ? { name: c.name, notifyDebt: readSettings(c.settings).notify.debt } : null);
+    }
+    return centers.get(id)!;
+  };
+  const balances = await balancesFor([...charged.keys()]);
   for (const [familyId, centerId] of charged) {
-    const center = await db.center.findUnique({ where: { id: centerId }, select: { name: true, settings: true } });
-    if (!center || !readSettings(center.settings).notify.debt) continue;
-    const balance = await familyBalance(familyId);
+    const center = await centerOf(centerId);
+    if (!center?.notifyDebt) continue;
+    const balance = balances.get(familyId) ?? 0;
     if (balance >= 0) continue;
     const payUrl = await payLinkForFamily(familyId);
     debtNotices += await db.$transaction(async (tx) => {
@@ -60,8 +133,11 @@ export async function billingSync(today: ISODate = todayISO()): Promise<JobResul
       return enqueue(tx, centerId, chats, (l) => msg.debt(l, { center: center.name, debt: -balance, payUrl }), `debt:${familyId}:${today}`);
     });
   }
-  return { enrollments: enrollments.length, ledgerEntries: entries, syncFailed: failed, debtNotices };
+  console.log(`[billing] ${enrollments.length} enrollment(s) synced in ${syncMs}ms (${failed} failed), ${debtNotices} debt notice(s)`);
+  return { enrollments: enrollments.length, ledgerEntries: entries, syncFailed: failed, debtNotices, billingMs: Date.now() - t0 };
 }
+
+const ALLOC_CHUNK = 500;
 
 /** 10:00 — "new period starts in N days" reminders and escalating debt reminders. */
 export async function reminders(today: ISODate = todayISO()): Promise<JobResult> {
@@ -97,9 +173,14 @@ export async function reminders(today: ISODate = todayISO()): Promise<JobResult>
     }
     if (s.notify.debt) {
       const neg = await db.ledgerEntry.groupBy({ by: ["familyId"], where: { centerId: c.id }, _sum: { amount: true }, having: { amount: { _sum: { lt: 0 } } } });
+      // ledgers of the debtor families are loaded in chunks, not one query per family
+      const allocs = new Map<string, Allocation>();
+      for (let i = 0; i < neg.length; i += ALLOC_CHUNK) {
+        for (const [id, a] of await allocationsFor(neg.slice(i, i + ALLOC_CHUNK).map((n) => n.familyId))) allocs.set(id, a);
+      }
       for (const n of neg) {
-        const alloc = await familyAllocation(n.familyId);
-        if (!alloc.oldestUnpaidDate) continue;
+        const alloc = allocs.get(n.familyId);
+        if (!alloc?.oldestUnpaidDate) continue;
         const overdue = diffDays(today, alloc.oldestUnpaidDate);
         if (![3, 7, 14, 30].includes(overdue)) continue;
         const payUrl = await payLinkForFamily(n.familyId);
@@ -123,7 +204,9 @@ export async function teacherReminders(today: ISODate = todayISO()): Promise<Job
   const byTeacher = new Map<string, typeof lessons>();
   for (const l of lessons) {
     if (!readSettings(l.group.center.settings).notify.teacherReminder || !l.teacher.telegramChatId) continue;
-    byTeacher.set(l.teacherId, [...(byTeacher.get(l.teacherId) ?? []), l]);
+    const list = byTeacher.get(l.teacherId);
+    if (list) list.push(l);
+    else byTeacher.set(l.teacherId, [l]);
   }
   let sent = 0;
   for (const [teacherId, list] of byTeacher) {
