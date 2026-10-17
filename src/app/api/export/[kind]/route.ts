@@ -164,8 +164,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ kind
   const ctx = await getCtx();
   if (!ctx) return new Response("unauthorized", { status: 401 });
   if (!ctx.can("export")) return new Response("forbidden", { status: 403 });
+  // own keys only: "constructor", "toString", "__proto__" are not exporters
+  if (!Object.hasOwn(exporters, kind)) return new Response("not found", { status: 404 });
   const exporter = exporters[kind];
-  if (!exporter) return new Response("not found", { status: 404 });
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries());
   const data = await exporter(ctx, sp);
   if (!data) return new Response("forbidden", { status: 403 });
