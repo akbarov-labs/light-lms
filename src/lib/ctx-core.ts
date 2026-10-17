@@ -23,7 +23,7 @@ export interface Ctx {
   locale: Locale;
   t: TFn;
   can: (p: Perm) => boolean;
-  /** Listed in PLATFORM_ADMIN_PHONES: may open /platform (all centers). */
+  /** User.platformAdmin (set only by scripts/platform-admin.ts): may open /platform (all centers). */
   isPlatformAdmin: boolean;
 }
 
@@ -62,7 +62,7 @@ export function buildCtx(user: UserWithCenter, opts: { activeBranchId?: string |
     locale,
     t: makeT(locale),
     can: (p) => perms.has(p),
-    isPlatformAdmin: isPlatformAdmin(user.phone),
+    isPlatformAdmin: isPlatformAdmin(user),
   };
 }
 
