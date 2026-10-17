@@ -20,6 +20,12 @@ beforeAll(async () => {
     create: { centerId: center.id, phone: PHONE, name: "Reset Tester", role: "ADMIN", perms: [], passwordHash: await bcrypt.hash("old-password-1", 4), telegramChatId: "777000111" },
   });
   user = { id: u.id, phone: PHONE, centerId: center.id };
+  // the chat proved this phone by sharing its contact (the bot's TelegramLink row)
+  await db.telegramLink.upsert({
+    where: { chatId_kind_refId: { chatId: "777000111", kind: "STAFF", refId: u.id } },
+    update: { phone: PHONE },
+    create: { chatId: "777000111", kind: "STAFF", refId: u.id, phone: PHONE },
+  });
   await db.loginAttempt.deleteMany({});
   await db.passwordReset.deleteMany({ where: { userId: u.id } });
 });

@@ -8,6 +8,7 @@ import { dbAttemptStore } from "./attempts-db";
 import { attemptKey, checkAttempts, recordAttempt, RULES } from "./ratelimit";
 import { hashResetCode, newResetCode, newTempPassword, RESET_CODE_MAX_TRIES, RESET_CODE_TTL_MS, resetCodeMatches } from "./security";
 import { sendTelegram, telegramEnabled } from "../telegram";
+import { validLinks } from "../telegram-links";
 
 export const BCRYPT_ROUNDS = 10;
 
@@ -49,6 +50,8 @@ export async function requestResetCode(phone: string | null, ip: string): Promis
 
   const user = phone ? await db.user.findUnique({ where: { phone }, include: { center: { select: { locale: true } } } }) : null;
   if (!user || user.archivedAt || !user.telegramChatId) return { result: "sent" };
+  // the chat must still be a valid link for this account (same phone, center enabled)
+  if (!(await validLinks(user.telegramChatId)).staffIds.includes(user.id)) return { result: "sent" };
   const code = newResetCode();
   await db.passwordReset.create({ data: { userId: user.id, codeHash: hashResetCode(user.id, code), expiresAt: new Date(Date.now() + RESET_CODE_TTL_MS) } });
   const locale = isLocale(user.locale) ? user.locale : isLocale(user.center.locale) ? user.center.locale : "uz";
@@ -60,10 +63,16 @@ export async function requestResetCode(phone: string | null, ip: string): Promis
   return { result: "sent" };
 }
 
-/** Code for a staff member who asked the bot directly (/parol). Null = not a linked, active staff chat. */
+/**
+ * Code for a staff member who asked the bot directly (/parol). Null = not a linked, active staff chat:
+ * the link must still match the user's current phone, the user must be active and the center enabled.
+ */
 export async function createResetCodeForChat(chatId: string): Promise<{ code: string; phone: string } | null> {
-  const user = await db.user.findFirst({ where: { telegramChatId: chatId, archivedAt: null } });
-  if (!user) return null;
+  const { staffIds } = await validLinks(chatId);
+  const users = await db.user.findMany({ where: { id: { in: staffIds }, telegramChatId: chatId, archivedAt: null, center: { disabledAt: null } } });
+  // one chat linked to several staff accounts (same phone can't happen — phone is unique) → never guess
+  if (users.length !== 1) return null;
+  const user = users[0];
   const recent = await db.passwordReset.count({ where: { userId: user.id, createdAt: { gt: new Date(Date.now() - RULES.resetRequestPhone.windowMs) } } });
   if (recent >= RULES.resetRequestPhone.limit) return null;
   const code = newResetCode();

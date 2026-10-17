@@ -19,6 +19,7 @@ import { assertBranch, staffInScope, staffPermsFor, type Ctx } from "@/lib/ctx";
 import { adminResetPassword, BCRYPT_ROUNDS, setPassword } from "@/lib/auth/password";
 import { MIN_PASSWORD } from "@/lib/auth/security";
 import { issueSession } from "@/lib/auth/session-cookie";
+import { unlinkIfPhoneChanged, unlinkRef } from "@/lib/telegram-links";
 
 // ---------------------------------------------------------------- center
 
@@ -254,6 +255,8 @@ export async function saveStaffAction(_: ActionState, fd: FormData): Promise<Act
         if (!staffInScope(ctx, u.branches.map((b) => b.branchId))) throw new UserError("error.forbidden");
         if (u.id === ctx.userId && f.role !== u.role) throw new UserError("settings.cannotEditOwner");
         await tx.user.update({ where: { id: u.id }, data });
+        // new phone: the chat linked to the old one loses the teacher menu and /parol codes (S3)
+        await unlinkIfPhoneChanged(tx, "STAFF", u.id, u.phone, f.phone);
         // a password typed by an admin is a reset: old sessions end, the user picks their own next time
         if (f.password) await setPassword(tx, { id: u.id, phone: f.phone }, f.password, { mustChange: u.id !== ctx.userId });
         await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: u.id, action: "update", before: { ...u, passwordHash: undefined }, after: { ...data, branchIds, passwordChanged: !!f.password } });
@@ -285,6 +288,8 @@ export async function toggleStaffArchiveAction(_: ActionState, fd: FormData): Pr
     if (!staffInScope(ctx, u.branches.map((b) => b.branchId))) throw new UserError("error.forbidden");
     await db.$transaction(async (tx) => {
       await tx.user.update({ where: { id }, data: { archivedAt: u.archivedAt ? null : new Date() } });
+      // archived staff lose the bot (after a restore they re-link by sharing their contact)
+      if (!u.archivedAt) await unlinkRef(tx, "STAFF", id);
       await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "User", entityId: id, action: u.archivedAt ? "restore" : "archive" });
     });
     revalidatePath("/settings/staff");
