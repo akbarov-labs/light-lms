@@ -12,6 +12,7 @@ import { nextPeriodStart, periodContaining } from "@/lib/billing/periods";
 import { payLinkForFamily } from "@/lib/payments/links";
 import { attendanceMark, fullName } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
+import { isTeacherRow } from "@/lib/queries/staff";
 import { B } from "./texts";
 
 export interface Linked {
@@ -44,7 +45,7 @@ export async function linkChat(chatId: string, phone: string, locale: Locale): P
       });
     }
   });
-  return { guardians: guardians.length, students: students.length, staff: staff.map((s) => ({ id: s.id, role: s.role, isTeacher: s.isTeacher || s.role === "TEACHER" })) };
+  return { guardians: guardians.length, students: students.length, staff: staff.map((s) => ({ id: s.id, role: s.role, isTeacher: isTeacherRow(s) })) };
 }
 
 export async function chatLocale(chatId: string): Promise<Locale | null> {
@@ -66,7 +67,7 @@ export async function chatRoles(chatId: string) {
   const staff = await db.user.findMany({ where: { id: { in: links.staffIds }, archivedAt: null, center: { disabledAt: null } } });
   return {
     family: links.guardianIds.length > 0 || links.studentIds.length > 0,
-    teacher: staff.find((s) => s.isTeacher || s.role === "TEACHER") ?? null,
+    teacher: staff.find(isTeacherRow) ?? null,
     owner: staff.find((s) => s.role === "OWNER" || s.role === "MANAGER") ?? null,
   };
 }
