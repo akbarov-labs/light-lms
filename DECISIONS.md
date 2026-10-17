@@ -120,3 +120,14 @@
 2026-10-17 — Raw report SQL uses scope twins in src/lib/queries/scope-sql.ts kept in step with studentScope/familyScope — Prisma can't express HAVING/UNION filters.
 2026-10-17 — error.tsx / not-found.tsx at root, (admin) and t/ (+ global-error.tsx). No route-level loading.tsx: it streamed every first load and delayed hydration, so an early click on a server-action form (setup wizard) became a plain POST that did not advance — navigation feedback is a pending spinner on the clicked nav link (useLinkStatus) instead.
 2026-10-17 — Environment variables are read through src/lib/env.ts (lazy getters): APP_URL had two different fallbacks and inconsistent trailing-slash handling.
+2026-10-17 — Major upgrades (all releases ≥ 2 weeks old): Zod 4.6, Prisma 7.10, Next 16.3 + React 19.3, Vitest 5.0 + @vitest/coverage-v8, ESLint 10.12. TypeScript stays 5.9 (TS 7 only behind Next's experimental flag). Node ≥ 20.19 required by Prisma 7 (images use Node 22).
+2026-10-17 — Next 16 renamed middleware to src/proxy.ts (earlier lines that say "middleware" mean this file); nonce CSP, the / → /welcome rewrite and redirects are unchanged. Turbopack builds the standalone output.
+2026-10-17 — Prisma 7: `prisma-client` generator into src/generated/prisma (gitignored, built by postinstall), prisma.config.ts, pg driver adapter (@prisma/adapter-pg) — no native query engine, so binaryTargets are gone and the worker is one self-contained bundle. db.ts loads .env only when DATABASE_URL is unset (scripts and worker:dev relied on Prisma 6 doing that).
+2026-10-17 — Unique violations are detected with isUniqueViolation() (src/lib/db-errors.ts): with the driver adapter, P2002 no longer carries meta.target.
+2026-10-17 — Zod 4: nested object defaults use .prefault({}) (Zod 4's .default no longer fills nested defaults); settings and form behaviour are pinned by tests.
+2026-10-17 — React Compiler lint rules (react-hooks 7) are off until the compiler is adopted — 10 known findings (refs read in handlers, set-state-in-effect resets, two server-component patterns), none changes behaviour today.
+2026-10-17 — ESLint 10 runs with eslint-plugin-react/import/jsx-a11y whose peer ranges stop at 9; findings verified identical; React version pinned in settings.
+2026-10-17 — The vitest 5 lockfile change was resolved with npm 11 (npm 10's arborist crashes on its peers); `npm@10 ci` installs it, so the Docker image's npm still works.
+2026-10-17 — mysql2 (pulled in by prisma 7.10.0) overridden to 3.24.4 — the security fix prisma 7.10.1 ships, without taking a 2-day-old release.
+2026-10-17 — Coverage floor on money code (src/lib/billing, salary, payments): lines/statements/functions 90%, branches 80% (`npm run test:coverage`); DB adapters are covered by the integration suite instead.
+2026-10-17 — Export buttons are plain <a> links — Next's <Link> prefetched the CSV routes.

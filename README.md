@@ -37,6 +37,7 @@ Qolgan / v2: Click, Uzum, SMS, baholar va oylik hisobot kartasi, imtihon va sert
 
 ```bash
 npm test                    # unit (billing, salary, Payme, rules)
+npm run test:coverage       # unit + coverage; money code (billing/salary/payments) must stay ≥ 90% lines
 npm run test:integration    # database tests (separate lms_test database)
 E2E_BASE_URL=http://localhost:3010 npm run test:e2e   # browser + accessibility, on a demo-data stack
 DATABASE_URL=... npx tsx scripts/scale-test.ts         # 2 000-student load data (never production)
@@ -102,6 +103,7 @@ npm run worker:dev                       # cron + bot
 |---|---|
 | `npm test` | unit testlar (billing, oylik, Payme, telefon, sanalar, CSV, ruxsatlar) |
 | `npm run test:integration` | baza bilan testlar (`lms_test` bazasini o'zi yaratadi) |
+| `npm run test:coverage` | unit testlar + qamrov (pul kodi ≥ 90%) |
 | `npm run typecheck` / `npm run lint` / `npm run build` | tekshiruvlar |
 | `npm run job:nightly` (`job:billing`, `job:reminders`, `job:teacher-reminders`, `job:daily-report`, `job:notifications`, `job:lessons`) | jobni qo'lda ishga tushirish; sana berish mumkin: `npm run job:nightly -- 2026-10-01`. Docker'da: `docker compose exec worker node run-job.mjs nightly`. Chiqish kodi 2 = shu ish allaqachon ishlayapti (ikki marta ishlamaydi) |
 | `npm run seed` | bo'sh bazaga demo markazni yozadi |
