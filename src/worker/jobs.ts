@@ -76,7 +76,7 @@ export async function nightly(today: ISODate = todayISO()): Promise<JobResult> {
   });
   await step("notificationRetention", async () => {
     const p = await purgeOldNotifications();
-    return { notificationsPurgedSent: p.sent, notificationsPurgedFailed: p.failed };
+    return { sentNotificationsPurged: p.sent, failedNotificationsPurged: p.failed };
   });
   if (failed.length) out.failedSteps = failed.join(",");
   return out;
