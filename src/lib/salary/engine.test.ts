@@ -75,6 +75,35 @@ describe("salary", () => {
     expect(on.total).toBe(Math.round(per * 3 * 0.5));
   });
 
+  it("pay from collected with installments: a lesson counts only when its installment and every earlier one are paid", () => {
+    // Python Foundation: 2 400 000 whole course (Sep–Dec, Mon/Wed/Fri) in 4 monthly installments of 600 000
+    let input = scenario({
+      asOf: "2026-12-31",
+      groupStart: "2026-09-01",
+      groupEnd: "2026-12-31",
+      course: { pricingType: "PACKAGE", price: 2_400_000, packageLessons: null, installments: 4 },
+      enrollment: { startDate: "2026-09-01", activatedAt: "2026-09-01" },
+    });
+    for (const l of input.lessons) input = withStatus(input, l.date, "HELD");
+    const lessons: LessonRow[] = input.lessons.map((l) => ({ id: l.id, date: l.date, status: l.status, teacherId: "T", groupId: "g1", groupName: "PY" }));
+    const enrollmentsByGroup = new Map([["g1", [{ input, studentName: "A" }]]]);
+    const total = input.lessons.length;
+    const run = (month: string, paid: string[]) => {
+      const held = collectLessons({ teacherId: "T", month, lessons, enrollmentsByGroup, payTrial: false, paidKeys: new Set(paid) });
+      return computeSalary({ rule: rule({ percent: 10 }), lessons: held, adjustments: [], payFromCollected: true }).lines[0];
+    };
+    const sep = input.lessons.filter((l) => l.date.startsWith("2026-09")).length;
+    const oct = input.lessons.filter((l) => l.date.startsWith("2026-10")).length;
+    // only installment 1 paid → only the lessons of month 1 count
+    expect(run("2026-09", ["pkg:e1:1:1"])).toMatchObject({ studentLessons: sep, amount: Math.round(((2_400_000 / total) * sep) / 10) });
+    expect(run("2026-10", ["pkg:e1:1:1"]).studentLessons).toBe(0);
+    expect(run("2026-12", ["pkg:e1:1:1"]).studentLessons).toBe(0);
+    // installment 2 paid but not 1 → October still does not count
+    expect(run("2026-10", ["pkg:e1:1:2"]).studentLessons).toBe(0);
+    expect(run("2026-10", ["pkg:e1:1:1", "pkg:e1:1:2"]).studentLessons).toBe(oct);
+    expect(run("2026-11", ["pkg:e1:1:1", "pkg:e1:1:2"]).studentLessons).toBe(0);
+  });
+
   it("bonuses and fines are added", () => {
     const r = computeSalary({ rule: rule({ model: "FIXED", fixedAmount: 2_000_000 }), lessons: [], adjustments: [{ amount: 300_000, reason: "bonus" }, { amount: -50_000, reason: "kechikish" }], payFromCollected: false });
     expect(r.total).toBe(2_250_000);

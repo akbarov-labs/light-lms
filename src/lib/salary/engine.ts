@@ -91,7 +91,9 @@ export function collectLessons(p: {
       for (const ge of p.enrollmentsByGroup.get(l.groupId) ?? []) {
         const v = lessonValue(ge.input, l.id, p.payTrial);
         if (!v) continue;
-        students.push({ enrollmentId: ge.input.enrollment.id, studentName: ge.studentName, value: v.value, key: v.key, trial: v.trial, paid: v.key ? p.paidKeys.has(v.key) : false });
+        // with installments the lesson's installment AND every earlier one must be paid
+        const paid = v.keys.length > 0 && v.keys.every((k) => p.paidKeys.has(k));
+        students.push({ enrollmentId: ge.input.enrollment.id, studentName: ge.studentName, value: v.value, key: v.key, trial: v.trial, paid });
       }
       return { lessonId: l.id, date: l.date, groupId: l.groupId, groupName: l.groupName, students };
     });

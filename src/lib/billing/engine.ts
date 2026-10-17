@@ -299,6 +299,11 @@ export interface LessonValue {
   value: number;
   /** Billing unit the lesson belongs to (for "pay only from collected money"). */
   key: string | null;
+  /**
+   * Every unit that must be fully paid for the lesson to count with "pay only from collected
+   * money": the lesson's own unit and, with installments, all earlier installments of its package.
+   */
+  keys: string[];
   trial: boolean;
 }
 
@@ -319,10 +324,10 @@ export function lessonValue(input: BillingInput, lessonId: string, payTrial: boo
     if (input.course.pricingType === "SUBSCRIPTION") {
       const p = periodContaining(lesson.date, 1);
       const scheduled = scheduledInPeriod(input, p);
-      return scheduled > 0 ? { value: coursePriceAt(input.course, lesson.date) / scheduled, key: null, trial: true } : null;
+      return scheduled > 0 ? { value: coursePriceAt(input.course, lesson.date) / scheduled, key: null, keys: [], trial: true } : null;
     }
     const size = input.course.packageLessons || wholeCourseLessons(input);
-    return { value: coursePriceAt(input.course, lesson.date) / size, key: null, trial: true };
+    return { value: coursePriceAt(input.course, lesson.date) / size, key: null, keys: [], trial: true };
   }
 
   if (!isChargeable(lesson, e, input.settings, input.excusedLessonIds)) return null;
@@ -331,7 +336,8 @@ export function lessonValue(input: BillingInput, lessonId: string, payTrial: boo
     const p = periodContaining(lesson.date, anchorDay(input));
     const scheduled = scheduledInPeriod(input, p);
     if (scheduled === 0) return null;
-    return { value: unitPrice(input, p.start) / scheduled, key: `sub:${e.id}:${p.start}`, trial: false };
+    const key = `sub:${e.id}:${p.start}`;
+    return { value: unitPrice(input, p.start) / scheduled, key, keys: [key], trial: false };
   }
 
   const info = packageInfo(input);
@@ -343,5 +349,14 @@ export function lessonValue(input: BillingInput, lessonId: string, payTrial: boo
   const start = pkgIndex === 1 ? e.activatedAt! : chargeable[(pkgIndex - 1) * info.size - 1].date;
   const price = packagePrice(input, info, start);
   const inst = Math.max(1, input.course.installments || 1);
-  return { value: price / info.size, key: inst > 1 ? `pkg:${e.id}:${pkgIndex}:1` : `pkg:${e.id}:${pkgIndex}`, trial: false };
+  if (inst === 1) {
+    const key = `pkg:${e.id}:${pkgIndex}`;
+    return { value: price / info.size, key, keys: [key], trial: false };
+  }
+  // Installment j covers the lessons from packageStart + (j−1) months; a lesson is "collected"
+  // only when its installment and every earlier one of the package are fully paid.
+  let j = 1;
+  while (j < inst && addMonthsAnchored(start, j) <= lesson.date) j++;
+  const keys = Array.from({ length: j }, (_, x) => `pkg:${e.id}:${pkgIndex}:${x + 1}`);
+  return { value: price / info.size, key: keys[j - 1], keys, trial: false };
 }
