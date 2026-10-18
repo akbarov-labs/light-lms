@@ -101,7 +101,7 @@ test.describe("visitor", () => {
 test.describe("staff", () => {
   test("owner: every main page renders and passes the accessibility scan", async ({ page }) => {
     await login(page, OWNER);
-    for (const path of ["/", "/today", "/leads", "/students", "/groups", "/courses", "/payments", "/debtors", "/salary", "/expenses", "/reports", "/audit", "/settings", "/settings/staff"]) {
+    for (const path of ["/", "/today", "/leads", "/students", "/groups", "/courses", "/exams", "/certificates", "/payments", "/debtors", "/salary", "/expenses", "/reports", "/audit", "/settings", "/settings/staff"]) {
       await page.goto(path);
       await expect(page.locator("main")).toBeVisible();
       await a11y(page, path);
@@ -199,7 +199,7 @@ test.describe("staff", () => {
   test("owner on a phone: admin pages never scroll sideways (wide tables scroll inside their card)", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, OWNER);
-    for (const path of ["/", "/today", "/leads", "/students", "/groups", "/payments", "/debtors", "/salary", "/reports", "/settings"]) {
+    for (const path of ["/", "/today", "/leads", "/students", "/groups", "/exams", "/certificates", "/payments", "/debtors", "/salary", "/reports", "/settings"]) {
       await page.goto(path);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       expect(overflow, `${path} scrolls sideways by ${overflow}px`).toBeLessThanOrEqual(0);
@@ -210,11 +210,74 @@ test.describe("staff", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, TEACHER);
     await expect(page).toHaveURL(/\/t/);
-    for (const path of ["/t", "/t/week", "/t/salary"]) {
+    for (const path of ["/t", "/t/week", "/t/reports", "/t/salary"]) {
       await page.goto(path);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       expect(overflow, `${path} scrolls sideways`).toBeLessThanOrEqual(0);
       await a11y(page, path);
     }
+  });
+});
+
+test.describe("v2: report cards, exams, certificates, Mini App", () => {
+  test("owner: a group's report cards, a card, an exam and a certificate render and pass the scan", async ({ page }) => {
+    await login(page, OWNER);
+    await page.goto("/groups");
+    await settle(page);
+    await page.locator("main table tbody a", { hasText: "GE-A1 ertalab" }).first().click();
+    await page.waitForURL("**/groups/**");
+    await page.getByRole("link", { name: "Oylik hisobot" }).click();
+    await page.waitForURL("**/reports**");
+    await a11y(page, "group report cards");
+    await page.getByRole("link", { name: "Ko'rish" }).first().click();
+    await page.waitForURL("**/report-cards/**");
+    await expect(page.getByText("Davomat").first()).toBeVisible();
+    await a11y(page, "report card");
+    await page.goto("/exams");
+    await settle(page);
+    await page.getByRole("link", { name: "A1 daraja imtihoni" }).click();
+    await page.waitForURL("**/exams/**");
+    await expect(page.getByRole("button", { name: "Natijalarni saqlash" })).toBeVisible();
+    await a11y(page, "exam page");
+    await page.goto("/certificates");
+    await settle(page);
+    const code = (await page.locator("main table tbody tr td.font-mono").first().textContent())?.trim() ?? "";
+    expect(code).toMatch(/^[A-Z2-9]{10}$/);
+    await page.locator("main table tbody a").first().click();
+    await page.waitForURL("**/certificates/**");
+    await expect(page.getByRole("heading", { name: "SERTIFIKAT" })).toBeVisible();
+    await a11y(page, "certificate");
+    // anyone can check the code, signed out
+    await page.context().clearCookies();
+    await page.goto(`/v/${code}`);
+    await expect(page.locator("main").getByRole("status")).toContainText("Haqiqiy");
+    await a11y(page, "certificate check");
+    await page.goto("/v/ABCDEFGHJK");
+    await expect(page.locator("main").getByRole("alert")).toBeVisible();
+  });
+
+  test("public: a sent report card opens by its link; the Mini App outside Telegram explains itself", async ({ page, request }) => {
+    await login(page, OWNER);
+    await page.goto("/groups");
+    await settle(page);
+    await page.locator("main table tbody a", { hasText: "GE-A1 ertalab" }).first().click();
+    await page.waitForURL("**/groups/**");
+    await page.getByRole("link", { name: "Oylik hisobot" }).click();
+    await page.waitForURL("**/reports**");
+    // last month's cards are sent in the demo; open one and follow its public link
+    await page.locator('input[type="month"]').fill(new Date(Date.now() - 31 * 86_400_000).toISOString().slice(0, 7));
+    await page.getByRole("button", { name: "Filtrlash" }).click();
+    await page.getByRole("link", { name: "Ko'rish" }).first().click();
+    await page.waitForURL("**/report-cards/**");
+    const href = await page.locator('a[href*="/rc/"]').first().getAttribute("href");
+    expect(href).toBeTruthy();
+    await page.context().clearCookies();
+    await page.goto(new URL(href!).pathname);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await a11y(page, "public report card");
+    await page.goto("/tg");
+    await expect(page.getByText("Telegram ichida")).toBeVisible();
+    // the Mini App's API refuses anything Telegram did not sign
+    expect((await request.post("/api/tg/data", { data: "user=%7B%22id%22%3A1%7D&hash=" + "0".repeat(64) })).status()).toBeGreaterThanOrEqual(401);
   });
 });

@@ -30,7 +30,7 @@ export function ExamResultsBoard({ examId, rows, sections, maxScore, t, locked }
             <thead>
               <tr className="border-b border-zinc-100 text-left text-xs text-zinc-500">
                 <th className="px-4 py-2 font-medium">{t("exams.participant")}</th>
-                {sections.length > 0 ? sections.map((s, i) => <th key={i} className="px-2 py-2 text-right font-medium">{s.name} <span className="text-zinc-400">/{s.max}</span></th>) : <th className="px-2 py-2 text-right font-medium">{t("exams.score")} <span className="text-zinc-400">/{maxScore}</span></th>}
+                {sections.length > 0 ? sections.map((s, i) => <th key={i} className="px-2 py-2 text-right font-medium">{s.name} <span className="font-normal">/{s.max}</span></th>) : <th className="px-2 py-2 text-right font-medium">{t("exams.score")} <span className="font-normal">/{maxScore}</span></th>}
                 {sections.length > 0 && <th className="px-2 py-2 text-right font-medium">{t("exams.total")}</th>}
                 <th className="px-2 py-2 font-medium">{t("exams.comment")}</th>
                 <th className="px-4 py-2" />

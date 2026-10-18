@@ -87,6 +87,26 @@ Ochiq lid formasi: http://localhost:3000/f/demo
 Sozlamalar → Payme: Merchant ID va kalit. Payme kabinetiga endpoint: `<APP_URL>/api/payme`. Kalit bo'lmasa to'lov tugmalari ko'rinmaydi.
 Ota-onaga yuboriladigan havola: `<APP_URL>/pay/<familyId>` → Payme checkout.
 
+### Click va Uzum Bank (ixtiyoriy)
+
+- **Click**: Sozlamalar → Click: Service ID, Merchant ID, maxfiy kalit. Click kabinetida Prepare = `<APP_URL>/api/click/prepare`, Complete = `<APP_URL>/api/click/complete` (bitta manzil so'ralsa: `<APP_URL>/api/click/shop`).
+- **Uzum Bank**: Sozlamalar → Uzum: serviceId, login, parol (Uzum menejeri beradi). Webhook manzili: `<APP_URL>/api/uzum` (Uzum oxiriga `/check`, `/create`, `/confirm`, `/reverse`, `/status` qo'shadi).
+- Ulangan har bir tizim `/pay/<familyId>` sahifasida o'z tugmasi bilan chiqadi; to'lov avtomatik balansga tushadi, bekor qilinsa qaytariladi.
+
+### SMS (ixtiyoriy, Eskiz.uz)
+
+Sozlamalar → SMS: markazning o'z Eskiz email/paroli va yuboruvchi nomi. Qaysi xabarlar SMS bilan ham ketishini belgilang (standart: faqat Telegram'ga ulanmagan oilalarga). Eskiz faqat kabinetda tasdiqlangan shablon matnlarini yuboradi. Lokal Docker'da `SMS_DRY_RUN=true` — SMS yuborilmaydi, worker logiga yoziladi (`docker compose logs worker`).
+
+### Hisobot kartalari, imtihonlar, sertifikatlar
+
+- Guruh → **Oylik hisobot**: har bir o'quvchi uchun davomat, o'rtacha baho, reyting; o'qituvchi izoh yozadi (`/t/reports`), ofis ota-onalarga yuboradi. Ota-ona havolasi: `/rc/<token>`. Sozlamalarda avtomatik yuborish (har oyning N-kuni, 11:00).
+- **Imtihonlar** (`/exams`): darajani aniqlash testi (lidlar uchun ham), daraja / yakuniy / mock imtihon, bo'limlar, o'tish bali. Natijalar ota-onalarga yuboriladi, o'tganlarga sertifikat (A4, QR kod).
+- **Sertifikatlar** (`/certificates`): istalgan kishi `/v/<kod>` da tekshiradi; o'chirilmaydi — bekor qilinadi.
+
+### Telegram Mini App
+
+Bot tokeni va **https** `APP_URL` bo'lsa, botning menyu tugmasi "📱 Ilova" ni ochadi (`/tg`): balans, to'lash, jadval, davomat, hisobot va sertifikatlar. Telegram Mini App'ni faqat https orqali ochadi, shuning uchun lokal `http://localhost` da tugma chiqmaydi.
+
 ### Yangi markaz va platforma admini / Signup and platform admin
 
 - Yangi markaz: http://localhost:3000/signup → markaz, egasi va filial yaratiladi, keyin sozlash ustasi `/setup` ochiladi (istalgan qadamni o'tkazib yuborish mumkin).
@@ -109,7 +129,7 @@ npm run worker:dev                       # cron + bot
 | `npm run test:integration` | baza bilan testlar (`lms_test` bazasini o'zi yaratadi) |
 | `npm run test:coverage` | unit testlar + qamrov (pul kodi ≥ 90%) |
 | `npm run typecheck` / `npm run lint` / `npm run build` | tekshiruvlar |
-| `npm run job:nightly` (`job:billing`, `job:reminders`, `job:teacher-reminders`, `job:daily-report`, `job:notifications`, `job:lessons`) | jobni qo'lda ishga tushirish; sana berish mumkin: `npm run job:nightly -- 2026-10-01`. Docker'da: `docker compose exec worker node run-job.mjs nightly`. Chiqish kodi 2 = shu ish allaqachon ishlayapti (ikki marta ishlamaydi) |
+| `npm run job:nightly` (`job:billing`, `job:reminders`, `job:teacher-reminders`, `job:daily-report`, `job:report-cards`, `job:notifications`, `job:sms`, `job:lessons`) | jobni qo'lda ishga tushirish; sana berish mumkin: `npm run job:nightly -- 2026-10-01`. Docker'da: `docker compose exec worker node run-job.mjs nightly`. Chiqish kodi 2 = shu ish allaqachon ishlayapti (ikki marta ishlamaydi) |
 | `npm run seed` | bo'sh bazaga demo markazni yozadi |
 
 Telefondan sinash (bir Wi-Fi tarmog'ida): `.env` da `WEB_BIND=0.0.0.0` — standart holatda ilova faqat shu kompyuterdan ochiladi (`127.0.0.1`).
@@ -119,8 +139,9 @@ Telefondan sinash (bir Wi-Fi tarmog'ida): `.env` da `WEB_BIND=0.0.0.0` — stand
 - 00:30 — darslar 60 kun oldinga, guruh holatlari, muzlatishlar, barcha ochiq yozuvlar bo'yicha hisob-kitob (+ qarz xabari)
 - 10:00 — yangi oy to'lovi eslatmasi (N kun oldin) va qarz eslatmalari (3/7/14/30 kun)
 - 20:00 — davomat belgilanmagan o'qituvchilarga eslatma
+- 11:00 — oylik hisobot kartalarini avtomatik yuborish (yoqilgan markazlarda, tanlangan kunda)
 - 21:00 — egasi/menejerga kunlik hisobot
-- har 5 soniyada — Telegram xabarlar navbati (≤25 xabar/s)
+- har 5 soniyada — Telegram xabarlar navbati (≤25 xabar/s) va SMS navbati (≤5 SMS/s)
 
 ### Muammolar / Troubleshooting
 
@@ -137,11 +158,14 @@ Telefondan sinash (bir Wi-Fi tarmog'ida): `.env` da `WEB_BIND=0.0.0.0` — stand
 prisma/            schema, migrations, seed-demo.ts (deterministik demo)
 src/lib/billing    hisob-kitob dvigateli (sof funksiyalar + testlar), sync.ts (baza)
 src/lib/salary     oylik dvigateli + servis
-src/lib/payments   Payme Merchant API (+ testlar), provider interfeysi (Click/Uzum v2)
+src/lib/payments   Payme, Click, Uzum (sof handlerlar + testlar, Prisma repo'lar)
+src/lib/academics  hisobot kartasi va imtihon hisob-kitobi (sof funksiyalar + testlar)
+src/lib/sms        Eskiz SMS mijozi, HTML → SMS matni
 src/lib/services   darslar, yozuvlar (enrollment), davomat, to'lovlar, lidlar
 src/app/(admin)    admin panel sahifalari va server action'lar
 src/app/t          o'qituvchi (telefon) sahifalari
-src/app/f/[slug]   ochiq lid formasi;  src/app/pay/[id] — Payme to'lov sahifasi
+src/app/f/[slug]   ochiq lid formasi;  src/app/pay/[id] — to'lov sahifasi (Payme/Click/Uzum)
+src/app/tg         Telegram Mini App;  src/app/rc/[token] — ota-ona hisobot kartasi;  src/app/v — sertifikat tekshiruvi
 src/worker         cron joblar, xabarlar navbati, Telegram bot (grammY)
 tests/             baza bilan integratsion testlar
 ```
