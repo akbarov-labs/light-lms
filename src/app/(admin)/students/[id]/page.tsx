@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { requireStaff, studentScope } from "@/lib/ctx";
 import type { DictKey } from "@/lib/i18n";
 import { db } from "@/lib/db";
-import { addDays, formatDate, formatDateTime, fromISODate, toISODate, todayISO } from "@/lib/dates";
+import { addDays, formatDate, formatDateTime, fromISODate, toISODate, todayISO, monthLabel } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
 import { attendanceTone, enrollmentTone, fullName } from "@/lib/format";
@@ -45,6 +45,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     }),
     db.group.findMany({ where: { centerId: ctx.centerId, status: { in: ["ACTIVE", "PLANNED"] }, ...(ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) }, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
   ]);
+  const reportCards = await db.reportCard.findMany({ where: { studentId: id, centerId: ctx.centerId }, include: { group: { select: { name: true, code: true } } }, orderBy: [{ month: "desc" }], take: 24 });
   const enrollmentIds = student.enrollments.map((e) => e.id);
   const events = await db.auditLog.findMany({
     where: { centerId: ctx.centerId, OR: [{ entity: "Student", entityId: id }, { entity: "Enrollment", entityId: { in: enrollmentIds }, action: { not: "billing.sync" } }] },
@@ -258,6 +259,21 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           )}
         </Card>
       </div>
+
+      <Card className="mt-4" pad={false} title={t("rc.cards")}>
+        {reportCards.length === 0 ? (
+          <EmptyState compact>{t("rc.none")}</EmptyState>
+        ) : (
+          <ul className="divide-y divide-zinc-100 text-sm">
+            {reportCards.map((c) => (
+              <li key={c.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                <Link href={`/report-cards/${c.id}`} className="hover:underline hover:decoration-zinc-400">{monthLabel(c.month, ctx.locale)} · {c.group.name} #{c.group.code}</Link>
+                <Badge tone={c.status === "SENT" ? "green" : "gray"}>{t(`rc.${c.status}`)}</Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {showMoney && (
         <Card className="mt-4" pad={false} title={t("students.ledger")}>

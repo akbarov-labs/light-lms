@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readSettings } from "./settings";
 
-const notifyAll = { payment: true, reminder: true, debt: true, absence: true, trial: true, teacherReminder: true, dailyReport: true };
+const notifyAll = { payment: true, reminder: true, debt: true, absence: true, trial: true, teacherReminder: true, dailyReport: true, reportCard: true, examResult: true };
 const defaults = {
   trialLessons: 1,
   excusedAbsenceCredit: false,
@@ -14,6 +14,7 @@ const defaults = {
   expenseCategories: ["Ijara / Rent", "Kommunal / Utilities", "Reklama / Ads", "Oylik / Salary", "Jihozlar / Equipment", "Ofis / Office", "Boshqa / Other"],
   notify: notifyAll,
   paymeFiscal: null,
+  reportCards: { autoSend: false, sendDay: 3 },
   sms: { payment: false, reminder: true, debt: true, absence: false, trial: true, reportCard: false, examResult: false, onlyWithoutTelegram: true },
 };
 

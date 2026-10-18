@@ -60,57 +60,60 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
         title={<>{group.name} <span className="text-zinc-500">#{group.code}</span></>}
         subtitle={<Badge tone={groupTone[group.status]}>{t(`group.${group.status}`)}</Badge>}
         actions={
-          ctx.can("groups.edit") && (
-            <>
-              <LinkButton variant="secondary" href={`/groups/${id}/edit`}>{t("common.edit")}</LinkButton>
-              <ActionMenu
-                label={t("shell.more")}
-                items={[
-                  ...((ctx.can("finance.view") || ctx.can("settings")) && !ctx.branchIds
-                    ? [{ key: "history", label: t("students.history"), href: `/audit?entity=Group&entityId=${id}` }]
-                    : []),
-                  group.status === "ACTIVE" || group.status === "PLANNED"
-                    ? {
-                        key: "finish",
-                        label: t("groups.finish"),
-                        content: (
-                          <ModalForm action={setGroupStatusAction} className="space-y-4">
-                            <input type="hidden" name="id" value={id} />
-                            <p className="text-sm text-zinc-600">{t("groups.finishHint")}</p>
-                            <SubmitButton name="status" value="FINISHED">{t("groups.finish")}</SubmitButton>
-                          </ModalForm>
-                        ),
-                      }
-                    : {
-                        key: "restore",
-                        label: t("common.restore"),
-                        content: (
-                          <ModalForm action={setGroupStatusAction} className="space-y-4">
-                            <input type="hidden" name="id" value={id} />
-                            <SubmitButton name="status" value="ACTIVE">{t("common.restore")}</SubmitButton>
-                          </ModalForm>
-                        ),
-                      },
-                  ...(ctx.can("archive") && group.status !== "ARCHIVED"
-                    ? [
-                        {
-                          key: "archive",
-                          label: t("common.archive"),
-                          danger: true,
+          <>
+            <LinkButton variant="secondary" href={`/groups/${id}/reports`}>{t("rc.title")}</LinkButton>
+            {ctx.can("groups.edit") && (
+              <>
+                <LinkButton variant="secondary" href={`/groups/${id}/edit`}>{t("common.edit")}</LinkButton>
+                <ActionMenu
+                  label={t("shell.more")}
+                  items={[
+                    ...((ctx.can("finance.view") || ctx.can("settings")) && !ctx.branchIds
+                      ? [{ key: "history", label: t("students.history"), href: `/audit?entity=Group&entityId=${id}` }]
+                      : []),
+                    group.status === "ACTIVE" || group.status === "PLANNED"
+                      ? {
+                          key: "finish",
+                          label: t("groups.finish"),
                           content: (
                             <ModalForm action={setGroupStatusAction} className="space-y-4">
                               <input type="hidden" name="id" value={id} />
-                              <p className="text-sm text-zinc-600">{t("groups.archiveHint")}</p>
-                              <SubmitButton variant="danger" name="status" value="ARCHIVED">{t("common.archive")}</SubmitButton>
+                              <p className="text-sm text-zinc-600">{t("groups.finishHint")}</p>
+                              <SubmitButton name="status" value="FINISHED">{t("groups.finish")}</SubmitButton>
+                            </ModalForm>
+                          ),
+                        }
+                      : {
+                          key: "restore",
+                          label: t("common.restore"),
+                          content: (
+                            <ModalForm action={setGroupStatusAction} className="space-y-4">
+                              <input type="hidden" name="id" value={id} />
+                              <SubmitButton name="status" value="ACTIVE">{t("common.restore")}</SubmitButton>
                             </ModalForm>
                           ),
                         },
-                      ]
-                    : []),
-                ]}
-              />
-            </>
-          )
+                    ...(ctx.can("archive") && group.status !== "ARCHIVED"
+                      ? [
+                          {
+                            key: "archive",
+                            label: t("common.archive"),
+                            danger: true,
+                            content: (
+                              <ModalForm action={setGroupStatusAction} className="space-y-4">
+                                <input type="hidden" name="id" value={id} />
+                                <p className="text-sm text-zinc-600">{t("groups.archiveHint")}</p>
+                                <SubmitButton variant="danger" name="status" value="ARCHIVED">{t("common.archive")}</SubmitButton>
+                              </ModalForm>
+                            ),
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              </>
+            )}
+          </>
         }
       />
       <Card className="mb-4">

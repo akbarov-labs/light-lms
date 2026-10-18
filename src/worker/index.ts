@@ -7,7 +7,7 @@ import { TZ } from "@/lib/dates";
 import { createBot } from "./bot";
 import { processNotifications, telegramSender, type Sender } from "./notifications";
 import { errText, sleep } from "./util";
-import { dailyReport, jobProblems, nightly, reminders, teacherReminders, type JobResult } from "./jobs";
+import { dailyReport, jobProblems, nightly, reminders, reportCardsJob, teacherReminders, type JobResult } from "./jobs";
 import { lockKeyFor, withJobLock } from "./job-lock";
 import { assertStrongAuthSecret } from "@/lib/auth/startup";
 import { refreshAllBalances } from "@/lib/billing/balance-cache";
@@ -126,6 +126,7 @@ async function main() {
   schedule("0 10 * * *", "reminders", () => reminders());
   schedule("0 20 * * *", "teacher-reminders", () => teacherReminders());
   schedule("0 21 * * *", "daily-report", () => dailyReport());
+  schedule("0 11 * * *", "report-cards", () => reportCardsJob());
   // family balance cache: pages refresh it themselves, this keeps that work off page views
   schedule("*/5 * * * *", "balances", () => refreshAllBalances(), (r) => !r.balancesRefreshed);
   // prod: the backups folder is mounted read-only at BACKUP_CHECK_DIR; alert if last night's dump is missing

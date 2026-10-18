@@ -1,6 +1,7 @@
 // Scheduled jobs (HANDOFF §11). Every job is idempotent and safe to re-run; each logs its counts.
 import { db } from "@/lib/db";
-import { addDays, diffDays, formatDate, fromISODate, monthRange, parts, todayISO, toISODate, type ISODate } from "@/lib/dates";
+import { addDays, diffDays, formatDate, fromISODate, monthRange, parts, shiftMonth, todayISO, toISODate, type ISODate } from "@/lib/dates";
+import { ensureCards, sendCards } from "@/lib/services/report-cards";
 import { generateAllLessons } from "@/lib/services/lessons";
 import { refreshFreezeStatuses } from "@/lib/services/enrollments";
 import { loadBillingInput, syncEnrollment } from "@/lib/billing/sync";
@@ -282,4 +283,34 @@ export async function dailyReport(today: ISODate = todayISO()): Promise<JobResul
     }, () => reportsFailed++);
   }
   return { recipients: users.length, sent, reportsFailed };
+}
+
+/**
+ * 11:00 — centers with auto-send on: on their chosen day, last month's report cards of every group go to
+ * parents (drafts are created first; cards without a held lesson are skipped). Isolated per group.
+ */
+export async function reportCardsJob(today: ISODate = todayISO()): Promise<JobResult> {
+  const month = shiftMonth(today.slice(0, 7), -1);
+  const { start, end } = monthRange(month);
+  const centers = await db.center.findMany({ where: { disabledAt: null }, select: { id: true, settings: true } });
+  let sent = 0;
+  let groupsFailed = 0;
+  let centersDue = 0;
+  for (const c of centers) {
+    const s = readSettings(c.settings).reportCards;
+    if (!s.autoSend || parts(today).d !== s.sendDay) continue;
+    centersDue++;
+    const groups = await db.group.findMany({
+      where: { centerId: c.id, startDate: { lte: fromISODate(end) }, OR: [{ endDate: null }, { endDate: { gte: fromISODate(start) } }], lessons: { some: { status: "HELD", date: { gte: fromISODate(start), lte: fromISODate(end) } } } },
+      select: { id: true },
+    });
+    for (const g of groups) {
+      await isolated(`report-cards group ${g.id}`, async () => {
+        await ensureCards(c.id, g.id, month);
+        const drafts = await db.reportCard.findMany({ where: { groupId: g.id, month, status: "DRAFT" }, select: { id: true } });
+        sent += (await sendCards({ userId: null, centerId: c.id }, drafts.map((d) => d.id))).sent;
+      }, () => groupsFailed++);
+    }
+  }
+  return { month, centersDue, reportCardsSent: sent, groupsFailed };
 }

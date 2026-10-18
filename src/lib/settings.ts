@@ -34,11 +34,18 @@ export const centerSettingsSchema = z.object({
       trial: z.boolean().default(true),
       teacherReminder: z.boolean().default(true),
       dailyReport: z.boolean().default(true),
+      reportCard: z.boolean().default(true),
+      examResult: z.boolean().default(true),
     })
     // prefault: {} is parsed, so every nested default applies (zod 4 .default() would return {} as is)
     .prefault({}),
   // a broken value must not reset every other setting to its default
   paymeFiscal: paymeFiscalSchema.nullable().default(null).catch(null),
+  /** Report cards (v2): send last month's cards to parents automatically on this day of the month, 11:00. */
+  reportCards: z
+    .object({ autoSend: z.boolean().default(false), sendDay: z.number().int().min(1).max(28).default(3) })
+    .prefault({})
+    .catch(() => ({ autoSend: false, sendDay: 3 })),
   /** SMS (v2): which family messages also go out as SMS. Needs the center's Eskiz login (Center.sms*). */
   sms: z
     .object({

@@ -49,12 +49,18 @@ export default async function CenterSettings() {
           <Checkbox name="transferAsTrial" label={t("settings.transferAsTrial")} defaultChecked={s.transferAsTrial} />
         </div>
       </Card>
+      <Card title={t("settings.reportCards")}>
+        <div className="grid items-end gap-3 sm:grid-cols-2">
+          <Checkbox name="reportCardsAuto" label={t("settings.reportCardsAuto")} defaultChecked={s.reportCards.autoSend} />
+          <Field label={t("settings.reportCardsDay")}><Input type="number" min={1} max={28} name="reportCardsDay" defaultValue={s.reportCards.sendDay} /></Field>
+        </div>
+      </Card>
       <Card title={t("settings.expenseCategories")}>
         <Field hint={t("expenses.categoriesHint")}><Textarea name="expenseCategories" rows={6} defaultValue={s.expenseCategories.join("\n")} /></Field>
       </Card>
       <Card title={t("settings.notifications")}>
         <div className="grid gap-2 sm:grid-cols-2">
-          {(["payment", "reminder", "debt", "absence", "trial", "teacherReminder", "dailyReport"] as const).map((k) => (
+          {(["payment", "reminder", "debt", "absence", "trial", "teacherReminder", "dailyReport", "reportCard", "examResult"] as const).map((k) => (
             <Checkbox key={k} name={`notify.${k}`} label={t(`settings.notify.${k}`)} defaultChecked={s.notify[k]} />
           ))}
         </div>

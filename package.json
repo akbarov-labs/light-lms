@@ -26,6 +26,7 @@
     "job:reminders": "tsx src/worker/run-job.ts reminders",
     "job:teacher-reminders": "tsx src/worker/run-job.ts teacher-reminders",
     "job:daily-report": "tsx src/worker/run-job.ts daily-report",
+    "job:report-cards": "tsx src/worker/run-job.ts report-cards",
     "job:notifications": "tsx src/worker/run-job.ts notifications",
     "job:sms": "tsx src/worker/run-job.ts sms",
     "job:demo-reset": "tsx src/worker/run-job.ts demo-reset",

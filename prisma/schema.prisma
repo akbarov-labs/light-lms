@@ -182,6 +182,7 @@ model Center {
   clickTxs      ClickTransaction[]
   uzumTxs       UzumTransaction[]
   notifications Notification[]
+  reportCards   ReportCard[]
 }
 
 model Branch {
@@ -317,6 +318,7 @@ model Group {
   slots       GroupSlot[]
   lessons     Lesson[]
   enrollments Enrollment[]
+  reportCards ReportCard[]
 
   @@unique([centerId, code])
   @@index([centerId, createdAt])
@@ -465,6 +467,7 @@ model Student {
   attendance  Attendance[]
   ledger      LedgerEntry[]
   leads       Lead[]
+  reportCards ReportCard[]
 
   @@index([centerId, createdAt])
   @@index([familyId])
@@ -496,9 +499,10 @@ model Enrollment {
   transferredFrom Enrollment[]     @relation("Transfer")
   createdAt       DateTime         @default(now())
 
-  freezes    EnrollmentFreeze[]
-  attendance Attendance[]
-  ledger     LedgerEntry[]
+  freezes     EnrollmentFreeze[]
+  attendance  Attendance[]
+  ledger      LedgerEntry[]
+  reportCards ReportCard[]
 
   @@index([studentId])
   @@index([groupId])
@@ -771,6 +775,43 @@ model UzumTransaction {
 
   @@index([familyId])
   @@index([centerId, createTime])
+}
+
+enum ReportCardStatus {
+  DRAFT
+  SENT
+}
+
+/// Monthly report card of one enrollment (v2). While DRAFT the numbers are computed live from attendance;
+/// sending freezes them into `data` and gives parents the public link /rc/<token>.
+model ReportCard {
+  id             String           @id @default(cuid())
+  centerId       String
+  center         Center           @relation(fields: [centerId], references: [id])
+  studentId      String
+  student        Student          @relation(fields: [studentId], references: [id])
+  enrollmentId   String
+  enrollment     Enrollment       @relation(fields: [enrollmentId], references: [id])
+  groupId        String
+  group          Group            @relation(fields: [groupId], references: [id])
+  /// YYYY-MM
+  month          String
+  teacherComment String?
+  commentById    String?
+  /// Progress snapshot (src/lib/academics/progress.ts) frozen when sent
+  data           Json?
+  status         ReportCardStatus @default(DRAFT)
+  /// unguessable id of the parents' public page
+  token          String           @unique
+  sentAt         DateTime?
+  sentById       String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([enrollmentId, month])
+  @@index([centerId, month])
+  @@index([groupId, month])
+  @@index([studentId])
 }
 
 model TelegramLink {

@@ -52,6 +52,8 @@ const centerSchema = z.object({
   uzumServiceId: zOptStr,
   uzumLogin: zOptStr,
   uzumPassword: zOptStr,
+  reportCardsAuto: zBool,
+  reportCardsDay: zOptInt(1, 28),
   smsLogin: zOptStr,
   smsPassword: zOptStr,
   smsFrom: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().trim().max(11).optional()),
@@ -76,7 +78,7 @@ function parseFiscal(f: { fiscalIkpu?: string; fiscalPackageCode?: string; fisca
   return r.data;
 }
 
-const NOTIFY = ["payment", "reminder", "debt", "absence", "trial", "teacherReminder", "dailyReport"] as const;
+const NOTIFY = ["payment", "reminder", "debt", "absence", "trial", "teacherReminder", "dailyReport", "reportCard", "examResult"] as const;
 
 export async function saveCenterAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction("settings", async (ctx) => {
@@ -110,6 +112,7 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
       })(),
       notify: Object.fromEntries(NOTIFY.map((k) => [k, fd.get(`notify.${k}`) === "on"])) as typeof old.notify,
       paymeFiscal,
+      reportCards: { autoSend: f.reportCardsAuto, sendDay: f.reportCardsDay ?? old.reportCards.sendDay },
       sms: { ...Object.fromEntries(SMS_EVENTS.map((k) => [k, fd.get(`sms.${k}`) === "on"])), onlyWithoutTelegram: fd.get("sms.onlyWithoutTelegram") === "on" } as typeof old.sms,
     };
     await db
