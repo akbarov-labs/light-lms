@@ -6,6 +6,7 @@ import { accentVars } from "@/lib/color";
 import type { ReportCardData } from "@/lib/services/report-cards";
 import { ReportCardView } from "@/components/report-card-view";
 import { PrintButton } from "@/components/client";
+import { DocTitle } from "@/components/doc-title";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -26,6 +27,7 @@ export default async function PublicReportCard({ params, searchParams }: { param
         <a href="?lang=ru" className={locale === "ru" ? "font-semibold" : "text-zinc-500"}>Русский</a>
         <PrintButton label={t("common.print")} />
       </div>
+      <DocTitle title={`${t("rc.title")} · ${(card.data as unknown as ReportCardData).student}`} />
       <ReportCardView data={card.data as unknown as ReportCardData} t={t} locale={locale} />
     </main>
   );

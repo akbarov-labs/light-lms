@@ -6,6 +6,7 @@ import { formatDateTime } from "@/lib/dates";
 import { cardData, cardUrl } from "@/lib/services/report-cards";
 import { ReportCardView } from "@/components/report-card-view";
 import { PrintButton } from "@/components/client";
+import { DocTitle } from "@/components/doc-title";
 import { accentVars } from "@/lib/color";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,7 @@ export default async function ReportCardPage({ params }: { params: Promise<{ id:
           </span>
         )}
       </div>
+      <DocTitle title={`${t("rc.title")} · ${data.student}`} />
       <ReportCardView data={data} t={t} locale={ctx.locale} note={card.status === "DRAFT" ? t("rc.liveNote") : undefined} />
     </main>
   );

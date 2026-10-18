@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { makeT } from "@/lib/i18n";
 import { formatDate, formatDateTime, toISODate } from "@/lib/dates";
 import { normalizeCode } from "@/lib/academics/exams";
+import { DocTitle } from "@/components/doc-title";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -19,6 +20,7 @@ export default async function VerifyCertificate({ params, searchParams }: { para
   const found = c && !c.center.disabledAt;
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
+      <DocTitle title={t("cert.checkTitle")} />
       <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xs">
         <div className="mb-4 flex justify-between text-sm">
           <h1 className="font-semibold">{t("cert.checkTitle")}</h1>
