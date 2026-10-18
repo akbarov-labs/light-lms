@@ -48,6 +48,12 @@ export const msg = {
       `✍️ Bugungi darslar uchun davomat belgilanmagan:\n${p.lessons.map((x) => `• ${esc(x)}`).join("\n")}`,
       `✍️ Не отмечена посещаемость за сегодня:\n${p.lessons.map((x) => `• ${esc(x)}`).join("\n")}`,
     ),
+  examResult: (l: Locale, p: { center: string; student: string; exam: string; date: ISODate; score: number; maxScore: number; passed: boolean | null; level: string | null }) =>
+    m(
+      l,
+      `📝 <b>${esc(p.center)}</b>\n${esc(p.student)} — ${esc(p.exam)} (${formatDate(p.date)})\nNatija: <b>${p.score} / ${p.maxScore}</b>${p.passed === null ? "" : p.passed ? " — o'tdi ✅" : " — o'tmadi"}${p.level ? `\nDaraja: ${esc(p.level)}` : ""}`,
+      `📝 <b>${esc(p.center)}</b>\n${esc(p.student)} — ${esc(p.exam)} (${formatDate(p.date)})\nРезультат: <b>${p.score} / ${p.maxScore}</b>${p.passed === null ? "" : p.passed ? " — сдал(а) ✅" : " — не сдал(а)"}${p.level ? `\nУровень: ${esc(p.level)}` : ""}`,
+    ),
   reportCard: (l: Locale, p: { center: string; student: string; group: string; month: string; attendancePct: number | null; gradeAvg: number | null; url: string }) =>
     m(
       l,

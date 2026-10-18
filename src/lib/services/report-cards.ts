@@ -75,6 +75,13 @@ export async function cardData(cardId: string, tx: Tx = db): Promise<ReportCardD
   });
   if (card.status === "SENT" && card.data) return card.data as unknown as ReportCardData;
   const { progress, scale } = await progressOf(tx, card.enrollmentId, card.month);
+  const { start, end } = monthRange(card.month);
+  // this group's exams and ungrouped ones (placement, mock) the student sat that month
+  const results = await tx.examResult.findMany({
+    where: { studentId: card.studentId, exam: { archivedAt: null, date: { gte: fromISODate(start), lte: fromISODate(end) }, OR: [{ groupId: card.groupId }, { groupId: null }] } },
+    include: { exam: { select: { title: true, date: true, maxScore: true } } },
+    orderBy: { exam: { date: "asc" } },
+  });
   return {
     v: 1,
     month: card.month,
@@ -88,7 +95,7 @@ export async function cardData(cardId: string, tx: Tx = db): Promise<ReportCardD
     gradeScale: scale,
     progress,
     comment: card.teacherComment,
-    exams: [],
+    exams: results.map((r) => ({ title: r.exam.title, date: toISODate(r.exam.date), score: r.score, maxScore: r.exam.maxScore, passed: r.passed, level: r.level })),
   };
 }
 

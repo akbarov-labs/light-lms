@@ -158,6 +158,8 @@ model Center {
   smsFrom         String?
   receiptSeq      Int       @default(0)
   groupSeq        Int       @default(0)
+  /// last certificate number issued this year is derived from this counter (v2)
+  certSeq         Int       @default(0)
   /// SaaS plan: caps active students (see src/lib/plans.ts). No billing integration yet.
   plan            Plan      @default(FREE)
   /// Set by a platform admin: staff can't sign in, public forms are closed. Data is kept.
@@ -183,6 +185,8 @@ model Center {
   uzumTxs       UzumTransaction[]
   notifications Notification[]
   reportCards   ReportCard[]
+  exams         Exam[]
+  certificates  Certificate[]
 }
 
 model Branch {
@@ -201,6 +205,7 @@ model Branch {
   expenses Expense[]
   leads    Lead[]
   students Student[]
+  exams    Exam[]
 
   @@index([centerId])
 }
@@ -288,6 +293,7 @@ model Course {
 
   groups Group[]
   leads  Lead[]
+  exams  Exam[]
 
   @@index([centerId])
 }
@@ -319,6 +325,7 @@ model Group {
   lessons     Lesson[]
   enrollments Enrollment[]
   reportCards ReportCard[]
+  exams       Exam[]
 
   @@unique([centerId, code])
   @@index([centerId, createdAt])
@@ -463,11 +470,13 @@ model Student {
   status         StudentStatus @default(ACTIVE)
   createdAt      DateTime      @default(now())
 
-  enrollments Enrollment[]
-  attendance  Attendance[]
-  ledger      LedgerEntry[]
-  leads       Lead[]
-  reportCards ReportCard[]
+  enrollments  Enrollment[]
+  attendance   Attendance[]
+  ledger       LedgerEntry[]
+  leads        Lead[]
+  reportCards  ReportCard[]
+  examResults  ExamResult[]
+  certificates Certificate[]
 
   @@index([centerId, createdAt])
   @@index([familyId])
@@ -666,7 +675,8 @@ model Lead {
   updatedAt     DateTime  @updatedAt
   archivedAt    DateTime?
 
-  notes LeadNote[]
+  notes       LeadNote[]
+  examResults ExamResult[]
 
   @@index([centerId, createdAt])
   @@index([centerId, stage])
@@ -812,6 +822,107 @@ model ReportCard {
   @@index([centerId, month])
   @@index([groupId, month])
   @@index([studentId])
+}
+
+enum ExamKind {
+  PLACEMENT
+  LEVEL
+  FINAL
+  MOCK
+}
+
+/// An exam (v2): placement test (leads or students), level / final exam of a group, or a mock exam.
+model Exam {
+  id          String    @id @default(cuid())
+  centerId    String
+  center      Center    @relation(fields: [centerId], references: [id])
+  branchId    String?
+  branch      Branch?   @relation(fields: [branchId], references: [id])
+  groupId     String?
+  group       Group?    @relation(fields: [groupId], references: [id])
+  courseId    String?
+  course      Course?   @relation(fields: [courseId], references: [id])
+  kind        ExamKind
+  title       String
+  date        DateTime  @db.Date
+  maxScore    Int       @default(100)
+  /// null = no pass mark (placement, mock)
+  passScore   Int?
+  /// [{ name, max }] — e.g. Listening / Reading / Writing / Speaking; [] = one total score
+  sections    Json      @default("[]")
+  /// placement: [{ min, level }] — the highest band whose min ≤ score is the recommended level
+  levelBands  Json      @default("[]")
+  /// results were sent to parents
+  publishedAt DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  archivedAt  DateTime?
+
+  results      ExamResult[]
+  certificates Certificate[]
+
+  @@index([centerId, date])
+  @@index([groupId])
+}
+
+model ExamResult {
+  id            String   @id @default(cuid())
+  examId        String
+  exam          Exam     @relation(fields: [examId], references: [id])
+  /// a student, or (placement) a lead who is not a student yet
+  studentId     String?
+  student       Student? @relation(fields: [studentId], references: [id])
+  leadId        String?
+  lead          Lead?    @relation(fields: [leadId], references: [id])
+  score         Int
+  /// per section, in the exam's section order
+  sectionScores Json     @default("[]")
+  passed        Boolean?
+  level         String?
+  comment       String?
+  enteredById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  certificate Certificate?
+
+  @@unique([examId, studentId])
+  @@unique([examId, leadId])
+  @@index([studentId])
+  @@index([leadId])
+}
+
+/// A printable certificate (v2), verifiable by anyone at /v/<code>. Never deleted: revoked instead.
+model Certificate {
+  id           String      @id @default(cuid())
+  centerId     String
+  center       Center      @relation(fields: [centerId], references: [id])
+  /// "2026-0007": year of issue + the center's running number
+  number       String
+  studentId    String
+  student      Student     @relation(fields: [studentId], references: [id])
+  examId       String?
+  exam         Exam?       @relation(fields: [examId], references: [id])
+  examResultId String?     @unique
+  examResult   ExamResult? @relation(fields: [examResultId], references: [id])
+  groupId      String?
+  courseId     String?
+  title        String
+  level        String?
+  score        Int?
+  maxScore     Int?
+  issuedAt     DateTime    @db.Date
+  issuedById   String?
+  /// public verification code (10 characters, no look-alike letters)
+  code         String      @unique
+  revokedAt    DateTime?
+  revokedById  String?
+  revokeReason String?
+  createdAt    DateTime    @default(now())
+
+  @@unique([centerId, number])
+  @@index([studentId])
+  @@index([centerId, issuedAt])
 }
 
 model TelegramLink {

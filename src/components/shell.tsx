@@ -1,23 +1,6 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import {
-  BarChart3,
-  BookOpen,
-  Building2,
-  CircleAlert,
-  Banknote,
-  LayoutDashboard,
-  Receipt,
-  ScrollText,
-  Settings,
-  Smartphone,
-  Sun,
-  UserPlus,
-  Users,
-  UsersRound,
-  Wallet,
-
-} from "lucide-react";
+import { Award, Banknote, BarChart3, BookOpen, Building2, CircleAlert, ClipboardCheck, LayoutDashboard, Receipt, ScrollText, Settings, Smartphone, Sun, UserPlus, Users, UsersRound, Wallet } from "lucide-react";
 import type { Ctx } from "@/lib/ctx";
 import type { DictKey } from "@/lib/i18n";
 import type { Perm } from "@/lib/perms";
@@ -59,6 +42,8 @@ const NAV: { group?: DictKey; items: NavItem[] }[] = [
     items: [
       { href: "/groups", key: "nav.groups", icon: UsersRound },
       { href: "/courses", key: "nav.courses", icon: BookOpen },
+      { href: "/exams", key: "nav.exams", icon: ClipboardCheck },
+      { href: "/certificates", key: "nav.certificates", icon: Award },
     ],
   },
   {
