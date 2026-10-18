@@ -13,6 +13,7 @@ import { UserError } from "@/lib/user-error";
 import { ownerReport } from "../jobs";
 import { createResetCodeForChat } from "@/lib/auth/password";
 import { B, buttonKey } from "./texts";
+import { appUrl } from "@/lib/env";
 import {
   attendanceText,
   balanceText,
@@ -28,6 +29,12 @@ import {
 } from "./data";
 
 const CYCLE: AttendanceStatus[] = ["PRESENT", "ABSENT", "LATE", "EXCUSED"];
+
+/** The Mini App URL, or null: Telegram opens Mini Apps only over HTTPS. */
+export function miniAppUrl(): string | null {
+  const base = appUrl();
+  return base.startsWith("https://") ? `${base}/tg` : null;
+}
 /** Unsaved attendance per chat + lesson (single worker process, so memory is enough). */
 const drafts = new Map<string, Map<string, AttendanceStatus>>();
 /** Abandoned drafts are never saved; keep the newest ones only. */
@@ -115,6 +122,11 @@ export function createBot(token: string): Bot {
       return;
     }
     await ctx.reply(B.linked[l], { reply_markup: await menu(chatId, l) });
+    const app = miniAppUrl();
+    if (app && (linked.guardians || linked.students)) {
+      const t = makeT(l);
+      await ctx.reply(t("tg.openAppHint"), { reply_markup: new InlineKeyboard().webApp(t("tg.openApp"), app) });
+    }
   });
 
   bot.on("message:text", async (ctx) => {

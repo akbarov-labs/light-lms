@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checkAuthSecret, clientIp, hashResetCode, newResetCode, newTempPassword, passwordProblem, resetCodeMatches, secureCookies } from "./security";
-import { buildCsp, securityHeaders } from "./headers";
+import { buildCsp, securityHeaders, TELEGRAM_FRAME_ANCESTORS } from "./headers";
 import { sessionStale } from "../session";
 import { assertStrongAuthSecret, authSecretVerdict } from "./startup";
 
@@ -142,6 +142,15 @@ describe("security headers", () => {
     expect(csp).toContain("upgrade-insecure-requests");
     expect(buildCsp("abc", { dev: true, https: false })).toContain("'unsafe-eval'");
     expect(buildCsp("abc", { dev: false, https: false })).not.toContain("upgrade-insecure-requests");
+  });
+  it("every pay provider's checkout is an allowed form target (redirects after submit are checked too)", () => {
+    const formAction = buildCsp("abc", { dev: false, https: true }).split("; ").find((d) => d.startsWith("form-action"))!;
+    for (const host of ["https://checkout.paycom.uz", "https://checkout.test.paycom.uz", "https://my.click.uz", "https://www.uzumbank.uz"]) expect(formAction).toContain(host);
+  });
+  it("only the Mini App may be framed, and only by Telegram Web", () => {
+    expect(buildCsp("abc", { dev: false, https: true, frameAncestors: TELEGRAM_FRAME_ANCESTORS })).toContain("frame-ancestors https://web.telegram.org");
+    expect(securityHeaders(true, { embeddable: true }).map(([k]) => k)).not.toContain("x-frame-options");
+    expect(securityHeaders(true)).toContainEqual(["x-frame-options", "DENY"]);
   });
   it("HSTS only over HTTPS", () => {
     expect(securityHeaders(true).map(([k]) => k)).toContain("strict-transport-security");

@@ -4,7 +4,7 @@ import cron, { type ScheduledTask } from "node-cron";
 import type { Bot } from "grammy";
 import { db } from "@/lib/db";
 import { TZ } from "@/lib/dates";
-import { createBot } from "./bot";
+import { createBot, miniAppUrl } from "./bot";
 import { processNotifications, telegramSender, type Sender } from "./notifications";
 import { errText, sleep } from "./util";
 import { dailyReport, jobProblems, nightly, reminders, reportCardsJob, teacherReminders, type JobResult } from "./jobs";
@@ -118,6 +118,10 @@ async function main() {
     bot = b;
     send = telegramSender(b.api);
     b.start({ drop_pending_updates: true, onStart: (me) => log(`bot @${me.username} polling`) }).catch((e) => log("bot stopped", e));
+    // the chat menu button opens the Mini App for everyone (unlinked chats are told to share their phone)
+    const app = miniAppUrl();
+    if (app) b.api.setChatMenuButton({ menu_button: { type: "web_app", text: "📱 Ilova", web_app: { url: app } } }).then(() => log(`mini app menu button → ${app}`), (e) => log("mini app menu button failed", e));
+    else log("Mini App needs an https APP_URL — menu button not set");
   } else {
     log("TELEGRAM_BOT_TOKEN is empty — bot disabled, notifications stay queued; jobs still run");
   }
