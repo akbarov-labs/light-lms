@@ -7,7 +7,7 @@ import { loadBillingInput, syncEnrollment } from "@/lib/billing/sync";
 import { computeExpected } from "@/lib/billing/engine";
 import { nextPeriodStart, periodContaining } from "@/lib/billing/periods";
 import { readSettings } from "@/lib/settings";
-import { enqueue, familyChats, staffChat } from "@/lib/notify";
+import { enqueue, notifyFamily, staffChat } from "@/lib/notify";
 import { msg, esc } from "@/lib/messages";
 import { balancesFor } from "@/lib/services/wallet";
 import { freshBalances, refreshAllBalances } from "@/lib/billing/balance-cache";
@@ -126,10 +126,9 @@ export async function billingSync(today: ISODate = todayISO()): Promise<JobResul
     const balance = balances.get(familyId) ?? 0;
     if (balance >= 0) continue;
     const payUrl = await payLinkForFamily(familyId);
-    debtNotices += await db.$transaction(async (tx) => {
-      const chats = await familyChats(tx, familyId);
-      return enqueue(tx, centerId, chats, (l) => msg.debt(l, { center: center.name, debt: -balance, payUrl }), `debt:${familyId}:${today}`);
-    });
+    debtNotices += await db.$transaction((tx) =>
+      notifyFamily(tx, { centerId, familyId, event: "debt", text: (l) => msg.debt(l, { center: center.name, debt: -balance, payUrl }), dedupeKey: `debt:${familyId}:${today}` }),
+    );
   }
   console.log(`[billing] ${enrollments.length} enrollment(s) synced in ${syncMs}ms (${failed} failed), ${debtNotices} debt notice(s)`);
   return { enrollments: enrollments.length, ledgerEntries: entries, syncFailed: failed, debtNotices, billingMs: Date.now() - t0 };
@@ -176,16 +175,16 @@ export async function reminders(today: ISODate = todayISO()): Promise<JobResult>
             const unit = computeExpected(input).find((u) => u.start === next);
             if (!unit || unit.amount <= 0) return;
             const payUrl = await payLinkForFamily(e.student.familyId);
-            upcoming += await db.$transaction(async (tx) => {
-              const chats = await familyChats(tx, e.student.familyId, e.student.id);
-              return enqueue(
-                tx,
-                c.id,
-                chats,
-                (l) => msg.reminder(l, { center: c.name, student: `${e.student.firstName} ${e.student.lastName}`, group: e.group.name, amount: unit.amount, date: next, payUrl }),
-                `remind:${e.id}:${next}`,
-              );
-            });
+            upcoming += await db.$transaction((tx) =>
+              notifyFamily(tx, {
+                centerId: c.id,
+                familyId: e.student.familyId,
+                studentId: e.student.id,
+                event: "reminder",
+                text: (l) => msg.reminder(l, { center: c.name, student: `${e.student.firstName} ${e.student.lastName}`, group: e.group.name, amount: unit.amount, date: next, payUrl }),
+                dedupeKey: `remind:${e.id}:${next}`,
+              }),
+            );
           }, failItem);
         }
       }
@@ -199,10 +198,9 @@ export async function reminders(today: ISODate = todayISO()): Promise<JobResult>
             const overdue = diffDays(today, toISODate(n.oldestUnpaidDate));
             if (![3, 7, 14, 30].includes(overdue)) return;
             const payUrl = await payLinkForFamily(n.familyId);
-            debts += await db.$transaction(async (tx) => {
-              const chats = await familyChats(tx, n.familyId);
-              return enqueue(tx, c.id, chats, (l) => msg.debt(l, { center: c.name, debt: -Number(n.balance), payUrl }), `debt-overdue:${n.familyId}:${today}`);
-            });
+            debts += await db.$transaction((tx) =>
+              notifyFamily(tx, { centerId: c.id, familyId: n.familyId, event: "debt", text: (l) => msg.debt(l, { center: c.name, debt: -Number(n.balance), payUrl }), dedupeKey: `debt-overdue:${n.familyId}:${today}` }),
+            );
           }, failItem);
         }
       }

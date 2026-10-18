@@ -1,6 +1,6 @@
 import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
-import { readSettings } from "@/lib/settings";
+import { readSettings, SMS_EVENTS } from "@/lib/settings";
 import { Card } from "@/components/ui";
 import { Checkbox, Field, FormGrid, Input, Select, Textarea } from "@/components/fields";
 import { ActionForm, SubmitButton } from "@/components/client";
@@ -94,6 +94,21 @@ export default async function CenterSettings() {
           <Field label={t("settings.uzumPassword")} hint={c.uzumPassword ? t("settings.secretKeep") : undefined}><Input name="uzumPassword" type="password" autoComplete="new-password" placeholder={c.uzumPassword ? "••••••" : ""} /></Field>
         </FormGrid>
         <p className="mt-3 text-xs text-zinc-500">{t("settings.uzumEndpoint")}: <code className="rounded-sm bg-zinc-100 px-1 text-zinc-700">{appUrl}/api/uzum</code></p>
+      </Card>
+      <Card title={t("settings.sms")} actions={c.smsLogin && c.smsPassword ? <SubmitButton variant="secondary" size="sm" name="intent" value="smsTest">{t("settings.smsTest")}</SubmitButton> : undefined}>
+        <p className="mb-3 text-sm text-zinc-500">{t("settings.smsHint")}</p>
+        <FormGrid cols={3}>
+          <Field label={t("settings.smsLogin")}><Input name="smsLogin" type="email" defaultValue={c.smsLogin ?? ""} autoComplete="off" /></Field>
+          <Field label={t("settings.smsPassword")} hint={c.smsPassword ? t("settings.secretKeep") : undefined}><Input name="smsPassword" type="password" autoComplete="new-password" placeholder={c.smsPassword ? "••••••" : ""} /></Field>
+          <Field label={t("settings.smsFrom")}><Input name="smsFrom" defaultValue={c.smsFrom ?? ""} placeholder="4546" maxLength={11} autoComplete="off" /></Field>
+        </FormGrid>
+        <div className="mt-4 mb-1 text-xs font-medium text-zinc-600">{t("settings.smsEvents")}</div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {SMS_EVENTS.map((k) => (
+            <Checkbox key={k} name={`sms.${k}`} label={t(`settings.sms.${k}`)} defaultChecked={s.sms[k]} />
+          ))}
+        </div>
+        <div className="mt-3"><Checkbox name="sms.onlyWithoutTelegram" label={t("settings.smsOnlyWithoutTelegram")} defaultChecked={s.sms.onlyWithoutTelegram} /></div>
       </Card>
       <div className="sticky bottom-4 z-10 flex justify-end rounded-xl border border-line bg-white/95 p-2 shadow-pop backdrop-blur-sm"><SubmitButton>{t("common.save")}</SubmitButton></div>
     </ActionForm>

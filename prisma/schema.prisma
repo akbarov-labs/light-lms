@@ -117,6 +117,11 @@ enum Plan {
   PRO
 }
 
+enum NotificationChannel {
+  TELEGRAM
+  SMS
+}
+
 enum NotificationStatus {
   PENDING
   SENDING
@@ -147,6 +152,10 @@ model Center {
   uzumServiceId   String?   @unique
   uzumLogin       String?
   uzumPassword    String?
+  /// SMS gateway (v2): the center\'s own Eskiz.uz account (email + password) and sender name ("4546" = Eskiz default).
+  smsLogin        String?
+  smsPassword     String?
+  smsFrom         String?
   receiptSeq      Int       @default(0)
   groupSeq        Int       @default(0)
   /// SaaS plan: caps active students (see src/lib/plans.ts). No billing integration yet.
@@ -778,24 +787,27 @@ model TelegramLink {
 }
 
 model Notification {
-  id            String             @id @default(cuid())
+  id            String              @id @default(cuid())
   centerId      String
-  center        Center             @relation(fields: [centerId], references: [id])
+  center        Center              @relation(fields: [centerId], references: [id])
+  channel       NotificationChannel @default(TELEGRAM)
+  /// destination: the Telegram chat id, or the phone (998…) for SMS
   chatId        String
   text          String
-  dedupeKey     String?            @unique
-  status        NotificationStatus @default(PENDING)
+  dedupeKey     String?             @unique
+  status        NotificationStatus  @default(PENDING)
   error         String?
-  attempts      Int                @default(0)
+  attempts      Int                 @default(0)
   /// not sent before this moment (backoff after an error or Telegram 429)
-  nextAttemptAt DateTime           @default(now())
+  nextAttemptAt DateTime            @default(now())
   /// set while a sender holds the row (status SENDING); stale claims are taken back
   lockedAt      DateTime?
-  createdAt     DateTime           @default(now())
+  createdAt     DateTime            @default(now())
   sentAt        DateTime?
 
   @@index([status, createdAt])
   @@index([status, nextAttemptAt])
+  @@index([channel, status, nextAttemptAt])
 }
 
 /// Login and reset-code attempts for rate limiting (key = "login:phone:998…", "login:ip:…", "reset:…").

@@ -20,7 +20,7 @@ describe("telegramSender", () => {
       },
     };
     const send = telegramSender(api as never, 20);
-    const err = await send("1", "<b>hi</b>").then(
+    const err = await send("1", "<b>hi</b>", { centerId: "c1" }).then(
       () => null,
       (e: unknown) => e,
     );

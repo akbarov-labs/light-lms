@@ -39,9 +39,30 @@ export const centerSettingsSchema = z.object({
     .prefault({}),
   // a broken value must not reset every other setting to its default
   paymeFiscal: paymeFiscalSchema.nullable().default(null).catch(null),
+  /** SMS (v2): which family messages also go out as SMS. Needs the center's Eskiz login (Center.sms*). */
+  sms: z
+    .object({
+      payment: z.boolean().default(false),
+      reminder: z.boolean().default(true),
+      debt: z.boolean().default(true),
+      absence: z.boolean().default(false),
+      trial: z.boolean().default(true),
+      reportCard: z.boolean().default(false),
+      examResult: z.boolean().default(false),
+      /** true = only families with no linked Telegram chat get the SMS (they already got the message) */
+      onlyWithoutTelegram: z.boolean().default(true),
+    })
+    .prefault({})
+    .catch(() => smsDefaults()),
 });
 
 export type CenterSettings = z.infer<typeof centerSettingsSchema>;
+export type SmsEvent = Exclude<keyof CenterSettings["sms"], "onlyWithoutTelegram">;
+export const SMS_EVENTS: SmsEvent[] = ["payment", "reminder", "debt", "absence", "trial", "reportCard", "examResult"];
+
+function smsDefaults() {
+  return { payment: false, reminder: true, debt: true, absence: false, trial: true, reportCard: false, examResult: false, onlyWithoutTelegram: true };
+}
 
 export function readSettings(raw: unknown): CenterSettings {
   const parsed = centerSettingsSchema.safeParse(raw ?? {});

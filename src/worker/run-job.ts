@@ -9,6 +9,7 @@ import { lockKeyFor, withJobLock } from "./job-lock";
 import { todayISO } from "@/lib/dates";
 import { refreshAllBalances } from "@/lib/billing/balance-cache";
 import { telegramBotToken } from "@/lib/env";
+import { smsSender } from "./sms-sender";
 
 const [name, date] = process.argv.slice(2);
 const today = date ?? todayISO();
@@ -29,9 +30,10 @@ const jobs: Record<string, () => Promise<unknown>> = {
     const bot = new Bot(token);
     return processNotifications(telegramSender(bot.api));
   },
+  sms: () => processNotifications(smsSender(), { channel: "SMS" }),
 };
 // the queue claims rows itself (FOR UPDATE SKIP LOCKED), so it runs next to the worker without a job lock
-const unlocked = new Set(["notifications"]);
+const unlocked = new Set(["notifications", "sms"]);
 
 const job = jobs[name];
 if (!job) {

@@ -12,7 +12,8 @@ import { formList, formObject, zBool, zDate, zId, zOptId, zOptInt, zOptStr, zPho
 import { UserError } from "@/lib/user-error";
 import { assertNotDemo } from "@/lib/demo-guard";
 import { PERMS, type Perm, type RoleName } from "@/lib/perms";
-import { paymeFiscalSchema, readSettings, type PaymeFiscal } from "@/lib/settings";
+import { paymeFiscalSchema, readSettings, SMS_EVENTS, type PaymeFiscal } from "@/lib/settings";
+import { enqueueSms } from "@/lib/notify";
 import { fromISODate } from "@/lib/dates";
 import { generateLessons } from "@/lib/services/lessons";
 import { syncGroup } from "@/lib/billing/sync";
@@ -51,6 +52,9 @@ const centerSchema = z.object({
   uzumServiceId: zOptStr,
   uzumLogin: zOptStr,
   uzumPassword: zOptStr,
+  smsLogin: zOptStr,
+  smsPassword: zOptStr,
+  smsFrom: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().trim().max(11).optional()),
 });
 
 /** Secret fields are never shown back: empty keeps the stored value, "-" removes it. */
@@ -106,6 +110,7 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
       })(),
       notify: Object.fromEntries(NOTIFY.map((k) => [k, fd.get(`notify.${k}`) === "on"])) as typeof old.notify,
       paymeFiscal,
+      sms: { ...Object.fromEntries(SMS_EVENTS.map((k) => [k, fd.get(`sms.${k}`) === "on"])), onlyWithoutTelegram: fd.get("sms.onlyWithoutTelegram") === "on" } as typeof old.sms,
     };
     await db
       .$transaction(async (tx) => {
@@ -129,6 +134,9 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
             uzumServiceId: f.uzumServiceId ?? null,
             uzumLogin: f.uzumLogin ?? null,
             uzumPassword: keepSecret(f.uzumPassword, before.uzumPassword),
+            smsLogin: f.smsLogin ?? null,
+            smsPassword: keepSecret(f.smsPassword, before.smsPassword),
+            smsFrom: f.smsFrom ?? null,
           },
         });
         await audit(tx, {
@@ -148,8 +156,22 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
         throw e;
       });
     revalidatePath("/", "layout");
+    if (fd.get("intent") === "smsTest") return { message: await queueTestSms(ctx) };
     return { message: ctx.t("common.saved") };
   });
+}
+
+/** One SMS to the signed-in user's own phone, through the queue like every other SMS. */
+async function queueTestSms(ctx: Ctx): Promise<string> {
+  const c = await db.center.findUniqueOrThrow({ where: { id: ctx.centerId }, select: { smsLogin: true, smsPassword: true } });
+  if (!c.smsLogin || !c.smsPassword) throw new UserError("settings.smsNotConfigured");
+  const me = await db.user.findUniqueOrThrow({ where: { id: ctx.userId }, select: { phone: true } });
+  await db.$transaction(async (tx) => {
+    // Eskiz test accounts accept only its own sample texts; this is one of them
+    await enqueueSms(tx, ctx.centerId, { phone: me.phone, locale: ctx.locale }, () => ctx.t("settings.smsTestText"));
+    await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Center", entityId: ctx.centerId, action: "sms.test", after: { phone: me.phone } });
+  });
+  return ctx.t("settings.smsTestSent", { phone: me.phone });
 }
 
 // ---------------------------------------------------------------- branches & rooms

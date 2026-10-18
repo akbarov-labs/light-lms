@@ -4,7 +4,7 @@ import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { fromISODate, todayISO, type ISODate } from "@/lib/dates";
 import { UserError } from "@/lib/user-error";
-import { enqueue, familyChats } from "@/lib/notify";
+import { notifyFamily } from "@/lib/notify";
 import { msg } from "@/lib/messages";
 import { readSettings } from "@/lib/settings";
 import { formatMoney } from "@/lib/money";
@@ -73,14 +73,14 @@ export async function postPayment(tx: Tx, actor: Actor, p: PaymentInput) {
   if (readSettings(family.center.settings).notify.payment) {
     const balance = await familyBalance(family.id, tx);
     const student = family.students.find((s) => s.id === studentId) ?? family.students[0];
-    const chats = await familyChats(tx, family.id);
-    await enqueue(
-      tx,
-      actor.centerId,
-      chats,
-      (l) => msg.paymentReceived(l, { center: family.center.name, student: student ? `${student.firstName} ${student.lastName}` : family.name, amount: p.amount, balance, date }),
-      `payment:${entry.id}`,
-    );
+    await notifyFamily(tx, {
+      centerId: actor.centerId,
+      familyId: family.id,
+      studentId,
+      event: "payment",
+      text: (l) => msg.paymentReceived(l, { center: family.center.name, student: student ? `${student.firstName} ${student.lastName}` : family.name, amount: p.amount, balance, date }),
+      dedupeKey: `payment:${entry.id}`,
+    });
   }
   return entry;
 }
