@@ -14,6 +14,7 @@ const defaults = {
   expenseCategories: ["Ijara / Rent", "Kommunal / Utilities", "Reklama / Ads", "Oylik / Salary", "Jihozlar / Equipment", "Ofis / Office", "Boshqa / Other"],
   notify: notifyAll,
   paymeFiscal: null,
+  sms: { payment: false, reminder: true, debt: true, absence: false, trial: true, reportCard: false, examResult: false, onlyWithoutTelegram: true },
 };
 
 describe("readSettings (Center.settings JSON)", () => {
