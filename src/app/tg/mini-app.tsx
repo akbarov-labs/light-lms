@@ -8,6 +8,7 @@ import type { PortalData } from "@/lib/portal";
 import { formatMoney } from "@/lib/money";
 import { formatDate, monthLabel } from "@/lib/dates";
 import { attendanceMark } from "@/lib/format";
+import { formatPhone } from "@/lib/phone";
 
 export type MiniLabels = Partial<Record<DictKey, string>>;
 type Tab = "balance" | "schedule" | "attendance" | "docs";
@@ -127,7 +128,7 @@ export function MiniApp({ labels }: { labels: { uz: MiniLabels; ru: MiniLabels }
                   </div>
                 ))}
                 {f.payUrl && <button type="button" className="tg-button mt-4" onClick={() => openLink(`${f.payUrl}${locale === "ru" ? "?lang=ru" : ""}`)}>{t("tg.pay")}{f.balance < 0 ? ` ${formatMoney(-f.balance, cur)}` : ""}</button>}
-                {f.centerPhone && <a href={`tel:+${f.centerPhone}`} className="tg-link mt-3 block text-center text-sm">{t("tg.call")} +{f.centerPhone}</a>}
+                {f.centerPhone && <a href={`tel:+${f.centerPhone}`} className="tg-link mt-3 block text-center text-sm">{t("tg.call")} {formatPhone(f.centerPhone)}</a>}
               </section>
             ))}
             {d.payments.length > 0 && (
