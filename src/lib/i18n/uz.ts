@@ -5,6 +5,7 @@ import { moneyUz } from "./extra-money";
 import { securityUz } from "./extra-security";
 import { workerUz } from "./extra-worker";
 import { uiUz } from "./extra-ui";
+import { v2Uz } from "./extra-v2";
 
 export const uz = {
   ...saasUz,
@@ -12,6 +13,7 @@ export const uz = {
   ...securityUz,
   ...workerUz,
   ...uiUz,
+  ...v2Uz,
   "app.name": BRAND.name as string,
   "common.save": "Saqlash",
   "common.cancel": "Bekor qilish",

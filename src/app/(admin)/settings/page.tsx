@@ -77,6 +77,24 @@ export default async function CenterSettings() {
         </div>
         <p className="mt-3 text-xs text-zinc-500">{t("settings.paymeEndpoint")}: <code className="rounded-sm bg-zinc-100 px-1 text-zinc-700">{appUrl}/api/payme</code></p>
       </Card>
+      <Card title={t("settings.click")}>
+        <p className="mb-3 text-sm text-zinc-500">{t("settings.clickHint")}</p>
+        <FormGrid cols={3}>
+          <Field label={t("settings.clickServiceId")}><Input name="clickServiceId" defaultValue={c.clickServiceId ?? ""} inputMode="numeric" autoComplete="off" /></Field>
+          <Field label={t("settings.clickMerchantId")}><Input name="clickMerchantId" defaultValue={c.clickMerchantId ?? ""} inputMode="numeric" autoComplete="off" /></Field>
+          <Field label={t("settings.clickSecretKey")} hint={c.clickSecretKey ? t("settings.secretKeep") : undefined}><Input name="clickSecretKey" type="password" autoComplete="new-password" placeholder={c.clickSecretKey ? "••••••" : ""} /></Field>
+        </FormGrid>
+        <p className="mt-3 text-xs text-zinc-500">{t("settings.clickEndpoints")}: <code className="rounded-sm bg-zinc-100 px-1 text-zinc-700">{appUrl}/api/click/prepare</code> · <code className="rounded-sm bg-zinc-100 px-1 text-zinc-700">{appUrl}/api/click/complete</code></p>
+      </Card>
+      <Card title={t("settings.uzum")}>
+        <p className="mb-3 text-sm text-zinc-500">{t("settings.uzumHint")}</p>
+        <FormGrid cols={3}>
+          <Field label={t("settings.uzumServiceId")}><Input name="uzumServiceId" defaultValue={c.uzumServiceId ?? ""} inputMode="numeric" autoComplete="off" /></Field>
+          <Field label={t("settings.uzumLogin")}><Input name="uzumLogin" defaultValue={c.uzumLogin ?? ""} autoComplete="off" /></Field>
+          <Field label={t("settings.uzumPassword")} hint={c.uzumPassword ? t("settings.secretKeep") : undefined}><Input name="uzumPassword" type="password" autoComplete="new-password" placeholder={c.uzumPassword ? "••••••" : ""} /></Field>
+        </FormGrid>
+        <p className="mt-3 text-xs text-zinc-500">{t("settings.uzumEndpoint")}: <code className="rounded-sm bg-zinc-100 px-1 text-zinc-700">{appUrl}/api/uzum</code></p>
+      </Card>
       <div className="sticky bottom-4 z-10 flex justify-end rounded-xl border border-line bg-white/95 p-2 shadow-pop backdrop-blur-sm"><SubmitButton>{t("common.save")}</SubmitButton></div>
     </ActionForm>
   );

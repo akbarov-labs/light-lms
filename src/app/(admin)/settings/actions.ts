@@ -45,6 +45,22 @@ const centerSchema = z.object({
   fiscalIkpu: zOptStr,
   fiscalPackageCode: zOptStr,
   fiscalVat: zOptStr,
+  clickServiceId: zOptStr,
+  clickMerchantId: zOptStr,
+  clickSecretKey: zOptStr,
+  uzumServiceId: zOptStr,
+  uzumLogin: zOptStr,
+  uzumPassword: zOptStr,
+});
+
+/** Secret fields are never shown back: empty keeps the stored value, "-" removes it. */
+const keepSecret = (typed: string | undefined, stored: string | null) => (typed === "-" ? null : (typed ?? stored));
+const mask = <T extends Record<string, unknown>>(c: T) => ({
+  ...c,
+  paymeKey: c.paymeKey ? "***" : null,
+  clickSecretKey: c.clickSecretKey ? "***" : null,
+  uzumPassword: c.uzumPassword ? "***" : null,
+  smsPassword: c.smsPassword ? "***" : null,
 });
 
 /** All three fiscal fields empty → no fiscal receipt; otherwise they must form a valid PaymeFiscal. */
@@ -69,6 +85,10 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
     const paymeKey = f.paymeKey === "-" ? null : (f.paymeKey ?? before.paymeKey);
     if (paymeKey && (await db.center.findFirst({ where: { paymeKey, id: { not: ctx.centerId } }, select: { id: true } }))) throw new UserError("settings.paymeKeyTaken");
     const paymeFiscal = parseFiscal(f);
+    // Click / Uzum route callbacks by service id: one service = one center (unique index)
+    for (const [field, value] of [["clickServiceId", f.clickServiceId], ["uzumServiceId", f.uzumServiceId]] as const) {
+      if (value && (await db.center.findFirst({ where: { [field]: value, id: { not: ctx.centerId } }, select: { id: true } }))) throw new UserError("settings.serviceTaken");
+    }
     const old = readSettings(before.settings);
     const settings = {
       ...old,
@@ -103,6 +123,12 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
             // keep the stored key when the field is left empty (it is never shown back)
             paymeKey,
             paymeTestMode: f.paymeTestMode,
+            clickServiceId: f.clickServiceId ?? null,
+            clickMerchantId: f.clickMerchantId ?? null,
+            clickSecretKey: keepSecret(f.clickSecretKey, before.clickSecretKey),
+            uzumServiceId: f.uzumServiceId ?? null,
+            uzumLogin: f.uzumLogin ?? null,
+            uzumPassword: keepSecret(f.uzumPassword, before.uzumPassword),
           },
         });
         await audit(tx, {
@@ -111,13 +137,14 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
           entity: "Center",
           entityId: ctx.centerId,
           action: "settings",
-          before: { ...before, paymeKey: before.paymeKey ? "***" : null },
-          after: { ...after, paymeKey: after.paymeKey ? "***" : null },
+          before: mask(before),
+          after: mask(after),
         });
       })
       .catch((e: unknown) => {
         // lost a race with another center saving the same key (unique index)
         if (isUniqueViolation(e, "paymeKey")) throw new UserError("settings.paymeKeyTaken");
+        if (isUniqueViolation(e, "clickServiceId") || isUniqueViolation(e, "uzumServiceId")) throw new UserError("settings.serviceTaken");
         throw e;
       });
     revalidatePath("/", "layout");

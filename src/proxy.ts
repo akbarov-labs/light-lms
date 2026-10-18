@@ -3,7 +3,7 @@ import { SESSION_COOKIE, verifySession } from "@/lib/session";
 import { buildCsp, securityHeaders } from "@/lib/auth/headers";
 import { rawAppUrl } from "@/lib/env";
 
-const PUBLIC = [/^\/login/, /^\/signup/, /^\/welcome/, /^\/legal\//, /^\/demo$/, /^\/f\//, /^\/pay\//, /^\/api\/payme/, /^\/api\/health/, /^\/_next\//, /^\/favicon/];
+const PUBLIC = [/^\/login/, /^\/signup/, /^\/welcome/, /^\/legal\//, /^\/demo$/, /^\/f\//, /^\/pay\//, /^\/api\/payme/, /^\/api\/click\//, /^\/api\/uzum\//, /^\/api\/tg\//, /^\/tg(\/|$)/, /^\/rc\//, /^\/v\//, /^\/api\/health/, /^\/_next\//, /^\/favicon/];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

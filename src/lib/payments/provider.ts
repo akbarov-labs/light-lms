@@ -1,24 +1,34 @@
-// Common shape for online payment providers. Payme is implemented (payme.ts); Click and Uzum
-// slot in here later (v2) with the same two operations.
-export interface PayLinkInput {
-  familyId: string;
-  /** UZS (integer). */
-  amount: number;
-  returnUrl?: string;
-  lang?: "uz" | "ru";
+// Which online payment providers a center has connected. A provider counts only when every
+// credential it needs is set; the pay page and every pay link follow this one rule.
+export type ProviderCode = "PAYME" | "CLICK" | "UZUM";
+
+export interface ProviderKeys {
+  paymeMerchantId: string | null;
+  paymeKey: string | null;
+  clickServiceId: string | null;
+  clickMerchantId: string | null;
+  clickSecretKey: string | null;
+  uzumServiceId: string | null;
+  uzumLogin: string | null;
+  uzumPassword: string | null;
 }
 
-export interface PaymentProvider {
-  code: "PAYME" | "CLICK" | "UZUM";
-  /** URL the parent opens to pay; null when the center has not connected this provider. */
-  buildPayLink(centerId: string, input: PayLinkInput): Promise<string | null>;
-  /** Handle the provider's server-to-server callback; returns the HTTP JSON body. */
-  handleCallback(req: { headers: Headers; body: string }): Promise<unknown>;
-}
+/** Prisma `select` for ProviderKeys. */
+export const PROVIDER_SELECT = {
+  paymeMerchantId: true,
+  paymeKey: true,
+  clickServiceId: true,
+  clickMerchantId: true,
+  clickSecretKey: true,
+  uzumServiceId: true,
+  uzumLogin: true,
+  uzumPassword: true,
+} as const;
 
-/** Not implemented yet — kept so Click/Uzum have a place to land. */
-export const notImplemented = (code: "CLICK" | "UZUM"): PaymentProvider => ({
-  code,
-  buildPayLink: async () => null,
-  handleCallback: async () => ({ error: `${code} is not enabled` }),
-});
+export function enabledProviders(c: ProviderKeys): ProviderCode[] {
+  const out: ProviderCode[] = [];
+  if (c.paymeMerchantId && c.paymeKey) out.push("PAYME");
+  if (c.clickServiceId && c.clickMerchantId && c.clickSecretKey) out.push("CLICK");
+  if (c.uzumServiceId && c.uzumLogin && c.uzumPassword) out.push("UZUM");
+  return out;
+}

@@ -1,0 +1,34 @@
+// Strings for the v2 features (Click/Uzum, SMS, report cards, exams/certificates, Mini App). Spread into uz.ts / ru.ts.
+export const v2Uz = {
+  "settings.click": "Click (onlayn to'lov)",
+  "settings.clickHint": "Click SHOP-API: markazning o'z Click xizmati. Uchala qiymat to'ldirilsa, to'lov sahifasida Click tugmasi chiqadi.",
+  "settings.clickServiceId": "Service ID",
+  "settings.clickMerchantId": "Merchant ID",
+  "settings.clickSecretKey": "Maxfiy kalit (secret key)",
+  "settings.clickEndpoints": "Click kabinetida: Prepare va Complete manzillari",
+  "settings.uzum": "Uzum Bank (onlayn to'lov)",
+  "settings.uzumHint": "Uzum Bank Merchant API: Uzum menejeri bergan serviceId, login va parol. Hammasi to'ldirilsa, to'lov sahifasida Uzum tugmasi chiqadi.",
+  "settings.uzumServiceId": "Service ID",
+  "settings.uzumLogin": "Login",
+  "settings.uzumPassword": "Parol",
+  "settings.uzumEndpoint": "Uzum kabinetida: webhook manzili (oxiriga /check, /create, /confirm, /reverse, /status qo'shiladi)",
+  "settings.secretKeep": "••••••  (bo'sh = o'zgarmaydi, − = o'chirish)",
+  "settings.serviceTaken": "Bu Service ID boshqa markazga ulangan. O'z xizmatingiz raqamini kiriting.",
+} as const;
+
+export const v2Ru: Record<keyof typeof v2Uz, string> = {
+  "settings.click": "Click (онлайн-оплата)",
+  "settings.clickHint": "Click SHOP-API: собственный сервис Click центра. Когда заполнены все три значения, на странице оплаты появится кнопка Click.",
+  "settings.clickServiceId": "Service ID",
+  "settings.clickMerchantId": "Merchant ID",
+  "settings.clickSecretKey": "Секретный ключ (secret key)",
+  "settings.clickEndpoints": "В кабинете Click: адреса Prepare и Complete",
+  "settings.uzum": "Uzum Bank (онлайн-оплата)",
+  "settings.uzumHint": "Uzum Bank Merchant API: serviceId, логин и пароль от менеджера Uzum. Когда всё заполнено, на странице оплаты появится кнопка Uzum.",
+  "settings.uzumServiceId": "Service ID",
+  "settings.uzumLogin": "Логин",
+  "settings.uzumPassword": "Пароль",
+  "settings.uzumEndpoint": "В кабинете Uzum: адрес вебхука (в конце добавляется /check, /create, /confirm, /reverse, /status)",
+  "settings.secretKeep": "••••••  (пусто = без изменений, − = удалить)",
+  "settings.serviceTaken": "Этот Service ID уже подключён к другому центру. Введите номер своего сервиса.",
+};

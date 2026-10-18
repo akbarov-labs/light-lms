@@ -125,30 +125,38 @@ enum NotificationStatus {
 }
 
 model Center {
-  id                 String   @id @default(cuid())
-  name               String
-  slug               String   @unique
-  currency           String   @default("UZS")
-  timezone           String   @default("Asia/Tashkent")
-  locale             String   @default("uz")
-  accentColor        String   @default("#2563eb")
-  logoUrl            String?
-  phone              String?
-  settings           Json     @default("{}")
-  paymeMerchantId    String?
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  currency        String    @default("UZS")
+  timezone        String    @default("Asia/Tashkent")
+  locale          String    @default("uz")
+  accentColor     String    @default("#2563eb")
+  logoUrl         String?
+  phone           String?
+  settings        Json      @default("{}")
+  paymeMerchantId String?
   /// unique: the Payme key identifies the center on /api/payme
-  paymeKey           String?  @unique
-  paymeTestMode      Boolean  @default(true)
-  receiptSeq         Int      @default(0)
-  groupSeq           Int      @default(0)
+  paymeKey        String?   @unique
+  paymeTestMode   Boolean   @default(true)
+  /// Click SHOP-API (v2). service_id identifies the center on /api/click/*; the secret key signs every request.
+  clickServiceId  String?   @unique
+  clickMerchantId String?
+  clickSecretKey  String?
+  /// Uzum Bank Merchant API (v2). serviceId identifies the center on /api/uzum/*; Basic auth login + password.
+  uzumServiceId   String?   @unique
+  uzumLogin       String?
+  uzumPassword    String?
+  receiptSeq      Int       @default(0)
+  groupSeq        Int       @default(0)
   /// SaaS plan: caps active students (see src/lib/plans.ts). No billing integration yet.
-  plan               Plan     @default(FREE)
+  plan            Plan      @default(FREE)
   /// Set by a platform admin: staff can't sign in, public forms are closed. Data is kept.
-  disabledAt         DateTime?
-  disabledReason     String?
+  disabledAt      DateTime?
+  disabledReason  String?
   /// Setup wizard progress: { step, done: { branch, course, group, teacher }, courseId?, groupId?, dismissedAt?, completedAt? }
-  onboarding         Json     @default("{}")
-  createdAt          DateTime @default(now())
+  onboarding      Json      @default("{}")
+  createdAt       DateTime  @default(now())
 
   branches      Branch[]
   users         User[]
@@ -162,6 +170,8 @@ model Center {
   leads         Lead[]
   auditLogs     AuditLog[]
   paymeTxs      PaymeTransaction[]
+  clickTxs      ClickTransaction[]
+  uzumTxs       UzumTransaction[]
   notifications Notification[]
 }
 
@@ -200,19 +210,19 @@ model Room {
 }
 
 model User {
-  id             String    @id @default(cuid())
-  centerId       String
-  center         Center    @relation(fields: [centerId], references: [id])
-  phone          String    @unique
-  name           String
-  passwordHash   String
-  role           Role
-  isTeacher      Boolean   @default(false)
-  perms          String[]
-  telegramChatId String?
-  locale         String?
-  archivedAt     DateTime?
-  createdAt      DateTime  @default(now())
+  id                 String    @id @default(cuid())
+  centerId           String
+  center             Center    @relation(fields: [centerId], references: [id])
+  phone              String    @unique
+  name               String
+  passwordHash       String
+  role               Role
+  isTeacher          Boolean   @default(false)
+  perms              String[]
+  telegramChatId     String?
+  locale             String?
+  archivedAt         DateTime?
+  createdAt          DateTime  @default(now())
   /// sessions issued before this moment are rejected (password changed or reset)
   passwordChangedAt  DateTime?
   /// set by an admin reset: the user must pick a new password after signing in
@@ -319,26 +329,26 @@ model GroupSlot {
 }
 
 model Lesson {
-  id           String       @id @default(cuid())
-  groupId      String
-  group        Group        @relation(fields: [groupId], references: [id])
-  date         DateTime     @db.Date
-  startTime    String
-  endTime      String
-  teacherId    String
-  teacher      User         @relation("LessonTeacher", fields: [teacherId], references: [id])
-  roomId       String?
-  room         Room?        @relation(fields: [roomId], references: [id])
-  status       LessonStatus @default(SCHEDULED)
-  cancelReason String?
-  topic        String?
-  heldAt       DateTime?
-  markedById   String?
-  markedBy     User?        @relation("LessonMarkedBy", fields: [markedById], references: [id])
+  id            String       @id @default(cuid())
+  groupId       String
+  group         Group        @relation(fields: [groupId], references: [id])
+  date          DateTime     @db.Date
+  startTime     String
+  endTime       String
+  teacherId     String
+  teacher       User         @relation("LessonTeacher", fields: [teacherId], references: [id])
+  roomId        String?
+  room          Room?        @relation(fields: [roomId], references: [id])
+  status        LessonStatus @default(SCHEDULED)
+  cancelReason  String?
+  topic         String?
+  heldAt        DateTime?
+  markedById    String?
+  markedBy      User?        @relation("LessonMarkedBy", fields: [markedById], references: [id])
   /// Set when a lesson is rescheduled: the slot it came from, so generation never recreates it.
-  origDate      DateTime?   @db.Date
+  origDate      DateTime?    @db.Date
   origStartTime String?
-  createdAt    DateTime     @default(now())
+  createdAt     DateTime     @default(now())
 
   attendance Attendance[]
   ledger     LedgerEntry[]
@@ -367,11 +377,13 @@ model Family {
   name      String
   createdAt DateTime @default(now())
 
-  guardians  Guardian[]
-  students   Student[]
-  ledger     LedgerEntry[]
-  paymeTxs   PaymeTransaction[]
-  balance    FamilyBalance?
+  guardians Guardian[]
+  students  Student[]
+  ledger    LedgerEntry[]
+  paymeTxs  PaymeTransaction[]
+  clickTxs  ClickTransaction[]
+  uzumTxs   UzumTransaction[]
+  balance   FamilyBalance?
 
   @@index([centerId, createdAt])
 }
@@ -543,6 +555,8 @@ model LedgerEntry {
   createdAt    DateTime       @default(now())
 
   paymeTx PaymeTransaction?
+  clickTx ClickTransaction?
+  uzumTx  UzumTransaction?
 
   @@index([familyId])
   @@index([billingKey])
@@ -581,18 +595,18 @@ model SalaryAdjustment {
 }
 
 model Payslip {
-  id        String        @id @default(cuid())
-  teacherId String
-  teacher   User          @relation("PayslipTeacher", fields: [teacherId], references: [id])
-  month     String
-  status    PayslipStatus @default(DRAFT)
-  total     Int
-  lines     Json
-  lockedAt  DateTime?
+  id         String        @id @default(cuid())
+  teacherId  String
+  teacher    User          @relation("PayslipTeacher", fields: [teacherId], references: [id])
+  month      String
+  status     PayslipStatus @default(DRAFT)
+  total      Int
+  lines      Json
+  lockedAt   DateTime?
   lockedById String?
-  paidAt    DateTime?
-  paidById  String?
-  expenseId String?
+  paidAt     DateTime?
+  paidById   String?
+  expenseId  String?
 
   @@unique([teacherId, month])
 }
@@ -696,6 +710,60 @@ model PaymeTransaction {
   @@index([centerId, createTime])
 }
 
+/// Click SHOP-API payment (Prepare → Complete). state: 0 prepared, 1 confirmed, -1 cancelled.
+model ClickTransaction {
+  id            String       @id @default(cuid())
+  centerId      String
+  center        Center       @relation(fields: [centerId], references: [id])
+  clickTransId  String       @unique
+  clickPaydocId String?
+  familyId      String
+  family        Family       @relation(fields: [familyId], references: [id])
+  /// whole so'm
+  amount        Int
+  /// merchant_prepare_id / merchant_confirm_id we answer with (Click wants an integer)
+  prepareId     Int          @unique @default(autoincrement())
+  state         Int          @default(0)
+  /// Click's error code when it cancelled the payment in Complete
+  error         Int?
+  ledgerEntryId String?      @unique
+  ledgerEntry   LedgerEntry? @relation(fields: [ledgerEntryId], references: [id])
+  createdAt     DateTime     @default(now())
+  completedAt   DateTime?
+
+  @@index([familyId])
+  @@index([centerId, createdAt])
+}
+
+enum UzumState {
+  CREATED
+  CONFIRMED
+  REVERSED
+  FAILED
+}
+
+/// Uzum Bank Merchant API payment (check → create → confirm, or reverse). Times are ms since epoch.
+model UzumTransaction {
+  id            String       @id @default(cuid())
+  centerId      String
+  center        Center       @relation(fields: [centerId], references: [id])
+  transId       String       @unique
+  familyId      String
+  family        Family       @relation(fields: [familyId], references: [id])
+  amountTiyin   BigInt
+  state         UzumState    @default(CREATED)
+  createTime    BigInt
+  confirmTime   BigInt?
+  reverseTime   BigInt?
+  paymentSource String?
+  ledgerEntryId String?      @unique
+  ledgerEntry   LedgerEntry? @relation(fields: [ledgerEntryId], references: [id])
+  createdAt     DateTime     @default(now())
+
+  @@index([familyId])
+  @@index([centerId, createTime])
+}
+
 model TelegramLink {
   id        String   @id @default(cuid())
   chatId    String
@@ -710,21 +778,21 @@ model TelegramLink {
 }
 
 model Notification {
-  id        String             @id @default(cuid())
-  centerId  String
-  center    Center             @relation(fields: [centerId], references: [id])
-  chatId    String
-  text      String
-  dedupeKey String?            @unique
-  status    NotificationStatus @default(PENDING)
-  error     String?
-  attempts  Int                @default(0)
+  id            String             @id @default(cuid())
+  centerId      String
+  center        Center             @relation(fields: [centerId], references: [id])
+  chatId        String
+  text          String
+  dedupeKey     String?            @unique
+  status        NotificationStatus @default(PENDING)
+  error         String?
+  attempts      Int                @default(0)
   /// not sent before this moment (backoff after an error or Telegram 429)
-  nextAttemptAt DateTime       @default(now())
+  nextAttemptAt DateTime           @default(now())
   /// set while a sender holds the row (status SENDING); stale claims are taken back
-  lockedAt  DateTime?
-  createdAt DateTime           @default(now())
-  sentAt    DateTime?
+  lockedAt      DateTime?
+  createdAt     DateTime           @default(now())
+  sentAt        DateTime?
 
   @@index([status, createdAt])
   @@index([status, nextAttemptAt])

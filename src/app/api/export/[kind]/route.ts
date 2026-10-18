@@ -71,7 +71,7 @@ const exporters: Record<string, Exporter> = {
     const { t } = ctx;
     return {
       header: [t("common.date"), t("pay.receiptNo"), t("payments.family"), t("common.student"), t("ledger.PAYMENT"), t("common.method"), t("common.amount"), t("common.description"), t("pay.cashier"), t("pay.reversed")],
-      rows: rows.map((r) => [formatDate(toISODate(r.date)), r.receiptNo, r.family.name, r.student ? `${r.student.lastName} ${r.student.firstName}` : "", t(`ledger.${r.type}`), r.method ? t(`method.${r.method}`) : "", r.amount, r.description, r.createdById ? users.get(r.createdById) : "Payme", r.reversedBy ? t("common.yes") : ""]),
+      rows: rows.map((r) => [formatDate(toISODate(r.date)), r.receiptNo, r.family.name, r.student ? `${r.student.lastName} ${r.student.firstName}` : "", t(`ledger.${r.type}`), r.method ? t(`method.${r.method}`) : "", r.amount, r.description, r.createdById ? users.get(r.createdById) : r.method ? t(`method.${r.method}`) : "", r.reversedBy ? t("common.yes") : ""]),
     };
   },
   async debtors(ctx, sp) {
