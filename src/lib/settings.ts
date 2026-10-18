@@ -34,14 +34,42 @@ export const centerSettingsSchema = z.object({
       trial: z.boolean().default(true),
       teacherReminder: z.boolean().default(true),
       dailyReport: z.boolean().default(true),
+      reportCard: z.boolean().default(true),
+      examResult: z.boolean().default(true),
     })
     // prefault: {} is parsed, so every nested default applies (zod 4 .default() would return {} as is)
     .prefault({}),
   // a broken value must not reset every other setting to its default
   paymeFiscal: paymeFiscalSchema.nullable().default(null).catch(null),
+  /** Report cards (v2): send last month's cards to parents automatically on this day of the month, 11:00. */
+  reportCards: z
+    .object({ autoSend: z.boolean().default(false), sendDay: z.number().int().min(1).max(28).default(3) })
+    .prefault({})
+    .catch(() => ({ autoSend: false, sendDay: 3 })),
+  /** SMS (v2): which family messages also go out as SMS. Needs the center's Eskiz login (Center.sms*). */
+  sms: z
+    .object({
+      payment: z.boolean().default(false),
+      reminder: z.boolean().default(true),
+      debt: z.boolean().default(true),
+      absence: z.boolean().default(false),
+      trial: z.boolean().default(true),
+      reportCard: z.boolean().default(false),
+      examResult: z.boolean().default(false),
+      /** true = only families with no linked Telegram chat get the SMS (they already got the message) */
+      onlyWithoutTelegram: z.boolean().default(true),
+    })
+    .prefault({})
+    .catch(() => smsDefaults()),
 });
 
 export type CenterSettings = z.infer<typeof centerSettingsSchema>;
+export type SmsEvent = Exclude<keyof CenterSettings["sms"], "onlyWithoutTelegram">;
+export const SMS_EVENTS: SmsEvent[] = ["payment", "reminder", "debt", "absence", "trial", "reportCard", "examResult"];
+
+function smsDefaults() {
+  return { payment: false, reminder: true, debt: true, absence: false, trial: true, reportCard: false, examResult: false, onlyWithoutTelegram: true };
+}
 
 export function readSettings(raw: unknown): CenterSettings {
   const parsed = centerSettingsSchema.safeParse(raw ?? {});

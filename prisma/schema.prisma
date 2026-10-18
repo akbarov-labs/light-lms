@@ -117,6 +117,11 @@ enum Plan {
   PRO
 }
 
+enum NotificationChannel {
+  TELEGRAM
+  SMS
+}
+
 enum NotificationStatus {
   PENDING
   SENDING
@@ -125,30 +130,44 @@ enum NotificationStatus {
 }
 
 model Center {
-  id                 String   @id @default(cuid())
-  name               String
-  slug               String   @unique
-  currency           String   @default("UZS")
-  timezone           String   @default("Asia/Tashkent")
-  locale             String   @default("uz")
-  accentColor        String   @default("#2563eb")
-  logoUrl            String?
-  phone              String?
-  settings           Json     @default("{}")
-  paymeMerchantId    String?
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  currency        String    @default("UZS")
+  timezone        String    @default("Asia/Tashkent")
+  locale          String    @default("uz")
+  accentColor     String    @default("#2563eb")
+  logoUrl         String?
+  phone           String?
+  settings        Json      @default("{}")
+  paymeMerchantId String?
   /// unique: the Payme key identifies the center on /api/payme
-  paymeKey           String?  @unique
-  paymeTestMode      Boolean  @default(true)
-  receiptSeq         Int      @default(0)
-  groupSeq           Int      @default(0)
+  paymeKey        String?   @unique
+  paymeTestMode   Boolean   @default(true)
+  /// Click SHOP-API (v2). service_id identifies the center on /api/click/*; the secret key signs every request.
+  clickServiceId  String?   @unique
+  clickMerchantId String?
+  clickSecretKey  String?
+  /// Uzum Bank Merchant API (v2). serviceId identifies the center on /api/uzum/*; Basic auth login + password.
+  uzumServiceId   String?   @unique
+  uzumLogin       String?
+  uzumPassword    String?
+  /// SMS gateway (v2): the center\'s own Eskiz.uz account (email + password) and sender name ("4546" = Eskiz default).
+  smsLogin        String?
+  smsPassword     String?
+  smsFrom         String?
+  receiptSeq      Int       @default(0)
+  groupSeq        Int       @default(0)
+  /// last certificate number issued this year is derived from this counter (v2)
+  certSeq         Int       @default(0)
   /// SaaS plan: caps active students (see src/lib/plans.ts). No billing integration yet.
-  plan               Plan     @default(FREE)
+  plan            Plan      @default(FREE)
   /// Set by a platform admin: staff can't sign in, public forms are closed. Data is kept.
-  disabledAt         DateTime?
-  disabledReason     String?
+  disabledAt      DateTime?
+  disabledReason  String?
   /// Setup wizard progress: { step, done: { branch, course, group, teacher }, courseId?, groupId?, dismissedAt?, completedAt? }
-  onboarding         Json     @default("{}")
-  createdAt          DateTime @default(now())
+  onboarding      Json      @default("{}")
+  createdAt       DateTime  @default(now())
 
   branches      Branch[]
   users         User[]
@@ -162,7 +181,12 @@ model Center {
   leads         Lead[]
   auditLogs     AuditLog[]
   paymeTxs      PaymeTransaction[]
+  clickTxs      ClickTransaction[]
+  uzumTxs       UzumTransaction[]
   notifications Notification[]
+  reportCards   ReportCard[]
+  exams         Exam[]
+  certificates  Certificate[]
 }
 
 model Branch {
@@ -181,6 +205,7 @@ model Branch {
   expenses Expense[]
   leads    Lead[]
   students Student[]
+  exams    Exam[]
 
   @@index([centerId])
 }
@@ -200,19 +225,19 @@ model Room {
 }
 
 model User {
-  id             String    @id @default(cuid())
-  centerId       String
-  center         Center    @relation(fields: [centerId], references: [id])
-  phone          String    @unique
-  name           String
-  passwordHash   String
-  role           Role
-  isTeacher      Boolean   @default(false)
-  perms          String[]
-  telegramChatId String?
-  locale         String?
-  archivedAt     DateTime?
-  createdAt      DateTime  @default(now())
+  id                 String    @id @default(cuid())
+  centerId           String
+  center             Center    @relation(fields: [centerId], references: [id])
+  phone              String    @unique
+  name               String
+  passwordHash       String
+  role               Role
+  isTeacher          Boolean   @default(false)
+  perms              String[]
+  telegramChatId     String?
+  locale             String?
+  archivedAt         DateTime?
+  createdAt          DateTime  @default(now())
   /// sessions issued before this moment are rejected (password changed or reset)
   passwordChangedAt  DateTime?
   /// set by an admin reset: the user must pick a new password after signing in
@@ -268,6 +293,7 @@ model Course {
 
   groups Group[]
   leads  Lead[]
+  exams  Exam[]
 
   @@index([centerId])
 }
@@ -298,6 +324,8 @@ model Group {
   slots       GroupSlot[]
   lessons     Lesson[]
   enrollments Enrollment[]
+  reportCards ReportCard[]
+  exams       Exam[]
 
   @@unique([centerId, code])
   @@index([centerId, createdAt])
@@ -319,26 +347,26 @@ model GroupSlot {
 }
 
 model Lesson {
-  id           String       @id @default(cuid())
-  groupId      String
-  group        Group        @relation(fields: [groupId], references: [id])
-  date         DateTime     @db.Date
-  startTime    String
-  endTime      String
-  teacherId    String
-  teacher      User         @relation("LessonTeacher", fields: [teacherId], references: [id])
-  roomId       String?
-  room         Room?        @relation(fields: [roomId], references: [id])
-  status       LessonStatus @default(SCHEDULED)
-  cancelReason String?
-  topic        String?
-  heldAt       DateTime?
-  markedById   String?
-  markedBy     User?        @relation("LessonMarkedBy", fields: [markedById], references: [id])
+  id            String       @id @default(cuid())
+  groupId       String
+  group         Group        @relation(fields: [groupId], references: [id])
+  date          DateTime     @db.Date
+  startTime     String
+  endTime       String
+  teacherId     String
+  teacher       User         @relation("LessonTeacher", fields: [teacherId], references: [id])
+  roomId        String?
+  room          Room?        @relation(fields: [roomId], references: [id])
+  status        LessonStatus @default(SCHEDULED)
+  cancelReason  String?
+  topic         String?
+  heldAt        DateTime?
+  markedById    String?
+  markedBy      User?        @relation("LessonMarkedBy", fields: [markedById], references: [id])
   /// Set when a lesson is rescheduled: the slot it came from, so generation never recreates it.
-  origDate      DateTime?   @db.Date
+  origDate      DateTime?    @db.Date
   origStartTime String?
-  createdAt    DateTime     @default(now())
+  createdAt     DateTime     @default(now())
 
   attendance Attendance[]
   ledger     LedgerEntry[]
@@ -367,11 +395,13 @@ model Family {
   name      String
   createdAt DateTime @default(now())
 
-  guardians  Guardian[]
-  students   Student[]
-  ledger     LedgerEntry[]
-  paymeTxs   PaymeTransaction[]
-  balance    FamilyBalance?
+  guardians Guardian[]
+  students  Student[]
+  ledger    LedgerEntry[]
+  paymeTxs  PaymeTransaction[]
+  clickTxs  ClickTransaction[]
+  uzumTxs   UzumTransaction[]
+  balance   FamilyBalance?
 
   @@index([centerId, createdAt])
 }
@@ -440,10 +470,13 @@ model Student {
   status         StudentStatus @default(ACTIVE)
   createdAt      DateTime      @default(now())
 
-  enrollments Enrollment[]
-  attendance  Attendance[]
-  ledger      LedgerEntry[]
-  leads       Lead[]
+  enrollments  Enrollment[]
+  attendance   Attendance[]
+  ledger       LedgerEntry[]
+  leads        Lead[]
+  reportCards  ReportCard[]
+  examResults  ExamResult[]
+  certificates Certificate[]
 
   @@index([centerId, createdAt])
   @@index([familyId])
@@ -475,9 +508,10 @@ model Enrollment {
   transferredFrom Enrollment[]     @relation("Transfer")
   createdAt       DateTime         @default(now())
 
-  freezes    EnrollmentFreeze[]
-  attendance Attendance[]
-  ledger     LedgerEntry[]
+  freezes     EnrollmentFreeze[]
+  attendance  Attendance[]
+  ledger      LedgerEntry[]
+  reportCards ReportCard[]
 
   @@index([studentId])
   @@index([groupId])
@@ -543,6 +577,8 @@ model LedgerEntry {
   createdAt    DateTime       @default(now())
 
   paymeTx PaymeTransaction?
+  clickTx ClickTransaction?
+  uzumTx  UzumTransaction?
 
   @@index([familyId])
   @@index([billingKey])
@@ -581,18 +617,18 @@ model SalaryAdjustment {
 }
 
 model Payslip {
-  id        String        @id @default(cuid())
-  teacherId String
-  teacher   User          @relation("PayslipTeacher", fields: [teacherId], references: [id])
-  month     String
-  status    PayslipStatus @default(DRAFT)
-  total     Int
-  lines     Json
-  lockedAt  DateTime?
+  id         String        @id @default(cuid())
+  teacherId  String
+  teacher    User          @relation("PayslipTeacher", fields: [teacherId], references: [id])
+  month      String
+  status     PayslipStatus @default(DRAFT)
+  total      Int
+  lines      Json
+  lockedAt   DateTime?
   lockedById String?
-  paidAt    DateTime?
-  paidById  String?
-  expenseId String?
+  paidAt     DateTime?
+  paidById   String?
+  expenseId  String?
 
   @@unique([teacherId, month])
 }
@@ -639,7 +675,8 @@ model Lead {
   updatedAt     DateTime  @updatedAt
   archivedAt    DateTime?
 
-  notes LeadNote[]
+  notes       LeadNote[]
+  examResults ExamResult[]
 
   @@index([centerId, createdAt])
   @@index([centerId, stage])
@@ -696,6 +733,198 @@ model PaymeTransaction {
   @@index([centerId, createTime])
 }
 
+/// Click SHOP-API payment (Prepare → Complete). state: 0 prepared, 1 confirmed, -1 cancelled.
+model ClickTransaction {
+  id            String       @id @default(cuid())
+  centerId      String
+  center        Center       @relation(fields: [centerId], references: [id])
+  clickTransId  String       @unique
+  clickPaydocId String?
+  familyId      String
+  family        Family       @relation(fields: [familyId], references: [id])
+  /// whole so'm
+  amount        Int
+  /// merchant_prepare_id / merchant_confirm_id we answer with (Click wants an integer)
+  prepareId     Int          @unique @default(autoincrement())
+  state         Int          @default(0)
+  /// Click's error code when it cancelled the payment in Complete
+  error         Int?
+  ledgerEntryId String?      @unique
+  ledgerEntry   LedgerEntry? @relation(fields: [ledgerEntryId], references: [id])
+  createdAt     DateTime     @default(now())
+  completedAt   DateTime?
+
+  @@index([familyId])
+  @@index([centerId, createdAt])
+}
+
+enum UzumState {
+  CREATED
+  CONFIRMED
+  REVERSED
+  FAILED
+}
+
+/// Uzum Bank Merchant API payment (check → create → confirm, or reverse). Times are ms since epoch.
+model UzumTransaction {
+  id            String       @id @default(cuid())
+  centerId      String
+  center        Center       @relation(fields: [centerId], references: [id])
+  transId       String       @unique
+  familyId      String
+  family        Family       @relation(fields: [familyId], references: [id])
+  amountTiyin   BigInt
+  state         UzumState    @default(CREATED)
+  createTime    BigInt
+  confirmTime   BigInt?
+  reverseTime   BigInt?
+  paymentSource String?
+  ledgerEntryId String?      @unique
+  ledgerEntry   LedgerEntry? @relation(fields: [ledgerEntryId], references: [id])
+  createdAt     DateTime     @default(now())
+
+  @@index([familyId])
+  @@index([centerId, createTime])
+}
+
+enum ReportCardStatus {
+  DRAFT
+  SENT
+}
+
+/// Monthly report card of one enrollment (v2). While DRAFT the numbers are computed live from attendance;
+/// sending freezes them into `data` and gives parents the public link /rc/<token>.
+model ReportCard {
+  id             String           @id @default(cuid())
+  centerId       String
+  center         Center           @relation(fields: [centerId], references: [id])
+  studentId      String
+  student        Student          @relation(fields: [studentId], references: [id])
+  enrollmentId   String
+  enrollment     Enrollment       @relation(fields: [enrollmentId], references: [id])
+  groupId        String
+  group          Group            @relation(fields: [groupId], references: [id])
+  /// YYYY-MM
+  month          String
+  teacherComment String?
+  commentById    String?
+  /// Progress snapshot (src/lib/academics/progress.ts) frozen when sent
+  data           Json?
+  status         ReportCardStatus @default(DRAFT)
+  /// unguessable id of the parents' public page
+  token          String           @unique
+  sentAt         DateTime?
+  sentById       String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([enrollmentId, month])
+  @@index([centerId, month])
+  @@index([groupId, month])
+  @@index([studentId])
+}
+
+enum ExamKind {
+  PLACEMENT
+  LEVEL
+  FINAL
+  MOCK
+}
+
+/// An exam (v2): placement test (leads or students), level / final exam of a group, or a mock exam.
+model Exam {
+  id          String    @id @default(cuid())
+  centerId    String
+  center      Center    @relation(fields: [centerId], references: [id])
+  branchId    String?
+  branch      Branch?   @relation(fields: [branchId], references: [id])
+  groupId     String?
+  group       Group?    @relation(fields: [groupId], references: [id])
+  courseId    String?
+  course      Course?   @relation(fields: [courseId], references: [id])
+  kind        ExamKind
+  title       String
+  date        DateTime  @db.Date
+  maxScore    Int       @default(100)
+  /// null = no pass mark (placement, mock)
+  passScore   Int?
+  /// [{ name, max }] — e.g. Listening / Reading / Writing / Speaking; [] = one total score
+  sections    Json      @default("[]")
+  /// placement: [{ min, level }] — the highest band whose min ≤ score is the recommended level
+  levelBands  Json      @default("[]")
+  /// results were sent to parents
+  publishedAt DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  archivedAt  DateTime?
+
+  results      ExamResult[]
+  certificates Certificate[]
+
+  @@index([centerId, date])
+  @@index([groupId])
+}
+
+model ExamResult {
+  id            String   @id @default(cuid())
+  examId        String
+  exam          Exam     @relation(fields: [examId], references: [id])
+  /// a student, or (placement) a lead who is not a student yet
+  studentId     String?
+  student       Student? @relation(fields: [studentId], references: [id])
+  leadId        String?
+  lead          Lead?    @relation(fields: [leadId], references: [id])
+  score         Int
+  /// per section, in the exam's section order
+  sectionScores Json     @default("[]")
+  passed        Boolean?
+  level         String?
+  comment       String?
+  enteredById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  certificate Certificate?
+
+  @@unique([examId, studentId])
+  @@unique([examId, leadId])
+  @@index([studentId])
+  @@index([leadId])
+}
+
+/// A printable certificate (v2), verifiable by anyone at /v/<code>. Never deleted: revoked instead.
+model Certificate {
+  id           String      @id @default(cuid())
+  centerId     String
+  center       Center      @relation(fields: [centerId], references: [id])
+  /// "2026-0007": year of issue + the center's running number
+  number       String
+  studentId    String
+  student      Student     @relation(fields: [studentId], references: [id])
+  examId       String?
+  exam         Exam?       @relation(fields: [examId], references: [id])
+  examResultId String?     @unique
+  examResult   ExamResult? @relation(fields: [examResultId], references: [id])
+  groupId      String?
+  courseId     String?
+  title        String
+  level        String?
+  score        Int?
+  maxScore     Int?
+  issuedAt     DateTime    @db.Date
+  issuedById   String?
+  /// public verification code (10 characters, no look-alike letters)
+  code         String      @unique
+  revokedAt    DateTime?
+  revokedById  String?
+  revokeReason String?
+  createdAt    DateTime    @default(now())
+
+  @@unique([centerId, number])
+  @@index([studentId])
+  @@index([centerId, issuedAt])
+}
+
 model TelegramLink {
   id        String   @id @default(cuid())
   chatId    String
@@ -710,24 +939,27 @@ model TelegramLink {
 }
 
 model Notification {
-  id        String             @id @default(cuid())
-  centerId  String
-  center    Center             @relation(fields: [centerId], references: [id])
-  chatId    String
-  text      String
-  dedupeKey String?            @unique
-  status    NotificationStatus @default(PENDING)
-  error     String?
-  attempts  Int                @default(0)
+  id            String              @id @default(cuid())
+  centerId      String
+  center        Center              @relation(fields: [centerId], references: [id])
+  channel       NotificationChannel @default(TELEGRAM)
+  /// destination: the Telegram chat id, or the phone (998…) for SMS
+  chatId        String
+  text          String
+  dedupeKey     String?             @unique
+  status        NotificationStatus  @default(PENDING)
+  error         String?
+  attempts      Int                 @default(0)
   /// not sent before this moment (backoff after an error or Telegram 429)
-  nextAttemptAt DateTime       @default(now())
+  nextAttemptAt DateTime            @default(now())
   /// set while a sender holds the row (status SENDING); stale claims are taken back
-  lockedAt  DateTime?
-  createdAt DateTime           @default(now())
-  sentAt    DateTime?
+  lockedAt      DateTime?
+  createdAt     DateTime            @default(now())
+  sentAt        DateTime?
 
   @@index([status, createdAt])
   @@index([status, nextAttemptAt])
+  @@index([channel, status, nextAttemptAt])
 }
 
 /// Login and reset-code attempts for rate limiting (key = "login:phone:998…", "login:ip:…", "reset:…").

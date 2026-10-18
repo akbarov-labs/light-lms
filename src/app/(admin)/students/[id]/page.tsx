@@ -5,13 +5,15 @@ import { notFound } from "next/navigation";
 import { requireStaff, studentScope } from "@/lib/ctx";
 import type { DictKey } from "@/lib/i18n";
 import { db } from "@/lib/db";
-import { addDays, formatDate, formatDateTime, fromISODate, toISODate, todayISO } from "@/lib/dates";
+import { addDays, formatDate, formatDateTime, fromISODate, toISODate, todayISO, monthLabel } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
 import { attendanceTone, enrollmentTone, fullName } from "@/lib/format";
 import { familyAllocation, familyLedger } from "@/lib/services/wallet";
 import { Badge, Card, EmptyState, KV, LinkButton, PageHeader, Table, Td, Th, Tr, cx } from "@/components/ui";
-import { ActionForm, Modal, SubmitButton } from "@/components/client";
+import { ActionForm, Modal, ModalForm, SubmitButton } from "@/components/client";
+import { Field, FormGrid, Input, Select } from "@/components/fields";
+import { issueManualCertificateAction } from "../../exams/actions";
 import { LedgerTable } from "@/components/ledger-table";
 import { EnrollForm, EnrollmentActions } from "../../enrollments/ui";
 import { endFreezeAction } from "../../enrollments/actions";
@@ -27,7 +29,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
       branch: true,
       family: { include: { guardians: { orderBy: { isPrimary: "desc" } }, students: { select: { id: true, firstName: true, lastName: true, status: true } } } },
       enrollments: {
-        include: { group: { include: { course: { select: { name: true, pricingType: true } }, teacher: { select: { name: true } } } }, freezes: { orderBy: { fromDate: "desc" } }, transferredTo: { include: { group: { select: { name: true, code: true } } } } },
+        include: { group: { include: { course: { select: { name: true, level: true, pricingType: true } }, teacher: { select: { name: true } } } }, freezes: { orderBy: { fromDate: "desc" } }, transferredTo: { include: { group: { select: { name: true, code: true } } } } },
         orderBy: [{ endDate: { sort: "desc", nulls: "first" } }, { startDate: "desc" }],
       },
     },
@@ -45,6 +47,11 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     }),
     db.group.findMany({ where: { centerId: ctx.centerId, status: { in: ["ACTIVE", "PLANNED"] }, ...(ctx.branchIds ? { branchId: { in: ctx.branchIds } } : {}) }, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
   ]);
+  const [certificates, examResults] = await Promise.all([
+    db.certificate.findMany({ where: { studentId: id, centerId: ctx.centerId }, orderBy: { issuedAt: "desc" } }),
+    db.examResult.findMany({ where: { studentId: id, exam: { centerId: ctx.centerId, archivedAt: null } }, include: { exam: { select: { id: true, title: true, date: true, maxScore: true } } }, orderBy: { exam: { date: "desc" } }, take: 20 }),
+  ]);
+  const reportCards = await db.reportCard.findMany({ where: { studentId: id, centerId: ctx.centerId }, include: { group: { select: { name: true, code: true } } }, orderBy: [{ month: "desc" }], take: 24 });
   const enrollmentIds = student.enrollments.map((e) => e.id);
   const events = await db.auditLog.findMany({
     where: { centerId: ctx.centerId, OR: [{ entity: "Student", entityId: id }, { entity: "Enrollment", entityId: { in: enrollmentIds }, action: { not: "billing.sync" } }] },
@@ -258,6 +265,80 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           )}
         </Card>
       </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Card
+          pad={false}
+          title={t("nav.certificates")}
+          actions={
+            ctx.can("groups.edit") && (
+              <Modal label={t("cert.issueManual")} title={t("cert.issueManual")} variant="secondary" size="sm">
+                <ModalForm action={issueManualCertificateAction} className="space-y-3">
+                  <input type="hidden" name="studentId" value={id} />
+                  <FormGrid>
+                    <Field label={t("cert.courseTitle")}><Input name="title" required maxLength={120} defaultValue={open[0]?.group.course.name ?? ""} /></Field>
+                    <Field label={t("cert.level")}><Input name="level" maxLength={40} defaultValue={open[0]?.group.course.level ?? ""} /></Field>
+                    <Field label={t("cert.issuedAt")}><Input type="date" name="issuedAt" defaultValue={today} required /></Field>
+                    <Field label={t("common.group")}>
+                      <Select name="groupId" defaultValue={open[0]?.groupId ?? ""}>
+                        <option value="">—</option>
+                        {student.enrollments.map((e) => <option key={e.id} value={e.groupId}>{e.group.name} #{e.group.code}</option>)}
+                      </Select>
+                    </Field>
+                  </FormGrid>
+                  <SubmitButton>{t("cert.issueManual")}</SubmitButton>
+                </ModalForm>
+              </Modal>
+            )
+          }
+        >
+          {certificates.length === 0 ? (
+            <EmptyState compact>{t("cert.none")}</EmptyState>
+          ) : (
+            <ul className="divide-y divide-zinc-100 text-sm">
+              {certificates.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                  <Link href={`/certificates/${c.id}`} className="hover:underline hover:decoration-zinc-400">{c.number} · {c.title}{c.level ? ` · ${c.level}` : ""}</Link>
+                  {c.revokedAt ? <Badge tone="red">{t("cert.revoked")}</Badge> : <span className="whitespace-nowrap text-xs text-zinc-500">{formatDate(toISODate(c.issuedAt))}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+        <Card pad={false} title={t("nav.exams")}>
+          {examResults.length === 0 ? (
+            <EmptyState compact>{t("common.empty")}</EmptyState>
+          ) : (
+            <ul className="divide-y divide-zinc-100 text-sm">
+              {examResults.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                  <Link href={`/exams/${r.exam.id}`} className="hover:underline hover:decoration-zinc-400">{formatDate(toISODate(r.exam.date))} · {r.exam.title}</Link>
+                  <span className="tnum whitespace-nowrap">
+                    {r.score} / {r.exam.maxScore}
+                    {r.level && <> · {r.level}</>}
+                    {r.passed !== null && <> <Badge tone={r.passed ? "green" : "red"}>{r.passed ? t("exams.passed") : t("exams.failed")}</Badge></>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      <Card className="mt-4" pad={false} title={t("rc.cards")}>
+        {reportCards.length === 0 ? (
+          <EmptyState compact>{t("rc.none")}</EmptyState>
+        ) : (
+          <ul className="divide-y divide-zinc-100 text-sm">
+            {reportCards.map((c) => (
+              <li key={c.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                <Link href={`/report-cards/${c.id}`} className="hover:underline hover:decoration-zinc-400">{monthLabel(c.month, ctx.locale)} · {c.group.name} #{c.group.code}</Link>
+                <Badge tone={c.status === "SENT" ? "green" : "gray"}>{t(`rc.${c.status}`)}</Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {showMoney && (
         <Card className="mt-4" pad={false} title={t("students.ledger")}>

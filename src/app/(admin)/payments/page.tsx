@@ -44,7 +44,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
         </Select>
         <Select name="method" aria-label={t("common.method")} defaultValue={sp.method ?? ""}>
           <option value="">{t("common.method")}: {t("common.all")}</option>
-          {(["CASH", "CARD", "TRANSFER", "PAYME"] as const).map((m) => <option key={m} value={m}>{t(`method.${m}`)}</option>)}
+          {(["CASH", "CARD", "TRANSFER", "PAYME", "CLICK", "UZUM"] as const).map((m) => <option key={m} value={m}>{t(`method.${m}`)}</option>)}
         </Select>
         <Select name="cashier" aria-label={t("pay.cashier")} defaultValue={sp.cashier ?? ""}>
           <option value="">{t("payments.cashierAll")}</option>
@@ -84,7 +84,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                   </Td>
                   <Td>{r.method ? t(`method.${r.method}`) : "—"}</Td>
                   <Td className={cx("whitespace-nowrap text-right font-medium", r.reversedBy ? "line-through" : r.amount < 0 ? "text-red-600" : "text-emerald-700")}>{formatMoney(r.amount)}</Td>
-                  <Td className="text-xs">{r.createdById ? users.get(r.createdById) : "Payme"}</Td>
+                  <Td className="text-xs">{r.createdById ? users.get(r.createdById) : r.method ? t(`method.${r.method}`) : "—"}</Td>
                 </Tr>
               ))}
             </tbody>

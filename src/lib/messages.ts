@@ -1,5 +1,5 @@
 // Telegram message texts (uz / ru). Plain text with a little HTML (<b>) — the bot sends parse_mode=HTML.
-import { formatDate, type ISODate } from "./dates";
+import { formatDate, monthLabel, type ISODate } from "./dates";
 import { formatMoney } from "./money";
 import type { Locale } from "./i18n";
 
@@ -47,5 +47,17 @@ export const msg = {
       l,
       `✍️ Bugungi darslar uchun davomat belgilanmagan:\n${p.lessons.map((x) => `• ${esc(x)}`).join("\n")}`,
       `✍️ Не отмечена посещаемость за сегодня:\n${p.lessons.map((x) => `• ${esc(x)}`).join("\n")}`,
+    ),
+  examResult: (l: Locale, p: { center: string; student: string; exam: string; date: ISODate; score: number; maxScore: number; passed: boolean | null; level: string | null }) =>
+    m(
+      l,
+      `📝 <b>${esc(p.center)}</b>\n${esc(p.student)} — ${esc(p.exam)} (${formatDate(p.date)})\nNatija: <b>${p.score} / ${p.maxScore}</b>${p.passed === null ? "" : p.passed ? " — o'tdi ✅" : " — o'tmadi"}${p.level ? `\nDaraja: ${esc(p.level)}` : ""}`,
+      `📝 <b>${esc(p.center)}</b>\n${esc(p.student)} — ${esc(p.exam)} (${formatDate(p.date)})\nРезультат: <b>${p.score} / ${p.maxScore}</b>${p.passed === null ? "" : p.passed ? " — сдал(а) ✅" : " — не сдал(а)"}${p.level ? `\nУровень: ${esc(p.level)}` : ""}`,
+    ),
+  reportCard: (l: Locale, p: { center: string; student: string; group: string; month: string; attendancePct: number | null; gradeAvg: number | null; url: string }) =>
+    m(
+      l,
+      `📘 <b>${esc(p.center)}</b>\n${esc(p.student)} — ${esc(p.group)}\n${monthLabel(p.month, "uz")} oyi hisoboti${p.attendancePct !== null ? `\nDavomat: ${p.attendancePct}%` : ""}${p.gradeAvg !== null ? `\nO'rtacha baho: ${p.gradeAvg}` : ""}\n${p.url}`,
+      `📘 <b>${esc(p.center)}</b>\n${esc(p.student)} — ${esc(p.group)}\nТабель за ${monthLabel(p.month, "ru").toLowerCase()}${p.attendancePct !== null ? `\nПосещаемость: ${p.attendancePct}%` : ""}${p.gradeAvg !== null ? `\nСредний балл: ${p.gradeAvg}` : ""}\n${p.url}`,
     ),
 };

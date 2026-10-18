@@ -13,7 +13,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: money,
-      exclude: ["**/*.test.ts", "src/lib/billing/testkit.ts", "src/lib/billing/sync.ts", "src/lib/billing/balance-cache.ts", "src/lib/salary/service.ts", "src/lib/payments/payme-repo.ts", "src/lib/payments/links.ts", "src/lib/payments/provider.ts"],
+      exclude: ["**/*.test.ts", "src/lib/billing/testkit.ts", "src/lib/billing/sync.ts", "src/lib/billing/balance-cache.ts", "src/lib/salary/service.ts", "src/lib/payments/payme-repo.ts", "src/lib/payments/click-repo.ts", "src/lib/payments/uzum-repo.ts", "src/lib/payments/links.ts", "src/lib/payments/provider.ts"],
       reporter: ["text-summary", "text"],
       thresholds: Object.fromEntries(money.map((g) => [g, { lines: 90, statements: 90, functions: 90, branches: 80 }])),
     },

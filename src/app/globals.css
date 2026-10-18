@@ -233,3 +233,47 @@
     transform: none;
   }
 }
+
+/* Telegram Mini App (/tg): colors follow the chat's theme (tgWebAppThemeParams), light defaults outside it */
+.tg-app {
+  --tg-sep: color-mix(in srgb, var(--tg-hint, #71717a) 22%, transparent);
+  background: var(--tg-bg, #ffffff);
+  color: var(--tg-text, #18181b);
+}
+.tg-card {
+  background: var(--tg-secondary-bg, #f4f4f5);
+  border-radius: 12px;
+  padding: 14px;
+}
+.tg-h {
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.tg-hint {
+  color: var(--tg-hint, #71717a);
+}
+.tg-link {
+  color: var(--tg-link, #2563eb);
+}
+.tg-button {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  border-radius: 10px;
+  padding: 12px;
+  font-weight: 600;
+  background: var(--tg-button, #2563eb);
+  color: var(--tg-button-text, #ffffff);
+}
+.tg-button-secondary {
+  background: var(--tg-secondary-bg, #f4f4f5);
+  color: var(--tg-link, #2563eb);
+}
+.tg-tabs {
+  background: var(--tg-bg, #ffffff);
+  border-top: 1px solid var(--tg-sep);
+}
+.tg-tab-active {
+  color: var(--tg-button, #2563eb);
+}

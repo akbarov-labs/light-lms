@@ -4,10 +4,10 @@ import cron, { type ScheduledTask } from "node-cron";
 import type { Bot } from "grammy";
 import { db } from "@/lib/db";
 import { TZ } from "@/lib/dates";
-import { createBot } from "./bot";
+import { createBot, miniAppUrl } from "./bot";
 import { processNotifications, telegramSender, type Sender } from "./notifications";
 import { errText, sleep } from "./util";
-import { dailyReport, jobProblems, nightly, reminders, teacherReminders, type JobResult } from "./jobs";
+import { dailyReport, jobProblems, nightly, reminders, reportCardsJob, teacherReminders, type JobResult } from "./jobs";
 import { lockKeyFor, withJobLock } from "./job-lock";
 import { assertStrongAuthSecret } from "@/lib/auth/startup";
 import { refreshAllBalances } from "@/lib/billing/balance-cache";
@@ -16,6 +16,8 @@ import { resetDemo } from "./demo-reset";
 import { alertOps, opsAlertsEnabled } from "@/lib/ops-alert";
 import { backupCheck } from "./backup-check";
 import { telegramBotToken } from "@/lib/env";
+import type { NotificationChannel } from "@/generated/prisma/client";
+import { smsDryRun, smsSender } from "./sms-sender";
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[worker]", ...a);
 
@@ -31,7 +33,7 @@ let bot: Bot | null = null;
 const tasks: ScheduledTask[] = [];
 const timers: NodeJS.Timeout[] = [];
 const queueAbort = new AbortController();
-let queueRun: Promise<void> | null = null;
+const queueRuns = new Map<NotificationChannel, Promise<void>>();
 
 /**
  * Run a job under its advisory lock; skip when another worker or a manual run already has it.
@@ -65,22 +67,23 @@ function beat() {
   writeFile(HEARTBEAT_FILE, new Date().toISOString()).catch((e) => log("heartbeat write failed", e));
 }
 
-function startQueue(send: Sender) {
+function startQueue(send: Sender, channel: NotificationChannel) {
   let pausedUntil = 0;
   const tick = async () => {
     if (stopping || Date.now() < pausedUntil) return;
-    const r = await processNotifications(send, { signal: queueAbort.signal });
+    const r = await processNotifications(send, { signal: queueAbort.signal, channel });
     if (r.rateLimitedMs) pausedUntil = Date.now() + r.rateLimitedMs;
-    if (r.sent || r.failed || r.retried || r.reclaimed || r.rateLimitedMs) log("notifications", JSON.stringify(r));
+    if (r.sent || r.failed || r.retried || r.reclaimed || r.rateLimitedMs) log(`notifications ${channel}`, JSON.stringify(r));
   };
   timers.push(
     setInterval(() => {
-      if (queueRun) return;
-      queueRun = tick()
-        .catch((e) => log("notifications error", e))
-        .finally(() => {
-          queueRun = null;
-        });
+      if (queueRuns.has(channel)) return;
+      queueRuns.set(
+        channel,
+        tick()
+          .catch((e) => log(`notifications ${channel} error`, e))
+          .finally(() => queueRuns.delete(channel)),
+      );
     }, QUEUE_TICK_MS),
   );
 }
@@ -93,7 +96,7 @@ async function shutdown(signal: string) {
   await Promise.allSettled(tasks.map((t) => t.stop()));
   queueAbort.abort(); // the batch stops after the message in flight and gives the rest back to the queue
   const drained = await Promise.race([
-    Promise.allSettled([bot?.stop(), queueRun]).then(() => true),
+    Promise.allSettled([bot?.stop(), ...queueRuns.values()]).then(() => true),
     sleep(DRAIN_MS).then(() => false),
   ]);
   if (!drained) log(`gave up waiting after ${DRAIN_MS}ms (unsent rows return to the queue after 10 min)`);
@@ -115,6 +118,10 @@ async function main() {
     bot = b;
     send = telegramSender(b.api);
     b.start({ drop_pending_updates: true, onStart: (me) => log(`bot @${me.username} polling`) }).catch((e) => log("bot stopped", e));
+    // the chat menu button opens the Mini App for everyone (unlinked chats are told to share their phone)
+    const app = miniAppUrl();
+    if (app) b.api.setChatMenuButton({ menu_button: { type: "web_app", text: "📱 Ilova", web_app: { url: app } } }).then(() => log(`mini app menu button → ${app}`), (e) => log("mini app menu button failed", e));
+    else log("Mini App needs an https APP_URL — menu button not set");
   } else {
     log("TELEGRAM_BOT_TOKEN is empty — bot disabled, notifications stay queued; jobs still run");
   }
@@ -123,6 +130,7 @@ async function main() {
   schedule("0 10 * * *", "reminders", () => reminders());
   schedule("0 20 * * *", "teacher-reminders", () => teacherReminders());
   schedule("0 21 * * *", "daily-report", () => dailyReport());
+  schedule("0 11 * * *", "report-cards", () => reportCardsJob());
   // family balance cache: pages refresh it themselves, this keeps that work off page views
   schedule("*/5 * * * *", "balances", () => refreshAllBalances(), (r) => !r.balancesRefreshed);
   // prod: the backups folder is mounted read-only at BACKUP_CHECK_DIR; alert if last night's dump is missing
@@ -135,7 +143,10 @@ async function main() {
     log("DEMO_MODE on — the database is wiped and re-seeded every night at 04:00");
   }
 
-  if (send) startQueue(send);
+  if (send) startQueue(send, "TELEGRAM");
+  // SMS rows wait for a center with an Eskiz account; the queue runs with or without the bot
+  startQueue(smsSender(), "SMS");
+  if (smsDryRun()) log("SMS dry run — SMS rows are logged, not sent (SMS_DRY_RUN / DEMO_MODE)");
   log(`started (TZ ${TZ})`);
 
   // catch up once on start so a fresh install has lessons and charges right away (same lock as 00:30)

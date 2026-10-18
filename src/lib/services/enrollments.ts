@@ -8,7 +8,7 @@ import { loadBillingInput, parseTermsHistory, syncEnrollment } from "@/lib/billi
 import { wholeCourseExhausted } from "@/lib/billing/engine";
 import { transferTerms } from "@/lib/billing/terms";
 import { UserError } from "@/lib/user-error";
-import { enqueue, familyChats } from "@/lib/notify";
+import { notifyFamily } from "@/lib/notify";
 import { msg } from "@/lib/messages";
 import { readSettings } from "@/lib/settings";
 import { advanceLeadsForStudent } from "./leads";
@@ -66,7 +66,7 @@ export async function enrollStudent(actor: Actor, input: EnrollInput, branchChec
   return db.$transaction(async (tx) => {
     const [student, group] = await Promise.all([
       tx.student.findUnique({ where: { id: input.studentId }, select: { id: true, centerId: true, familyId: true, firstName: true, lastName: true } }),
-      tx.group.findUnique({ where: { id: input.groupId }, include: { branch: true, center: { select: { name: true } } } }),
+      tx.group.findUnique({ where: { id: input.groupId }, include: { branch: true, center: { select: { name: true, settings: true } } } }),
     ]);
     if (!student || student.centerId !== actor.centerId || !group || group.centerId !== actor.centerId) throw new UserError("error.notFound");
     branchCheck?.(group.branchId);
@@ -92,23 +92,28 @@ export async function enrollStudent(actor: Actor, input: EnrollInput, branchChec
     if (!input.trial) await assertBillable(tx, e.id);
     await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "Enrollment", entityId: e.id, action: input.trial ? "enroll.trial" : "enroll.active", after: e });
     await advanceLeadsForStudent(tx, actor.centerId, student.id, input.trial ? "TRIAL_BOOKED" : "ENROLLED", actor.userId);
-    if (input.trial) {
+    if (input.trial && readSettings(group.center.settings).notify.trial) {
       const first = await tx.lesson.findFirst({
         where: { groupId: group.id, date: { gte: fromISODate(input.startDate) }, status: { not: "CANCELLED" } },
         orderBy: [{ date: "asc" }, { startTime: "asc" }],
       });
       if (first) {
-        const chats = await familyChats(tx, student.familyId, student.id);
-        await enqueue(tx, actor.centerId, chats, (l) =>
-          msg.trialBooked(l, {
-            center: group.center.name,
-            student: `${student.firstName} ${student.lastName}`,
-            group: group.name,
-            date: toISODate(first.date),
-            time: first.startTime,
-            address: group.branch.address,
-          }),
-        `trial:${e.id}`);
+        await notifyFamily(tx, {
+          centerId: actor.centerId,
+          familyId: student.familyId,
+          studentId: student.id,
+          event: "trial",
+          text: (l) =>
+            msg.trialBooked(l, {
+              center: group.center.name,
+              student: `${student.firstName} ${student.lastName}`,
+              group: group.name,
+              date: toISODate(first.date),
+              time: first.startTime,
+              address: group.branch.address,
+            }),
+          dedupeKey: `trial:${e.id}`,
+        });
       }
     }
     await syncEnrollment(e.id, { tx, userId: actor.userId });

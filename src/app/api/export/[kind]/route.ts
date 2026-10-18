@@ -1,6 +1,7 @@
 // CSV export for every list (HANDOFF §5 "Export"). Same filters and scoping as the pages.
 import type { NextRequest } from "next/server";
-import { branchWhere, getCtx, type Ctx } from "@/lib/ctx";
+import { branchWhere, getCtx, studentScope, type Ctx } from "@/lib/ctx";
+import { examFor, sectionsOf } from "@/lib/services/exams";
 import { db } from "@/lib/db";
 import { formatDate, formatDateTime, toISODate, todayISO } from "@/lib/dates";
 import { slotSummary } from "@/lib/format";
@@ -71,7 +72,7 @@ const exporters: Record<string, Exporter> = {
     const { t } = ctx;
     return {
       header: [t("common.date"), t("pay.receiptNo"), t("payments.family"), t("common.student"), t("ledger.PAYMENT"), t("common.method"), t("common.amount"), t("common.description"), t("pay.cashier"), t("pay.reversed")],
-      rows: rows.map((r) => [formatDate(toISODate(r.date)), r.receiptNo, r.family.name, r.student ? `${r.student.lastName} ${r.student.firstName}` : "", t(`ledger.${r.type}`), r.method ? t(`method.${r.method}`) : "", r.amount, r.description, r.createdById ? users.get(r.createdById) : "Payme", r.reversedBy ? t("common.yes") : ""]),
+      rows: rows.map((r) => [formatDate(toISODate(r.date)), r.receiptNo, r.family.name, r.student ? `${r.student.lastName} ${r.student.firstName}` : "", t(`ledger.${r.type}`), r.method ? t(`method.${r.method}`) : "", r.amount, r.description, r.createdById ? users.get(r.createdById) : r.method ? t(`method.${r.method}`) : "", r.reversedBy ? t("common.yes") : ""]),
     };
   },
   async debtors(ctx, sp) {
@@ -143,6 +144,32 @@ const exporters: Record<string, Exporter> = {
     return {
       header: [t("common.group"), t("common.course"), t("common.teacher"), t("reports.billed"), `${t("reports.attendance")} %`],
       rows: names.map((n) => [n, b.get(n)?.course ?? "", b.get(n)?.teacher ?? "", b.get(n)?.billed ?? 0, rate.get(n) ?? ""]),
+    };
+  },
+  async certificates(ctx) {
+    const certs = await db.certificate.findMany({
+      where: { centerId: ctx.centerId, ...(ctx.branchIds ? { student: studentScope({ ...ctx, activeBranchId: null }) } : {}) },
+      include: { student: { select: { firstName: true, lastName: true } } },
+      orderBy: { issuedAt: "desc" },
+    });
+    const { t } = ctx;
+    return {
+      header: [t("cert.number"), t("cert.issuedAt"), t("students.lastName"), t("students.firstName"), t("cert.courseTitle"), t("cert.level"), t("cert.score"), t("cert.code"), t("cert.revoked")],
+      rows: certs.map((c) => [c.number, formatDate(toISODate(c.issuedAt)), c.student.lastName, c.student.firstName, c.title, c.level, c.score === null ? "" : `${c.score}${c.maxScore ? `/${c.maxScore}` : ""}`, c.code, c.revokedAt ? `${formatDateTime(c.revokedAt)} ${c.revokeReason ?? ""}` : ""]),
+    };
+  },
+  async "exam-results"(ctx, sp) {
+    if (!sp.examId) return null;
+    const exam = await examFor({ userId: ctx.userId, centerId: ctx.centerId, canEdit: true, branchIds: ctx.branchIds }, sp.examId).catch(() => null);
+    if (!exam) return null;
+    const sections = sectionsOf(exam.sections);
+    const results = await db.examResult.findMany({ where: { examId: exam.id }, include: { student: { select: { firstName: true, lastName: true } }, lead: { select: { name: true, phone: true } } } });
+    const { t } = ctx;
+    return {
+      header: [t("exams.participant"), ...sections.map((x) => `${x.name} /${x.max}`), `${t("exams.total")} /${exam.maxScore}`, t("exams.passed"), t("exams.level"), t("exams.comment")],
+      rows: results
+        .map((r) => [r.student ? `${r.student.lastName} ${r.student.firstName}` : `${r.lead?.name ?? ""} (${t("exams.leadTag")})`, ...sections.map((_, i) => (Array.isArray(r.sectionScores) ? ((r.sectionScores as number[])[i] ?? "") : "")), r.score, r.passed === null ? "" : r.passed ? t("common.yes") : t("common.no"), r.level, r.comment] as Cell[])
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
     };
   },
   async staff(ctx) {

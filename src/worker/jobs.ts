@@ -1,13 +1,14 @@
 // Scheduled jobs (HANDOFF §11). Every job is idempotent and safe to re-run; each logs its counts.
 import { db } from "@/lib/db";
-import { addDays, diffDays, formatDate, fromISODate, monthRange, parts, todayISO, toISODate, type ISODate } from "@/lib/dates";
+import { addDays, diffDays, formatDate, fromISODate, monthRange, parts, shiftMonth, todayISO, toISODate, type ISODate } from "@/lib/dates";
+import { ensureCards, sendCards } from "@/lib/services/report-cards";
 import { generateAllLessons } from "@/lib/services/lessons";
 import { refreshFreezeStatuses } from "@/lib/services/enrollments";
 import { loadBillingInput, syncEnrollment } from "@/lib/billing/sync";
 import { computeExpected } from "@/lib/billing/engine";
 import { nextPeriodStart, periodContaining } from "@/lib/billing/periods";
 import { readSettings } from "@/lib/settings";
-import { enqueue, familyChats, staffChat } from "@/lib/notify";
+import { enqueue, notifyFamily, staffChat } from "@/lib/notify";
 import { msg, esc } from "@/lib/messages";
 import { balancesFor } from "@/lib/services/wallet";
 import { freshBalances, refreshAllBalances } from "@/lib/billing/balance-cache";
@@ -126,10 +127,9 @@ export async function billingSync(today: ISODate = todayISO()): Promise<JobResul
     const balance = balances.get(familyId) ?? 0;
     if (balance >= 0) continue;
     const payUrl = await payLinkForFamily(familyId);
-    debtNotices += await db.$transaction(async (tx) => {
-      const chats = await familyChats(tx, familyId);
-      return enqueue(tx, centerId, chats, (l) => msg.debt(l, { center: center.name, debt: -balance, payUrl }), `debt:${familyId}:${today}`);
-    });
+    debtNotices += await db.$transaction((tx) =>
+      notifyFamily(tx, { centerId, familyId, event: "debt", text: (l) => msg.debt(l, { center: center.name, debt: -balance, payUrl }), dedupeKey: `debt:${familyId}:${today}` }),
+    );
   }
   console.log(`[billing] ${enrollments.length} enrollment(s) synced in ${syncMs}ms (${failed} failed), ${debtNotices} debt notice(s)`);
   return { enrollments: enrollments.length, ledgerEntries: entries, syncFailed: failed, debtNotices, billingMs: Date.now() - t0 };
@@ -176,16 +176,16 @@ export async function reminders(today: ISODate = todayISO()): Promise<JobResult>
             const unit = computeExpected(input).find((u) => u.start === next);
             if (!unit || unit.amount <= 0) return;
             const payUrl = await payLinkForFamily(e.student.familyId);
-            upcoming += await db.$transaction(async (tx) => {
-              const chats = await familyChats(tx, e.student.familyId, e.student.id);
-              return enqueue(
-                tx,
-                c.id,
-                chats,
-                (l) => msg.reminder(l, { center: c.name, student: `${e.student.firstName} ${e.student.lastName}`, group: e.group.name, amount: unit.amount, date: next, payUrl }),
-                `remind:${e.id}:${next}`,
-              );
-            });
+            upcoming += await db.$transaction((tx) =>
+              notifyFamily(tx, {
+                centerId: c.id,
+                familyId: e.student.familyId,
+                studentId: e.student.id,
+                event: "reminder",
+                text: (l) => msg.reminder(l, { center: c.name, student: `${e.student.firstName} ${e.student.lastName}`, group: e.group.name, amount: unit.amount, date: next, payUrl }),
+                dedupeKey: `remind:${e.id}:${next}`,
+              }),
+            );
           }, failItem);
         }
       }
@@ -199,10 +199,9 @@ export async function reminders(today: ISODate = todayISO()): Promise<JobResult>
             const overdue = diffDays(today, toISODate(n.oldestUnpaidDate));
             if (![3, 7, 14, 30].includes(overdue)) return;
             const payUrl = await payLinkForFamily(n.familyId);
-            debts += await db.$transaction(async (tx) => {
-              const chats = await familyChats(tx, n.familyId);
-              return enqueue(tx, c.id, chats, (l) => msg.debt(l, { center: c.name, debt: -Number(n.balance), payUrl }), `debt-overdue:${n.familyId}:${today}`);
-            });
+            debts += await db.$transaction((tx) =>
+              notifyFamily(tx, { centerId: c.id, familyId: n.familyId, event: "debt", text: (l) => msg.debt(l, { center: c.name, debt: -Number(n.balance), payUrl }), dedupeKey: `debt-overdue:${n.familyId}:${today}` }),
+            );
           }, failItem);
         }
       }
@@ -284,4 +283,34 @@ export async function dailyReport(today: ISODate = todayISO()): Promise<JobResul
     }, () => reportsFailed++);
   }
   return { recipients: users.length, sent, reportsFailed };
+}
+
+/**
+ * 11:00 — centers with auto-send on: on their chosen day, last month's report cards of every group go to
+ * parents (drafts are created first; cards without a held lesson are skipped). Isolated per group.
+ */
+export async function reportCardsJob(today: ISODate = todayISO()): Promise<JobResult> {
+  const month = shiftMonth(today.slice(0, 7), -1);
+  const { start, end } = monthRange(month);
+  const centers = await db.center.findMany({ where: { disabledAt: null }, select: { id: true, settings: true } });
+  let sent = 0;
+  let groupsFailed = 0;
+  let centersDue = 0;
+  for (const c of centers) {
+    const s = readSettings(c.settings).reportCards;
+    if (!s.autoSend || parts(today).d !== s.sendDay) continue;
+    centersDue++;
+    const groups = await db.group.findMany({
+      where: { centerId: c.id, startDate: { lte: fromISODate(end) }, OR: [{ endDate: null }, { endDate: { gte: fromISODate(start) } }], lessons: { some: { status: "HELD", date: { gte: fromISODate(start), lte: fromISODate(end) } } } },
+      select: { id: true },
+    });
+    for (const g of groups) {
+      await isolated(`report-cards group ${g.id}`, async () => {
+        await ensureCards(c.id, g.id, month);
+        const drafts = await db.reportCard.findMany({ where: { groupId: g.id, month, status: "DRAFT" }, select: { id: true } });
+        sent += (await sendCards({ userId: null, centerId: c.id }, drafts.map((d) => d.id))).sent;
+      }, () => groupsFailed++);
+    }
+  }
+  return { month, centersDue, reportCardsSent: sent, groupsFailed };
 }

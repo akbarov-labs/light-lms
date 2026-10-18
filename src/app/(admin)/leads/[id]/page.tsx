@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { LeadStage } from "@/generated/prisma/client";
 import { canAccessBranch, requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
-import { formatDate, formatDateTime } from "@/lib/dates";
+import { formatDate, formatDateTime, toISODate } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { fullName, leadTone } from "@/lib/format";
 import { Badge, Card, KV, LinkButton, PageHeader } from "@/components/ui";
@@ -20,7 +20,14 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const { t } = ctx;
   const lead = await db.lead.findFirst({
     where: { id, centerId: ctx.centerId },
-    include: { course: true, branch: true, assignedTo: true, student: true, notes: { orderBy: { createdAt: "desc" } } },
+    include: {
+      course: true,
+      branch: true,
+      assignedTo: true,
+      student: true,
+      notes: { orderBy: { createdAt: "desc" } },
+      examResults: { include: { exam: { select: { id: true, title: true, date: true, maxScore: true } } }, orderBy: { createdAt: "desc" } },
+    },
   });
   if (!lead || (lead.branchId && !canAccessBranch(ctx, lead.branchId))) notFound();
   const authors = new Map((await db.user.findMany({ where: { id: { in: lead.notes.map((n) => n.createdById).filter(Boolean) as string[] } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
@@ -73,6 +80,18 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               <SubmitButton variant="secondary">{t("common.save")}</SubmitButton>
             </ActionForm>
           </Card>
+          {lead.examResults.length > 0 && (
+            <Card title={t("nav.exams")}>
+              <ul className="space-y-1 text-sm">
+                {lead.examResults.map((r) => (
+                  <li key={r.id} className="flex justify-between gap-3">
+                    <Link href={`/exams/${r.exam.id}`} className="hover:underline">{formatDate(toISODate(r.exam.date))} · {r.exam.title}</Link>
+                    <span className="tnum whitespace-nowrap font-medium">{r.score}/{r.exam.maxScore}{r.level ? ` · ${r.level}` : ""}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
         <Card className="lg:col-span-2" title={t("leads.history")}>
           <ActionForm action={addLeadNoteAction} reset className="mb-4 space-y-2">

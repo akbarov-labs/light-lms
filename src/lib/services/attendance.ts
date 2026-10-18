@@ -6,7 +6,7 @@ import { syncEnrollment } from "@/lib/billing/sync";
 import { enrollmentCovers, isFrozenOn } from "@/lib/billing/lessons";
 import { UserError } from "@/lib/user-error";
 import { readSettings } from "@/lib/settings";
-import { enqueue, familyChats } from "@/lib/notify";
+import { notifyFamily } from "@/lib/notify";
 import { msg } from "@/lib/messages";
 import type { Actor } from "./enrollments";
 import { advanceLeadsForStudent } from "./leads";
@@ -90,14 +90,14 @@ export async function saveAttendance(actor: Actor, lessonId: string, rows: Atten
         }
 
         if (r.status === "ABSENT" && before?.status !== "ABSENT" && date === todayISO() && settings.notify.absence) {
-          const chats = await familyChats(tx, e.student.familyId, e.studentId);
-          await enqueue(
-            tx,
-            actor.centerId,
-            chats,
-            (l) => msg.absent(l, { center: lesson.group.center.name, student: `${e.student.firstName} ${e.student.lastName}`, group: lesson.group.name, date, time: lesson.startTime }),
-            `absent:${lessonId}:${r.studentId}`,
-          );
+          await notifyFamily(tx, {
+            centerId: actor.centerId,
+            familyId: e.student.familyId,
+            studentId: e.studentId,
+            event: "absence",
+            text: (l) => msg.absent(l, { center: lesson.group.center.name, student: `${e.student.firstName} ${e.student.lastName}`, group: lesson.group.name, date, time: lesson.startTime }),
+            dedupeKey: `absent:${lessonId}:${r.studentId}`,
+          });
         }
       }
 

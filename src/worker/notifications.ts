@@ -5,10 +5,13 @@
 // taken back after STALE_LOCK_MIN minutes — the only case where a message can go out twice (sent, then the
 // process died before marking it SENT). That is accepted: losing the message would be worse.
 import type { Api } from "grammy";
+import type { NotificationChannel } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
+import { SmsError } from "@/lib/sms/eskiz";
 import { sleep } from "./util";
 
-export type Sender = (chatId: string, text: string) => Promise<void>;
+/** Deliver one queued row; `chatId` is the Telegram chat, or the phone for an SMS row. */
+export type Sender = (chatId: string, text: string, meta: { centerId: string }) => Promise<void>;
 
 /** One Telegram call may take this long; then it is aborted and retried later (transient), so a hung
  * connection cannot hold the whole batch — and its SENDING rows — until the 10-minute reclaim. */
@@ -25,7 +28,7 @@ export function telegramSender(api: Pick<Api, "sendMessage">, timeoutMs = SEND_T
 
 export const MAX_ATTEMPTS = 5;
 export const STALE_LOCK_MIN = 10;
-const GAP_MS = 40; // 25 msg/s
+const GAP_MS: Record<NotificationChannel, number> = { TELEGRAM: 40, SMS: 200 }; // Telegram 25 msg/s, SMS 5/s
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 3_600_000;
 
@@ -42,6 +45,7 @@ export type SendFailure =
 
 /** Classify a grammY error ({ error_code, description, parameters: { retry_after } }) or any other throw. */
 export function classifySendError(e: unknown): SendFailure {
+  if (e instanceof SmsError) return { kind: e.kind };
   const err = (e ?? {}) as { error_code?: number; description?: string; parameters?: { retry_after?: number } };
   if (err.error_code === 429) return { kind: "rate", retryAfterS: Math.max(1, Number(err.parameters?.retry_after) || 5) };
   if (err.error_code === 403) return { kind: "gone" };
@@ -56,6 +60,7 @@ function errorText(e: unknown): string {
 
 interface Claimed {
   id: string;
+  centerId: string;
   chatId: string;
   text: string;
   attempts: number;
@@ -71,18 +76,18 @@ export async function reclaimStale(minutes = STALE_LOCK_MIN): Promise<number> {
 
 // Times are compared on this process's clock, the same clock Prisma uses for the @default(now()) of
 // nextAttemptAt when a row is queued (a database clock a few ms behind would skip fresh rows).
-async function claim(limit: number): Promise<Claimed[]> {
+async function claim(limit: number, channel: NotificationChannel): Promise<Claimed[]> {
   const now = new Date();
   const rows = await db.$queryRaw<Claimed[]>`
     UPDATE "Notification" SET status = 'SENDING', "lockedAt" = ${now}
     WHERE id IN (
       SELECT id FROM "Notification"
-      WHERE status = 'PENDING' AND "nextAttemptAt" <= ${now}
+      WHERE status = 'PENDING' AND channel = ${channel}::"NotificationChannel" AND "nextAttemptAt" <= ${now}
       ORDER BY "createdAt"
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING id, "chatId", text, attempts, "createdAt"`;
+    RETURNING id, "centerId", "chatId", text, attempts, "createdAt"`;
   return rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
 }
 
@@ -100,7 +105,7 @@ async function unlinkChat(n: Claimed, error: string): Promise<void> {
   await db.$transaction(async (tx) => {
     await tx.notification.update({ where: { id: n.id }, data: { status: "FAILED", attempts: n.attempts + 1, error, lockedAt: null } });
     // nothing else queued for this chat can be delivered either
-    await tx.notification.updateMany({ where: { chatId: n.chatId, status: "PENDING" }, data: { status: "FAILED", error: `chat unlinked: ${error}`.slice(0, 500) } });
+    await tx.notification.updateMany({ where: { chatId: n.chatId, channel: "TELEGRAM", status: "PENDING" }, data: { status: "FAILED", error: `chat unlinked: ${error}`.slice(0, 500) } });
     await tx.telegramLink.deleteMany({ where: { chatId: n.chatId } });
     await tx.user.updateMany({ where: { telegramChatId: n.chatId }, data: { telegramChatId: null } });
     await tx.guardian.updateMany({ where: { telegramChatId: n.chatId }, data: { telegramChatId: null } });
@@ -118,11 +123,15 @@ export interface NotificationRun {
   rateLimitedMs?: number;
 }
 
-export async function processNotifications(send: Sender, opts: { limit?: number; signal?: AbortSignal; gapMs?: number } = {}): Promise<NotificationRun> {
-  const { limit = 100, signal, gapMs = GAP_MS } = opts;
+export async function processNotifications(
+  send: Sender,
+  opts: { limit?: number; signal?: AbortSignal; gapMs?: number; channel?: NotificationChannel } = {},
+): Promise<NotificationRun> {
+  const { limit = 100, signal, channel = "TELEGRAM" } = opts;
+  const gapMs = opts.gapMs ?? GAP_MS[channel];
   const res: NotificationRun = { sent: 0, failed: 0, retried: 0, unlinked: 0, reclaimed: 0 };
   res.reclaimed = await reclaimStale();
-  const batch = await claim(limit);
+  const batch = await claim(limit, channel);
   const gone = new Set<string>();
   for (let i = 0; i < batch.length; i++) {
     const n = batch[i];
@@ -137,7 +146,7 @@ export async function processNotifications(send: Sender, opts: { limit?: number;
       continue;
     }
     try {
-      await send(n.chatId, n.text);
+      await send(n.chatId, n.text, { centerId: n.centerId });
       await db.notification.update({ where: { id: n.id }, data: { status: "SENT", sentAt: new Date(), attempts: n.attempts + 1, error: null, lockedAt: null } });
       res.sent++;
     } catch (e) {
@@ -152,7 +161,7 @@ export async function processNotifications(send: Sender, opts: { limit?: number;
         res.rateLimitedMs = why.retryAfterS * 1000;
         break;
       }
-      if (why.kind === "gone") {
+      if (why.kind === "gone" && channel === "TELEGRAM") {
         await unlinkChat(n, error);
         gone.add(n.chatId);
         res.failed++;

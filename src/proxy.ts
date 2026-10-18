@@ -1,16 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
-import { buildCsp, securityHeaders } from "@/lib/auth/headers";
+import { buildCsp, securityHeaders, TELEGRAM_FRAME_ANCESTORS } from "@/lib/auth/headers";
 import { rawAppUrl } from "@/lib/env";
 
-const PUBLIC = [/^\/login/, /^\/signup/, /^\/welcome/, /^\/legal\//, /^\/demo$/, /^\/f\//, /^\/pay\//, /^\/api\/payme/, /^\/api\/health/, /^\/_next\//, /^\/favicon/];
+const PUBLIC = [/^\/login/, /^\/signup/, /^\/welcome/, /^\/legal\//, /^\/demo$/, /^\/f\//, /^\/pay\//, /^\/api\/payme/, /^\/api\/click\//, /^\/api\/uzum\//, /^\/api\/tg\//, /^\/tg(\/|$)/, /^\/rc\//, /^\/v(\/|$)/, /^\/api\/health/, /^\/_next\//, /^\/favicon/];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   // Per-request nonce: Next adds it to its own scripts when it sees it in the request's CSP header.
   const nonce = btoa(crypto.randomUUID());
   const https = (rawAppUrl() ?? "").startsWith("https://") || req.headers.get("x-forwarded-proto") === "https";
-  const csp = buildCsp(nonce, { dev: process.env.NODE_ENV !== "production", https });
+  // the Telegram Mini App (/tg) is the one page another site may frame
+  const embeddable = pathname === "/tg" || pathname.startsWith("/tg/");
+  const csp = buildCsp(nonce, { dev: process.env.NODE_ENV !== "production", https, frameAncestors: embeddable ? TELEGRAM_FRAME_ANCESTORS : undefined });
 
   const pass = () => {
     const h = new Headers(req.headers);
@@ -20,7 +22,7 @@ export async function proxy(req: NextRequest) {
   };
   const withHeaders = (res: NextResponse) => {
     res.headers.set("content-security-policy", csp);
-    for (const [k, v] of securityHeaders(https)) res.headers.set(k, v);
+    for (const [k, v] of securityHeaders(https, { embeddable })) res.headers.set(k, v);
     return res;
   };
 

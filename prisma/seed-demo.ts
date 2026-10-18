@@ -12,6 +12,8 @@ import { isFrozenOn } from "../src/lib/billing/lessons";
 import { reversePayment, takePayment, refund } from "../src/lib/services/payments";
 import { lockPayslip, markPayslipPaid } from "../src/lib/salary/service";
 import { familyAllocation } from "../src/lib/services/wallet";
+import { createExam, examRoster, issueForExam, publishResults, saveResults } from "../src/lib/services/exams";
+import { ensureCards, saveComments, sendCards } from "../src/lib/services/report-cards";
 
 // ------------------------------------------------------------------ deterministic random
 function mulberry32(seed: number) {
@@ -412,6 +414,50 @@ export async function seedDemo(_client?: PrismaClient) {
     for (let n = 0; n < int(1, 3); n++) {
       await db.leadNote.create({ data: { leadId: lead.id, text: pick(NOTES), createdById: U.admin, createdAt: new Date(createdAt.getTime() + n * 86_400_000) } });
     }
+  }
+
+  // ---------------------------------------------------------------- v2: exams, certificates, report cards
+  // drawn after everything else, so the earlier demo data (and the tests that rely on it) stay the same
+  const staff = { userId: U.owner, centerId: center.id, canEdit: true, branchIds: null };
+  const examDate = addDays(today, -14);
+  const levelExam = await createExam(staff, {
+    kind: "LEVEL",
+    title: "A1 daraja imtihoni",
+    date: examDate,
+    groupId: G.ge1.id,
+    courseId: null,
+    branchId: null,
+    maxScore: 100,
+    passScore: 60,
+    sections: [{ name: "Listening", max: 25 }, { name: "Reading", max: 25 }, { name: "Writing", max: 25 }, { name: "Speaking", max: 25 }],
+    bands: [],
+  });
+  const examined = await examRoster({ groupId: G.ge1.id, date: fromISODate(examDate) });
+  await saveResults(staff, levelExam, examined.map((r) => ({ studentId: r.studentId, sections: [int(9, 25), int(10, 25), int(7, 24), int(11, 25)], comment: chance(0.3) ? pick(["Speaking kuchli", "Writing ustida ishlash kerak", "Grammatika yaxshi"]) : null })));
+  await publishResults(staff, levelExam);
+  await issueForExam(staff, levelExam, addDays(examDate, 2));
+  const placement = await createExam(staff, {
+    kind: "PLACEMENT",
+    title: "Ingliz tili darajasini aniqlash",
+    date: addDays(today, -5),
+    groupId: null,
+    courseId: C.ge.id,
+    branchId: chilonzor.id,
+    maxScore: 60,
+    passScore: null,
+    sections: [],
+    bands: [{ min: 0, level: "A1" }, { min: 20, level: "A2" }, { min: 35, level: "B1" }, { min: 50, level: "B2" }],
+  });
+  const tested = await db.lead.findMany({ where: { centerId: center.id, stage: { in: ["CONTACTED", "TRIAL_BOOKED"] } }, orderBy: { createdAt: "asc" }, take: 5 });
+  await saveResults(staff, placement, tested.map((l) => ({ leadId: l.id, total: int(8, 58) })));
+  // last month's report cards of three groups, with comments, sent
+  const COMMENTS = ["Darslarda faol, uy vazifalarini o'z vaqtida bajaradi.", "Lug'at boyligi oshdi, gapirishda ko'proq mashq kerak.", "Yaxshi natija. Kechikmaslikka harakat qilsin.", "Diqqat bilan ishlaydi, savollarga to'liq javob beradi.", "Darslarni qoldirmaslik kerak — mavzular bir-biriga bog'liq."];
+  const cardsMonth = shiftMonth(today.slice(0, 7), -1);
+  for (const key of ["ge1", "ielts", "math1"] as const) {
+    await ensureCards(center.id, G[key].id, cardsMonth);
+    const cards = await db.reportCard.findMany({ where: { groupId: G[key].id, month: cardsMonth }, orderBy: { id: "asc" } });
+    await saveComments(staff, G[key].id, cardsMonth, cards.map((c) => ({ cardId: c.id, comment: chance(0.8) ? pick(COMMENTS) : null })));
+    await sendCards(owner, cards.map((c) => c.id));
   }
 
   // ---------------------------------------------------------------- summary

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { CalendarDays, LayoutDashboard, Sun, Wallet } from "lucide-react";
+import { CalendarDays, FileText, LayoutDashboard, Sun, Wallet } from "lucide-react";
 import { requireCtx } from "@/lib/ctx";
 import { accentVars } from "@/lib/color";
 import { CloseLabelProvider, SavedLabelProvider, Toaster } from "@/components/client";
@@ -31,9 +31,10 @@ export default async function TeacherLayout({ children }: { children: ReactNode 
           </header>
           <main className="px-4 py-5">{ctx.isTeacher ? children : <p className="py-10 text-center text-zinc-500">{t("t.notTeacher")}</p>}</main>
           <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md" aria-label={t("shell.menu")}>
-            <div className="mx-auto grid max-w-2xl grid-cols-3">
+            <div className="mx-auto grid max-w-2xl grid-cols-4">
               <TabLink href="/t" icon={<Sun className="h-5 w-5" aria-hidden />} label={t("t.today")} />
               <TabLink href="/t/week" icon={<CalendarDays className="h-5 w-5" aria-hidden />} label={t("t.week")} />
+              <TabLink href="/t/reports" icon={<FileText className="h-5 w-5" aria-hidden />} label={t("t.reports")} />
               <TabLink href="/t/salary" icon={<Wallet className="h-5 w-5" aria-hidden />} label={t("t.salary")} />
             </div>
           </nav>
