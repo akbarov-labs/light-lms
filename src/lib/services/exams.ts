@@ -26,6 +26,16 @@ export const bandsOf = (raw: unknown): LevelBand[] => (Array.isArray(raw) ? (raw
 
 const inBranches = (a: ExamAccess, branchId: string | null) => !a.branchIds || (branchId !== null && a.branchIds.includes(branchId));
 
+/** Students this actor may touch: home branch or any enrollment in their branches (the ctx-core access rule). */
+function studentInScope(a: ExamAccess) {
+  if (!a.branchIds) return {};
+  return { OR: [{ branchId: { in: a.branchIds } }, { branchId: null }, { enrollments: { some: { group: { branchId: { in: a.branchIds } } } } }] };
+}
+
+async function assertStudentInScope(tx: Tx, a: ExamAccess, studentId: string) {
+  if (!(await tx.student.findFirst({ where: { id: studentId, centerId: a.centerId, ...studentInScope(a) }, select: { id: true } }))) throw new UserError("error.notFound");
+}
+
 /** The exam, if this user may work on it: staff with groups.edit in its branch, or the teacher of its group. */
 export async function examFor(a: ExamAccess, examId: string, mode: "results" | "manage" = "manage") {
   const exam = await db.exam.findFirst({
@@ -113,21 +123,34 @@ export interface ResultRow {
 }
 
 /**
- * Save the typed results. An empty row clears an existing result unless it already has a certificate
- * (then the score must stay). Students must belong to the center; leads too. Returns rows written.
+ * Save the typed results. An empty row clears an existing result unless it has a live certificate
+ * (then the score must stay until the certificate is revoked). Staff may enter anyone in their branches
+ * (leads too); the group's teacher only the exam's roster and students who already have a result.
  */
 export async function saveResults(a: ExamAccess, examId: string, rows: ResultRow[]): Promise<{ saved: number; cleared: number }> {
   const exam = await examFor(a, examId, "results");
   if (exam.archivedAt) throw new UserError("error.locked");
   const scoring = { maxScore: exam.maxScore, passScore: exam.passScore, sections: sectionsOf(exam.sections), bands: bandsOf(exam.levelBands) };
+  const staff = a.canEdit && inBranches(a, exam.group?.branchId ?? exam.branchId);
+  // a teacher may only grade who sat their group's exam
+  const teacherMay = staff
+    ? null
+    : new Set([...(await examRoster(exam)).map((s) => s.studentId), ...(await db.examResult.findMany({ where: { examId, studentId: { not: null } }, select: { studentId: true } })).map((x) => x.studentId!)]);
   let saved = 0;
   let cleared = 0;
   await db.$transaction(async (tx) => {
     for (const r of rows) {
       const who = r.studentId ? { studentId: r.studentId } : r.leadId ? { leadId: r.leadId } : null;
       if (!who) continue;
-      if (r.studentId && !(await tx.student.findFirst({ where: { id: r.studentId, centerId: a.centerId }, select: { id: true } }))) throw new UserError("error.notFound");
-      if (r.leadId && !(await tx.lead.findFirst({ where: { id: r.leadId, centerId: a.centerId }, select: { id: true } }))) throw new UserError("error.notFound");
+      if (r.studentId) {
+        if (teacherMay && !teacherMay.has(r.studentId)) throw new UserError("error.forbidden");
+        await assertStudentInScope(tx, a, r.studentId);
+      }
+      if (r.leadId) {
+        if (teacherMay) throw new UserError("error.forbidden");
+        const lead = await tx.lead.findFirst({ where: { id: r.leadId, centerId: a.centerId }, select: { branchId: true } });
+        if (!lead || (a.branchIds && lead.branchId && !a.branchIds.includes(lead.branchId))) throw new UserError("error.notFound");
+      }
       let scored;
       try {
         scored = scoreResult(scoring, { total: r.total, sections: r.sections });
@@ -179,7 +202,8 @@ export async function publishResults(a: ExamAccess, examId: string): Promise<num
           studentId: s.id,
           event: "examResult",
           text: (l) => msg.examResult(l, { center: center.name, student: fullName(s), exam: exam.title, date: toISODate(exam.date), score: r.score, maxScore: exam.maxScore, passed: r.passed, level: r.level }),
-          dedupeKey: `exam:${examId}:${s.id}:${r.score}`,
+          // per saved version of the result: a correction (even back to an earlier score) is sent again
+          dedupeKey: `exam:${examId}:${s.id}:${r.updatedAt.getTime()}`,
         });
       }
     }
@@ -240,7 +264,8 @@ async function createCertificate(tx: Tx, actor: Actor, c: CertInput) {
 export async function issueForExam(a: ExamAccess, examId: string, issuedAt: ISODate = todayISO()): Promise<number> {
   const exam = await examFor(a, examId);
   if (exam.kind !== "LEVEL" && exam.kind !== "FINAL") throw new UserError("exams.noCertForKind");
-  const results = await db.examResult.findMany({ where: { examId, studentId: { not: null }, passed: { not: false }, certificate: null } });
+  // `passed: { not: false }` would be SQL `<> false`, which also drops NULL (no pass mark = everyone)
+  const results = await db.examResult.findMany({ where: { examId, studentId: { not: null }, OR: [{ passed: true }, { passed: null }], certificate: null } });
   const course = exam.course ?? exam.group?.course ?? null;
   let n = 0;
   for (const r of results) {
@@ -268,8 +293,7 @@ export async function issueForExam(a: ExamAccess, examId: string, issuedAt: ISOD
 /** A certificate without an exam (course completed). */
 export async function issueManual(a: ExamAccess, input: { studentId: string; title: string; level: string | null; issuedAt: ISODate; groupId?: string | null }) {
   if (!a.canEdit) throw new UserError("error.forbidden");
-  const s = await db.student.findFirst({ where: { id: input.studentId, centerId: a.centerId }, select: { id: true } });
-  if (!s) throw new UserError("error.notFound");
+  await assertStudentInScope(db, a, input.studentId);
   let courseId: string | null = null;
   if (input.groupId) {
     const g = await db.group.findFirst({ where: { id: input.groupId, centerId: a.centerId }, select: { courseId: true, branchId: true } });
@@ -283,11 +307,12 @@ export async function issueManual(a: ExamAccess, input: { studentId: string; tit
 export async function revokeCertificate(a: ExamAccess, certId: string, reason: string) {
   if (!a.canEdit) throw new UserError("error.forbidden");
   if (!reason.trim()) throw new UserError("exams.revokeReason");
-  const cert = await db.certificate.findFirst({ where: { id: certId, centerId: a.centerId } });
+  const cert = await db.certificate.findFirst({ where: { id: certId, centerId: a.centerId, student: studentInScope(a) } });
   if (!cert) throw new UserError("error.notFound");
   if (cert.revokedAt) return cert;
   return db.$transaction(async (tx) => {
-    const after = await tx.certificate.update({ where: { id: certId }, data: { revokedAt: new Date(), revokedById: a.userId, revokeReason: reason.trim().slice(0, 300) } });
+    // detach from the result (examId stays for history): its score unlocks and a corrected result can be certified again
+    const after = await tx.certificate.update({ where: { id: certId }, data: { revokedAt: new Date(), revokedById: a.userId, revokeReason: reason.trim().slice(0, 300), examResultId: null } });
     await audit(tx, { centerId: a.centerId, userId: a.userId, entity: "Certificate", entityId: certId, action: "revoke", before: cert, after });
     return after;
   });

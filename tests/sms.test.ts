@@ -17,6 +17,7 @@ const debt = (familyId: string, key: string) =>
 const setSms = (sms: Prisma.InputJsonValue) => db.center.update({ where: { id: centerId }, data: { settings: { sms } } });
 
 beforeAll(async () => {
+  process.env.TELEGRAM_BOT_TOKEN = "1:sms-test";
   const c = await db.center.upsert({ where: { slug: "sms-test" }, update: {}, create: { name: "SMS markaz", slug: "sms-test", smsLogin: "c@x.uz", smsPassword: "pw" } });
   centerId = c.id;
   const f1 = await db.family.create({ data: { centerId, name: "SMS oilasi", guardians: { create: [{ name: "Ota", phone: "998901110001" }, { name: "Ona", phone: "998901110002", isPrimary: true }] } } });
@@ -48,6 +49,15 @@ describe("notifyFamily + SMS", () => {
     await setSms({ onlyWithoutTelegram: false });
     await debt(tgFamily, "d3");
     expect((await db.notification.findMany({ where: { centerId }, orderBy: { createdAt: "asc" } })).map((r) => r.channel).sort()).toEqual(["SMS", "TELEGRAM", "TELEGRAM"]);
+  });
+  it("without a bot, a linked family still gets its SMS (no Telegram would reach it)", async () => {
+    delete process.env.TELEGRAM_BOT_TOKEN;
+    try {
+      await debt(tgFamily, "nobot");
+      expect((await db.notification.findMany({ where: { centerId } })).map((r) => r.channel).sort()).toEqual(["SMS", "TELEGRAM"]);
+    } finally {
+      process.env.TELEGRAM_BOT_TOKEN = "1:sms-test";
+    }
   });
   it("an event switched off, or no Eskiz account, sends no SMS", async () => {
     await setSms({ debt: false });

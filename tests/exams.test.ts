@@ -98,4 +98,46 @@ describe("exams", () => {
     const card = await db.reportCard.findUniqueOrThrow({ where: { enrollmentId_month: { enrollmentId: aEnrollment, month: "2026-10" } } });
     expect((await cardData(card.id)).exams).toEqual([{ title: "B1 yakuniy", date: "2026-10-15", score: 75, maxScore: 100, passed: true, level: null }]);
   });
+
+  it("review: a final exam without a pass mark certifies everyone with a result", async () => {
+    const id = await createExam(owner(), { kind: "FINAL", title: "Yakuniy (ballsiz)", date: "2026-10-25", groupId, courseId: null, branchId: null, maxScore: 100, passScore: null, sections: [], bands: [] });
+    await saveResults(owner(), id, [{ studentId: aId, total: 40 }, { studentId: bId, total: 90 }]);
+    expect(await issueForExam(owner(), id, "2026-10-26")).toBe(2);
+  });
+  it("review: revoking unlocks the score and the corrected result can be certified again", async () => {
+    const id = await createExam(owner(), { kind: "LEVEL", title: "Qayta", date: "2026-10-27", groupId, courseId: null, branchId: null, maxScore: 100, passScore: 50, sections: [], bands: [] });
+    await saveResults(owner(), id, [{ studentId: aId, total: 57 }]);
+    expect(await issueForExam(owner(), id)).toBe(1);
+    const cert = await db.certificate.findFirstOrThrow({ where: { examId: id } });
+    await expect(saveResults(owner(), id, [{ studentId: aId, total: 75 }])).rejects.toBeInstanceOf(UserError);
+    await revokeCertificate(owner(), cert.id, "ball xato");
+    expect(await saveResults(owner(), id, [{ studentId: aId, total: 75 }])).toEqual({ saved: 1, cleared: 0 });
+    expect(await issueForExam(owner(), id)).toBe(1);
+    const certs = await db.certificate.findMany({ where: { examId: id }, orderBy: { createdAt: "asc" } });
+    expect(certs.map((c) => [c.score, !!c.revokedAt])).toEqual([[57, true], [75, false]]);
+  });
+  it("review: a teacher grades only the roster; branch-scoped staff only their branches", async () => {
+    const outsider = await db.student.create({ data: { centerId, familyId: (await db.family.create({ data: { centerId, name: "Tashqi" } })).id, branchId: otherBranchId, firstName: "Tashqi", lastName: "Bola" } });
+    const otherLead = await db.lead.create({ data: { centerId, branchId: otherBranchId, name: "B lid", phone: "998905554433" } });
+    const id = await createExam(owner(), { kind: "MOCK", title: "Mock", date: "2026-10-28", groupId, courseId: null, branchId: null, maxScore: 10, passScore: null, sections: [], bands: [] });
+    await expect(saveResults(teacher(), id, [{ studentId: outsider.id, total: 5 }])).rejects.toBeInstanceOf(UserError);
+    await expect(saveResults(teacher(), id, [{ leadId, total: 5 }])).rejects.toBeInstanceOf(UserError);
+    expect((await saveResults(teacher(), id, [{ studentId: aId, total: 5 }])).saved).toBe(1);
+    const branchA = { ...owner(), branchIds: [branchId] };
+    await expect(saveResults(branchA, id, [{ studentId: outsider.id, total: 5 }])).rejects.toBeInstanceOf(UserError);
+    await expect(saveResults(branchA, id, [{ leadId: otherLead.id, total: 5 }])).rejects.toBeInstanceOf(UserError);
+    await expect(issueManual(branchA, { studentId: outsider.id, title: "X", level: null, issuedAt: "2026-10-28" })).rejects.toBeInstanceOf(UserError);
+    const cert = await issueManual(owner(), { studentId: outsider.id, title: "X", level: null, issuedAt: "2026-10-28" });
+    await expect(revokeCertificate(branchA, cert.id, "x")).rejects.toBeInstanceOf(UserError);
+  });
+  it("review: a corrected result is sent again, even back to an earlier score", async () => {
+    const id = await createExam(owner(), { kind: "MOCK", title: "Qayta yuborish", date: "2026-10-29", groupId, courseId: null, branchId: null, maxScore: 100, passScore: null, sections: [], bands: [] });
+    await saveResults(owner(), id, [{ studentId: aId, total: 80 }]);
+    expect(await publishResults(owner(), id)).toBe(1);
+    await saveResults(owner(), id, [{ studentId: aId, total: 90 }]);
+    expect(await publishResults(owner(), id)).toBe(1);
+    await saveResults(owner(), id, [{ studentId: aId, total: 80 }]);
+    expect(await publishResults(owner(), id)).toBe(1);
+    expect(await publishResults(owner(), id)).toBe(0);
+  });
 });

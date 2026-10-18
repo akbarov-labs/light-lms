@@ -4,6 +4,7 @@ import type { Tx } from "./db";
 import type { Locale } from "./i18n";
 import { readSettings, type SmsEvent } from "./settings";
 import { htmlToSms } from "./sms/text";
+import { telegramBotToken } from "./env";
 
 export interface Chat {
   chatId: string;
@@ -89,7 +90,8 @@ export async function notifyFamily(
 ): Promise<number> {
   const chats = await familyChats(tx, p.familyId, p.studentId);
   let n = await enqueue(tx, p.centerId, chats, p.text, p.dedupeKey);
-  const target = await familySmsTarget(tx, p.centerId, p.familyId, p.event, p.studentId, chats.length > 0);
+  // linked chats only count as "reads Telegram" when this installation has a bot to deliver them
+  const target = await familySmsTarget(tx, p.centerId, p.familyId, p.event, p.studentId, chats.length > 0 && !!telegramBotToken());
   if (target) n += await enqueueSms(tx, p.centerId, target, p.text, p.dedupeKey);
   return n;
 }

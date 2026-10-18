@@ -64,7 +64,7 @@ export async function saveExamResultsAction(_: ActionState, fd: FormData): Promi
 
 /** One participant added by hand (placement tests: leads and students outside the group). */
 export async function addParticipantAction(_: ActionState, fd: FormData): Promise<ActionState> {
-  return runAction(undefined, async (ctx) => {
+  return runAction("groups.edit", async (ctx) => {
     const f = z.object({ examId: zId, studentId: zOptId, leadId: zOptId, comment: zOptStr }).parse(formObject(fd));
     if (!f.studentId === !f.leadId) throw new UserError("exams.pickOne");
     const row = parseResultForm(fd)[0] ?? {};
