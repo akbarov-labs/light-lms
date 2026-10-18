@@ -274,7 +274,15 @@ export default async function WelcomePage() {
           <div className="mx-auto max-w-[1200px] px-4 py-20 sm:px-6 lg:py-28">
             <h2 className="text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-zinc-950 sm:text-[40px]">{c.pricing.title}</h2>
             <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-zinc-600">{c.pricing.lead}</p>
-            <div className="mt-10 overflow-hidden rounded-2xl border border-line">
+            <div className="mt-10 flex flex-col gap-4 rounded-2xl border border-zinc-900 bg-zinc-950 p-6 text-white sm:flex-row sm:items-center sm:justify-between sm:p-7">
+              <div className="max-w-2xl">
+                <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-400">{c.pricing.founding.badge}</div>
+                <div className="mt-2 text-lg font-semibold leading-snug tracking-[-0.01em] sm:text-xl">{c.pricing.founding.title}</div>
+                <p className="mt-2 text-sm leading-relaxed text-zinc-300">{c.pricing.founding.body}</p>
+              </div>
+              <a href={tg ? `https://t.me/${tg}` : BRAND.contact.phone ? `tel:+${BRAND.contact.phone}` : "/signup"} className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg bg-white px-4 text-sm font-medium text-zinc-950 hover:bg-zinc-100">{c.pricing.founding.cta}</a>
+            </div>
+            <div className="mt-4 overflow-hidden rounded-2xl border border-line">
               <div className="grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-4">
                 {planOrder.map((p) => {
                   const plan = PLANS[p];
