@@ -15,7 +15,7 @@ brauzer 110% zoom, sichqoncha sekin. Ovoz — o'zbekcha, oddiy, "biz" emas "siz"
 | 1:45–2:00 | Telefon o'lchamida `/t` → darsni ochish → davomat | "O'qituvchi dars tugashi bilan telefondan davomat belgilaydi — oyligi ham shundan hisoblanadi." |
 | 2:00–2:20 | **Oyliklar** → o'qituvchi → hisob | "Oy oxirida oylik tayyor: o'tilgan darslar, foiz, bonus. 'To'landi' — xarajatga o'zi yoziladi." |
 | 2:20–2:35 | **Boshqaruv paneli** (tushum, qarz, grafik) | "Ega telefondan ham ko'radi: tushum, qarz, yangi va ketgan o'quvchilar." |
-| 2:35–2:50 | Sayt → **Narxlar** → "Markazni bepul yaratish" | "30 tagacha o'quvchi — bepul. 5 daqiqada sozlanadi. Havolasi videoning tagida." |
+| 2:35–2:50 | Sayt → **Narxlar** → "Markazni bepul yaratish" | "50 tagacha o'quvchi — bepul. 5 daqiqada sozlanadi. Havolasi videoning tagida." |
 
 Eslatmalar
 - Videoda faqat demo ma'lumot bo'lsin (haqiqiy o'quvchi ismi/telefoni yo'q).

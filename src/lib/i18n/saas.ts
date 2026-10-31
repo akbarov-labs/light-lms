@@ -5,7 +5,7 @@ export const saasUz = {
   "auth.createCenter": "Bepul yarating",
 
   "signup.title": "Markazingizni yarating",
-  "signup.subtitle": "30 tagacha faol o'quvchi bepul. Karta kerak emas.",
+  "signup.subtitle": "50 tagacha faol o'quvchi bepul. Karta kerak emas.",
   "signup.centerName": "Markaz nomi",
   "signup.centerNamePh": "Masalan: Ilm Ziyo o'quv markazi",
   "signup.ownerName": "Ismingiz",
@@ -120,7 +120,7 @@ export const saasRu: Record<keyof typeof saasUz, string> = {
   "auth.createCenter": "Создайте бесплатно",
 
   "signup.title": "Создайте свой центр",
-  "signup.subtitle": "До 30 активных учеников бесплатно. Карта не нужна.",
+  "signup.subtitle": "До 50 активных учеников бесплатно. Карта не нужна.",
   "signup.centerName": "Название центра",
   "signup.centerNamePh": "Например: Учебный центр «Ilm Ziyo»",
   "signup.ownerName": "Ваше имя",

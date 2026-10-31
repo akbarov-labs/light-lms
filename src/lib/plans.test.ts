@@ -3,9 +3,9 @@ import { canActivate, isPlan, planFor, planLimit, PLANS, planUsage, seatsLeft } 
 
 describe("plan limits", () => {
   it("matches the published tiers", () => {
-    expect(planLimit("FREE")).toBe(30);
-    expect(planLimit("START")).toBe(100);
-    expect(planLimit("GROWTH")).toBe(300);
+    expect(planLimit("FREE")).toBe(50);
+    expect(planLimit("START")).toBe(150);
+    expect(planLimit("GROWTH")).toBe(400);
     expect(planLimit("PRO")).toBe(1000);
     expect(PLANS.FREE.monthlyPrice).toBe(0);
   });
@@ -18,48 +18,48 @@ describe("plan limits", () => {
 
   it("picks the smallest plan that fits", () => {
     expect(planFor(0)).toBe("FREE");
-    expect(planFor(30)).toBe("FREE");
-    expect(planFor(31)).toBe("START");
-    expect(planFor(300)).toBe("GROWTH");
-    expect(planFor(301)).toBe("PRO");
+    expect(planFor(50)).toBe("FREE");
+    expect(planFor(51)).toBe("START");
+    expect(planFor(400)).toBe("GROWTH");
+    expect(planFor(401)).toBe("PRO");
     expect(planFor(1001)).toBeNull();
   });
 });
 
 describe("canActivate", () => {
   it("allows up to and including the limit", () => {
-    expect(canActivate("FREE", 28, false)).toBe(true);
-    expect(canActivate("FREE", 29, false)).toBe(true); // becomes the 30th
-    expect(canActivate("FREE", 30, false)).toBe(false);
-    expect(canActivate("START", 100, false)).toBe(false);
-    expect(canActivate("START", 99, false)).toBe(true);
+    expect(canActivate("FREE", 48, false)).toBe(true);
+    expect(canActivate("FREE", 49, false)).toBe(true); // becomes the 50th
+    expect(canActivate("FREE", 50, false)).toBe(false);
+    expect(canActivate("START", 150, false)).toBe(false);
+    expect(canActivate("START", 149, false)).toBe(true);
   });
 
   it("never blocks a student who is already active (second group, transfer)", () => {
-    expect(canActivate("FREE", 30, true)).toBe(true);
-    expect(canActivate("FREE", 45, true)).toBe(true);
+    expect(canActivate("FREE", 50, true)).toBe(true);
+    expect(canActivate("FREE", 65, true)).toBe(true);
   });
 
   it("blocks new students when a center is already over (downgraded plan)", () => {
-    expect(canActivate("FREE", 60, false)).toBe(false);
+    expect(canActivate("FREE", 80, false)).toBe(false);
   });
 });
 
 describe("planUsage", () => {
   it("is ok well below the limit", () => {
-    expect(planUsage("FREE", 10)).toEqual({ plan: "FREE", limit: 30, used: 10, remaining: 20, percent: 33, level: "ok" });
+    expect(planUsage("FREE", 10)).toEqual({ plan: "FREE", limit: 50, used: 10, remaining: 40, percent: 20, level: "ok" });
   });
 
   it("warns from 90% of the limit", () => {
-    expect(planUsage("FREE", 26).level).toBe("ok");
-    expect(planUsage("FREE", 27).level).toBe("near");
-    expect(planUsage("START", 90).level).toBe("near");
-    expect(planUsage("START", 89).level).toBe("ok");
+    expect(planUsage("FREE", 44).level).toBe("ok");
+    expect(planUsage("FREE", 45).level).toBe("near");
+    expect(planUsage("START", 135).level).toBe("near");
+    expect(planUsage("START", 134).level).toBe("ok");
   });
 
   it("is full at the limit and over above it, percent capped at 100", () => {
-    expect(planUsage("FREE", 30)).toMatchObject({ level: "full", remaining: 0, percent: 100 });
-    expect(planUsage("FREE", 45)).toMatchObject({ level: "over", remaining: 0, percent: 100 });
+    expect(planUsage("FREE", 50)).toMatchObject({ level: "full", remaining: 0, percent: 100 });
+    expect(planUsage("FREE", 65)).toMatchObject({ level: "over", remaining: 0, percent: 100 });
   });
 
   it("handles an empty center", () => {
@@ -69,8 +69,8 @@ describe("planUsage", () => {
 
 describe("seatsLeft (imports)", () => {
   it("counts free seats and never goes negative", () => {
-    expect(seatsLeft("FREE", 25)).toBe(5);
-    expect(seatsLeft("FREE", 30)).toBe(0);
-    expect(seatsLeft("FREE", 40)).toBe(0);
+    expect(seatsLeft("FREE", 45)).toBe(5);
+    expect(seatsLeft("FREE", 50)).toBe(0);
+    expect(seatsLeft("FREE", 60)).toBe(0);
   });
 });

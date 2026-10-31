@@ -3,14 +3,14 @@
 
 const uz = {
   metaTitle: "O'quv markazlari uchun CRM",
-  metaDesc: "Lidlar, guruhlar, davomat, to'lovlar, qarzdorlar va o'qituvchi oyligi — bitta tizimda. 30 tagacha o'quvchi bilan bepul.",
+  metaDesc: "Lidlar, guruhlar, davomat, to'lovlar, qarzdorlar va o'qituvchi oyligi — bitta tizimda. 50 tagacha o'quvchi bilan bepul.",
   nav: { features: "Imkoniyatlar", pricing: "Narxlar", faq: "Savollar", login: "Kirish", start: "Bepul boshlash" },
   hero: {
     title: "O'quv markazingiz puli — daftarsiz va xatosiz.",
     lead: "Lid, sinov darsi, guruh, davomat, oylik to'lov, qarzdorlar va o'qituvchi oyligi bitta tizimda. Kim qancha qarzligi har doim aniq — darslardan hisoblanadi, qo'lda tuzatish shart emas.",
     start: "Markazni bepul yaratish",
     demo: "Demoni ko'rish",
-    note: "30 tagacha faol o'quvchi — doim bepul. Karta kerak emas.",
+    note: "50 tagacha faol o'quvchi — doim bepul. Karta kerak emas.",
   },
   pay: {
     label: "Demo ma'lumot",
@@ -53,7 +53,7 @@ const uz = {
     },
     debts: {
       title: "Qarzdorlar o'zi eslatiladi",
-      body: "Qarz paydo bo'lgan kundan 3, 7, 14 va 30 kun o'tib Telegram orqali eslatma ketadi — ichida Payme to'lov havolasi bilan. Ota-ona bosadi, to'laydi, tizimda o'zi belgilanadi.",
+      body: "Qarz paydo bo'lgan kundan 3, 7, 14 va 30 kun o'tib Telegram orqali eslatma ketadi — ichida Payme, Click yoki Uzum orqali to'lash havolasi bilan. Ota-ona bosadi, to'laydi, tizimda o'zi belgilanadi.",
       botName: "Markaz boti",
       message: "Assalomu alaykum! Hamidov Bekzod (IELTS 7.0) bo'yicha qarz: 400 000 so'm. To'lash uchun tugmani bosing.",
       payBtn: "Payme orqali to'lash",
@@ -100,17 +100,23 @@ const uz = {
     choose: "Boshlash",
     contact: "Bog'lanish",
     plans: { FREE: "Bepul", START: "Start", GROWTH: "O'sish", PRO: "Pro", NETWORK: "Tarmoq" },
-    all: "Har bir tarifda hamma imkoniyatlar: CRM, guruhlar, davomat, to'lovlar, qarzdorlar, oylik, hisobotlar, Telegram bot, Payme.",
+    all: "Har bir tarifda hamma imkoniyatlar: CRM, guruhlar, davomat, to'lovlar, qarzdorlar, oylik, hisobotlar, Telegram bot va ilova, Payme / Click / Uzum, SMS, hisobot kartalari, imtihon va sertifikatlar.",
     notes: ["Yillik to'lovda — 2 oy bepul.", "Excel yoki boshqa tizimdan ko'chirishda bepul yordam beramiz."],
+    founding: {
+      badge: "Asoschi markazlar",
+      title: "Birinchi 20 ta markaz uchun: 6 oy bepul, keyin umrbod 50% chegirma",
+      body: "O'quvchilar soni qancha bo'lishidan qat'i nazar, hamma imkoniyatlar. Evaziga — haftasiga bir qisqa suhbat va halol fikringiz: tizimni birga yaxshilaymiz.",
+      cta: "Joy band qilish",
+    },
   },
   faq: {
     title: "Ko'p beriladigan savollar",
     items: [
       ["Kompyuterga biror narsa o'rnatish kerakmi?", "Yo'q. Tizim brauzerda ishlaydi — kompyuterda ham, telefonda ham. O'qituvchilar davomatni telefondan belgilaydi, ota-onalar Telegram bot orqali foydalanadi."],
-      ["Ota-onalar onlayn to'lay oladimi?", "Ha. Payme kassangiz kalitini sozlamalarga qo'shsangiz, har bir eslatmada to'lov havolasi bo'ladi va to'lov tizimda o'zi belgilanadi. Click va Uzum keyingi navbatda."],
+      ["Ota-onalar onlayn to'lay oladimi?", "Ha. Payme, Click yoki Uzum Bank kassangizni sozlamalarga ulasangiz, har bir eslatmada to'lov havolasi bo'ladi va to'lov tizimda o'zi belgilanadi. Ota-ona Telegram ilovasidan ham to'lay oladi."],
       ["Ma'lumotlarimiz qayerda saqlanadi?", "Serverlar O'zbekiston hududida joylashadi. Har kecha zaxira nusxa olinadi. Ma'lumotlaringiz faqat sizning markazingizga ko'rinadi."],
       ["Bir nechta filialim bor — bo'ladimi?", "Ha. Filiallar soni cheklanmaydi. Menejer faqat o'z filialini ko'radi, ega hammasini bitta panelda ko'radi."],
-      ["Bepul tarifda nima cheklangan?", "Faqat faol o'quvchilar soni — 30 tagacha. Imkoniyatlar bir xil. O'quvchilar ko'paysa, tarifni sozlamalardan o'zgartirasiz."],
+      ["Bepul tarifda nima cheklangan?", "Faqat faol o'quvchilar soni — 50 tagacha (sinov darsidagilar hisoblanmaydi). Imkoniyatlar bir xil. O'quvchilar ko'paysa, tarifni sozlamalardan o'zgartirasiz."],
       ["Hozir boshqa CRM ishlatamiz, ko'chish qiyinmi?", "O'quvchilar ro'yxatini Excel/CSV qilib yuklaysiz, qarz va balanslar bilan birga. Kerak bo'lsa, ko'chirishni o'zimiz bepul qilib beramiz."],
     ],
   },
@@ -122,14 +128,14 @@ type Copy = typeof uz;
 
 const ru: Copy = {
   metaTitle: "CRM для учебных центров",
-  metaDesc: "Лиды, группы, посещаемость, оплаты, должники и зарплата преподавателей — в одной системе. Бесплатно до 30 учеников.",
+  metaDesc: "Лиды, группы, посещаемость, оплаты, должники и зарплата преподавателей — в одной системе. Бесплатно до 50 учеников.",
   nav: { features: "Возможности", pricing: "Цены", faq: "Вопросы", login: "Войти", start: "Начать бесплатно" },
   hero: {
     title: "Деньги учебного центра — без тетрадей и ошибок.",
     lead: "Лиды, пробный урок, группы, посещаемость, ежемесячная оплата, должники и зарплата преподавателей в одной системе. Кто сколько должен — всегда точно: считается из уроков, ничего не нужно править вручную.",
     start: "Создать центр бесплатно",
     demo: "Посмотреть демо",
-    note: "До 30 активных учеников — всегда бесплатно. Карта не нужна.",
+    note: "До 50 активных учеников — всегда бесплатно. Карта не нужна.",
   },
   pay: {
     label: "Демо-данные",
@@ -172,7 +178,7 @@ const ru: Copy = {
     },
     debts: {
       title: "Должникам напоминает система",
-      body: "Через 3, 7, 14 и 30 дней после появления долга уходит напоминание в Telegram — со ссылкой на оплату через Payme. Родитель нажимает, платит, в системе отмечается само.",
+      body: "Через 3, 7, 14 и 30 дней после появления долга уходит напоминание в Telegram — со ссылкой на оплату через Payme, Click или Uzum. Родитель нажимает, платит, в системе отмечается само.",
       botName: "Бот центра",
       message: "Здравствуйте! Долг по Хамидов Бекзод (IELTS 7.0): 400 000 сум. Нажмите кнопку, чтобы оплатить.",
       payBtn: "Оплатить через Payme",
@@ -219,17 +225,23 @@ const ru: Copy = {
     choose: "Начать",
     contact: "Связаться",
     plans: { FREE: "Бесплатный", START: "Старт", GROWTH: "Рост", PRO: "Про", NETWORK: "Сеть" },
-    all: "В каждом тарифе все возможности: CRM, группы, посещаемость, оплаты, должники, зарплата, отчёты, Telegram-бот, Payme.",
+    all: "В каждом тарифе все возможности: CRM, группы, посещаемость, оплаты, должники, зарплата, отчёты, Telegram-бот и приложение, Payme / Click / Uzum, SMS, табели, экзамены и сертификаты.",
     notes: ["При оплате за год — 2 месяца бесплатно.", "Бесплатно поможем перенести данные из Excel или другой системы."],
+    founding: {
+      badge: "Центры-основатели",
+      title: "Первым 20 центрам: 6 месяцев бесплатно, затем скидка 50% навсегда",
+      body: "Все возможности при любом числе учеников. Взамен — короткий созвон раз в неделю и честная обратная связь: улучшаем систему вместе.",
+      cta: "Забронировать место",
+    },
   },
   faq: {
     title: "Частые вопросы",
     items: [
       ["Нужно что-то устанавливать?", "Нет. Система работает в браузере — на компьютере и на телефоне. Преподаватели отмечают посещаемость с телефона, родители пользуются Telegram-ботом."],
-      ["Родители могут платить онлайн?", "Да. Добавьте ключ своей кассы Payme в настройках — в каждом напоминании будет ссылка на оплату, и оплата отметится в системе сама. Click и Uzum — следующие."],
+      ["Родители могут платить онлайн?", "Да. Подключите в настройках свою кассу Payme, Click или Uzum Bank — в каждом напоминании будет ссылка на оплату, и оплата отметится в системе сама. Родитель может оплатить и из приложения в Telegram."],
       ["Где хранятся наши данные?", "Серверы расположены на территории Узбекистана. Каждую ночь делается резервная копия. Ваши данные видны только вашему центру."],
       ["У меня несколько филиалов — подойдёт?", "Да. Число филиалов не ограничено. Менеджер видит только свой филиал, владелец — всё на одной панели."],
-      ["Что ограничено в бесплатном тарифе?", "Только число активных учеников — до 30. Возможности те же. Когда учеников станет больше, смените тариф в настройках."],
+      ["Что ограничено в бесплатном тарифе?", "Только число активных учеников — до 50 (ученики на пробном уроке не считаются). Возможности те же. Когда учеников станет больше, смените тариф в настройках."],
       ["Сейчас у нас другая CRM — сложно переехать?", "Загрузите список учеников в Excel/CSV вместе с долгами и балансами. При необходимости перенесём данные сами, бесплатно."],
     ],
   },

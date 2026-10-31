@@ -1,4 +1,4 @@
-// SaaS plans: each caps the number of active students (HANDOFF §1 pricing proposal).
+// SaaS plans: each caps the number of active students (DECISIONS.md 2026-10-18 pricing; HANDOFF §1 was the first draft).
 // Pure functions only — the DB count lives in services/plan-usage.ts. No billing integration yet.
 
 export const PLAN_NAMES = ["FREE", "START", "GROWTH", "PRO"] as const;
@@ -13,9 +13,9 @@ export interface PlanInfo {
 }
 
 export const PLANS: Record<PlanName, PlanInfo> = {
-  FREE: { name: "FREE", limit: 30, monthlyPrice: 0 },
-  START: { name: "START", limit: 100, monthlyPrice: 249_000 },
-  GROWTH: { name: "GROWTH", limit: 300, monthlyPrice: 590_000 },
+  FREE: { name: "FREE", limit: 50, monthlyPrice: 0 },
+  START: { name: "START", limit: 150, monthlyPrice: 249_000 },
+  GROWTH: { name: "GROWTH", limit: 400, monthlyPrice: 590_000 },
   PRO: { name: "PRO", limit: 1000, monthlyPrice: 990_000 },
 };
 
