@@ -47,7 +47,7 @@ export default async function SalaryPage({ searchParams }: { searchParams: Promi
             {rows.map(({ u, result, rule, slip }) => (
               <Tr key={u.id} muted={!!u.archivedAt}>
                 <Td><Link href={`/salary/${u.id}?month=${month}`} className="font-medium text-zinc-900 hover:underline hover:decoration-zinc-400">{u.name}</Link>{u.archivedAt && <> <Badge>{t("settings.archived")}</Badge></>}</Td>
-                <Td className="text-xs">{rule ? `${t(`salary.${rule.model}`)}${rule.percent ? ` · ${rule.percent}%` : ""}` : <span className="text-amber-700">{t("salary.noRule")}</span>}</Td>
+                <Td className="text-xs">{rule ? `${t(`salary.${rule.model}`)}${rule.percent ? ` · ${rule.percent}%` : ""}` : <Link href={`/salary/${u.id}?month=${month}&rule=new`} className="text-amber-700 underline decoration-amber-300 underline-offset-2 hover:decoration-amber-700">{t("salary.noRule")} · {t("salary.setRule")}</Link>}</Td>
                 <Td className="text-right">{result.lessonsHeld}</Td>
                 <Td className="whitespace-nowrap text-right font-medium">{formatMoney(result.total)}</Td>
                 <Td><Badge tone={slip?.status === "PAID" ? "green" : slip?.status === "LOCKED" ? "blue" : "gray"}>{t(`payslip.${slip?.status ?? "DRAFT"}`)}</Badge></Td>

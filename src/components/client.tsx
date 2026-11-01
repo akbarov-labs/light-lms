@@ -173,8 +173,16 @@ export function CloseLabelProvider({ value, children }: { value: string; childre
 }
 
 /** Button that opens a native <dialog>. Content is mounted only while open. */
-export function Modal({ label, title, children, variant = "primary", size = "md", wide, icon, ariaLabel }: { label: ReactNode; title: ReactNode; children: ReactNode; variant?: ButtonVariant; size?: "sm" | "md"; wide?: boolean; icon?: ReactNode; ariaLabel?: string }) {
+export function Modal({ label, title, children, variant = "primary", size = "md", wide, icon, ariaLabel, defaultOpen }: { label: ReactNode; title: ReactNode; children: ReactNode; variant?: ButtonVariant; size?: "sm" | "md"; wide?: boolean; icon?: ReactNode; ariaLabel?: string; defaultOpen?: boolean }) {
   const d = useDialog();
+  // open on arrival, for links that lead straight to a form (e.g. "set a salary rule" from the salary list)
+  const opened = useRef(false);
+  useEffect(() => {
+    if (defaultOpen && !opened.current) {
+      opened.current = true;
+      d.show();
+    }
+  }, [defaultOpen, d]);
   const closeLabel = useContext(CloseLabel);
   return (
     <>

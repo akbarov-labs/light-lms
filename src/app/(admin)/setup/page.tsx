@@ -11,6 +11,8 @@ import { Card, cx, LinkButton, PageHeader } from "@/components/ui";
 import { Field, FormGrid, Input, Select } from "@/components/fields";
 import { ActionForm, SubmitButton } from "@/components/client";
 import { PricingFields } from "../courses/pricing-fields";
+import { SalaryRuleFields } from "../salary/rule-fields";
+import { salaryRuleLabels } from "../salary/rule-labels";
 import { dismissSetupAction, setupBranchAction, setupCourseAction, setupGroupAction, setupTeacherAction, skipStepAction } from "./actions";
 import { RoomsEditor, ScheduleFields } from "./wizard-fields";
 import { appUrl as envAppUrl } from "@/lib/env";
@@ -281,6 +283,16 @@ async function TeacherStep({ ctx, o }: { ctx: Ctx; o: Onboarding }) {
           <Field label={t("common.phone")}><Input name="phone" type="tel" inputMode="tel" required placeholder="90 123 45 67" autoComplete="off" /></Field>
           <Field label={t("setup.tempPassword")} hint={t("setup.tempPasswordHint")}><Input name="password" required minLength={MIN_PASSWORD} defaultValue={newTempPassword()} autoComplete="off" spellCheck={false} /></Field>
         </FormGrid>
+        {ctx.can("finance.view") && (
+          // the divider sits on a wrapper: a <legend> on a bordered fieldset is drawn across the line
+          <div className="border-t border-zinc-100 pt-4">
+            <fieldset className="space-y-3">
+              <legend className="mb-1 text-sm font-medium text-zinc-900">{t("setup.teacherSalary")}</legend>
+              <p className="text-xs text-zinc-500">{t("setup.teacherSalaryHint")}</p>
+              <SalaryRuleFields labels={salaryRuleLabels(t)} />
+            </fieldset>
+          </div>
+        )}
         {group && group.teacherId === ctx.userId && (
           <label className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-700">
             <input type="checkbox" name="assignGroupId" value={group.id} defaultChecked className="mt-0.5 h-4 w-4 shrink-0 rounded-sm border-zinc-300 accent-[rgb(var(--accent))]" />

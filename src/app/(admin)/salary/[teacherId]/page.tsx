@@ -8,18 +8,22 @@ import { formatMoney } from "@/lib/money";
 import { liveSalary } from "@/lib/salary/service";
 import type { SalaryResult } from "@/lib/salary/engine";
 import { Badge, Card, LinkButton, PageHeader, Stat, Table, Td, Th, Tr } from "@/components/ui";
-import { Field, FormGrid, Input, Select } from "@/components/fields";
+import { Field, Input } from "@/components/fields";
 import { ActionForm, Modal, ModalForm, SubmitButton } from "@/components/client";
 import { SalaryBreakdown } from "@/components/salary-view";
 import { adjustmentAction, payslipAction, saveRuleAction } from "../actions";
 import { RuleDateField } from "../rule-date-field";
+import { SalaryRuleFields } from "../rule-fields";
+import { salaryRuleLabels } from "../rule-labels";
 
-export default async function TeacherSalaryPage({ params, searchParams }: { params: Promise<{ teacherId: string }>; searchParams: Promise<{ month?: string }> }) {
+export default async function TeacherSalaryPage({ params, searchParams }: { params: Promise<{ teacherId: string }>; searchParams: Promise<{ month?: string; rule?: string }> }) {
   const { teacherId } = await params;
   const sp = await searchParams;
   const ctx = await requireStaff("finance.view");
   const { t } = ctx;
   const month = monthParam(sp.month);
+  // "?rule=new": arriving from a "set a rule" link, so the form opens by itself (until a rule exists, so a reload after saving does not reopen it)
+  const openRule = sp.rule === "new";
   const teacher = await db.user.findFirst({ where: { id: teacherId, centerId: ctx.centerId }, include: { branches: true } });
   if (!teacher || (ctx.branchIds && !teacher.branches.some((b) => ctx.branchIds!.includes(b.branchId)))) notFound();
   const [{ result, lessons }, rules, slip] = await Promise.all([
@@ -74,20 +78,12 @@ export default async function TeacherSalaryPage({ params, searchParams }: { para
           <Card
             title={t("salary.rule")}
             actions={
-              <Modal label={t("salary.newRule")} title={t("salary.newRule")} variant="secondary" size="sm">
+              <Modal label={t("salary.newRule")} title={t("salary.newRule")} variant={rules.length === 0 ? "primary" : "secondary"} size="sm" defaultOpen={openRule && rules.length === 0}>
                 <ModalForm action={saveRuleAction} className="space-y-3">
                   <input type="hidden" name="teacherId" value={teacherId} />
-                  <Field label={t("salary.model")}>
-                    <Select name="model" defaultValue={rules[0]?.model ?? "PERCENT_EARNED"}>
-                      {(["PERCENT_EARNED", "FIXED", "PER_LESSON", "BASE_PLUS_PERCENT"] as const).map((m) => <option key={m} value={m}>{t(`salary.${m}`)}</option>)}
-                    </Select>
-                  </Field>
-                  <FormGrid>
-                    <Field label={t("salary.percent")}><Input name="percent" type="number" min={0} max={100} defaultValue={rules[0]?.percent ?? 40} /></Field>
-                    <Field label={t("salary.fixedAmount")}><Input name="fixedAmount" inputMode="numeric" defaultValue={rules[0]?.fixedAmount ?? ""} /></Field>
-                    <Field label={t("salary.perLesson")}><Input name="perLesson" inputMode="numeric" defaultValue={rules[0]?.perLesson ?? ""} /></Field>
+                  <SalaryRuleFields labels={salaryRuleLabels(t)} defaults={rules[0]}>
                     <Field label={t("salary.validFrom")}><RuleDateField defaultValue={monthRange(month).start} warning={t("money.ruleMidMonth", { date: "{date}" })} /></Field>
-                  </FormGrid>
+                  </SalaryRuleFields>
                   <SubmitButton>{t("common.save")}</SubmitButton>
                 </ModalForm>
               </Modal>

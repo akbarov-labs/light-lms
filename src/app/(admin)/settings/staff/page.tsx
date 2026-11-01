@@ -91,6 +91,9 @@ export default async function StaffPage() {
               <Td className="whitespace-nowrap text-right">
                 {(ctx.role === "OWNER" || (u.role !== "OWNER" && u.role !== "MANAGER" && staffInScope(ctx, u.branches.map((b) => b.branchId)))) && (
                   <div className="flex items-center justify-end gap-1">
+                    {(u.role === "TEACHER" || u.isTeacher) && !u.archivedAt && ctx.can("finance.view") && (
+                      <LinkButton href={`/salary/${u.id}`} variant="ghost" size="sm">{t("settings.salaryLink")}</LinkButton>
+                    )}
                     <Modal label={t("common.edit")} title={u.name} variant="secondary" size="sm" wide>
                       <StaffForm ctx={ctx} branches={branches} user={u} />
                     </Modal>

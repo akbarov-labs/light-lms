@@ -11,14 +11,16 @@ import { runAction, type ActionState } from "@/lib/action";
 import { actionCtx } from "@/lib/ctx";
 import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { formList, formObject, zDate, zMoney, zOptInt, zOptStr, zPhone, zStr, zTime } from "@/lib/forms";
+import { formList, formObject, zDate, zMoney, zOptInt, zOptMoney, zOptStr, zPhone, zStr, zTime } from "@/lib/forms";
 import { UserError } from "@/lib/user-error";
 import { assertNotDemo } from "@/lib/demo-guard";
-import { fromISODate, todayISO } from "@/lib/dates";
+import { fromISODate, monthRange, todayISO } from "@/lib/dates";
 import { validSlot, type WeeklySlot } from "@/lib/schedule";
 import { assertNoGroupClash, generateLessons } from "@/lib/services/lessons";
 import { BCRYPT_ROUNDS } from "@/lib/auth/password";
 import { MIN_PASSWORD } from "@/lib/auth/security";
+import { normalizeRule } from "@/lib/salary/models";
+import { createSalaryRule } from "@/lib/salary/service";
 import { dismiss, isSetupStep, markStep, readOnboarding, type Onboarding } from "@/lib/onboarding";
 
 async function updateProgress(tx: Tx, centerId: string, fn: (o: Onboarding) => Onboarding): Promise<void> {
@@ -157,7 +159,17 @@ export async function setupGroupAction(_: ActionState, fd: FormData): Promise<Ac
 
 // ---------------------------------------------------------------- 4. teacher
 
-const teacherSchema = z.object({ name: zStr, phone: zPhone, password: z.string().min(MIN_PASSWORD).max(200), assignGroupId: zOptStr });
+const teacherSchema = z.object({
+  name: zStr,
+  phone: zPhone,
+  password: z.string().min(MIN_PASSWORD).max(200),
+  assignGroupId: zOptStr,
+  // how the teacher is paid, asked here so a new teacher never silently earns 0 (DECISIONS 2026-11-01)
+  model: z.enum(["PERCENT_EARNED", "FIXED", "PER_LESSON", "BASE_PLUS_PERCENT"]).optional(),
+  percent: zOptInt(0, 100),
+  fixedAmount: zOptMoney,
+  perLesson: zOptMoney,
+});
 
 export async function setupTeacherAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return step(async (ctx) => {
@@ -188,6 +200,10 @@ export async function setupTeacherAction(_: ActionState, fd: FormData): Promise<
           await tx.group.update({ where: { id: group.id }, data: { teacherId: u.id } });
           await tx.lesson.updateMany({ where: { groupId: group.id, date: { gte: today }, status: "SCHEDULED", teacherId: group.teacherId }, data: { teacherId: u.id } });
           await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Group", entityId: group.id, action: "update", before: { teacherId: group.teacherId }, after: { teacherId: u.id } });
+        }
+        // from the 1st of this month, so this month's lessons already count
+        if (f.model && ctx.can("finance.view")) {
+          await createSalaryRule(tx, { userId: ctx.userId, centerId: ctx.centerId }, u.id, { ...normalizeRule(f.model, f), validFrom: monthRange(todayISO().slice(0, 7)).start });
         }
         await updateProgress(tx, ctx.centerId, (o) => markStep(o, "teacher", "done", new Date(), { teacherId: u.id }));
       },

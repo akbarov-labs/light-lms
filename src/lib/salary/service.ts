@@ -158,10 +158,13 @@ export async function addAdjustment(actor: Actor, teacherId: string, month: stri
 
 export async function setSalaryRule(actor: Actor, teacherId: string, rule: SalaryRule & { validFrom: string }) {
   await assertTeacher(actor, teacherId);
-  await db.$transaction(async (tx) => {
-    const r = await tx.salaryRule.create({
-      data: { teacherId, model: rule.model, percent: rule.percent, fixedAmount: rule.fixedAmount, perLesson: rule.perLesson, validFrom: fromISODate(rule.validFrom) },
-    });
-    await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "SalaryRule", entityId: r.id, action: "create", after: r });
+  await db.$transaction((tx) => createSalaryRule(tx, actor, teacherId, rule));
+}
+
+/** Inside a caller's transaction, for a teacher the caller has already checked (e.g. one it just created). */
+export async function createSalaryRule(tx: Tx, actor: Actor, teacherId: string, rule: SalaryRule & { validFrom: string }) {
+  const r = await tx.salaryRule.create({
+    data: { teacherId, model: rule.model, percent: rule.percent, fixedAmount: rule.fixedAmount, perLesson: rule.perLesson, validFrom: fromISODate(rule.validFrom) },
   });
+  await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "SalaryRule", entityId: r.id, action: "create", after: r });
 }

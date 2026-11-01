@@ -3,7 +3,7 @@ import { FakeLedger, scenario, withStatus } from "@/lib/billing/testkit";
 import { allocate, type AllocEntry } from "@/lib/billing/allocation";
 import { computeExpected } from "@/lib/billing/engine";
 import type { BillingInput } from "@/lib/billing/types";
-import { collectLessons, computeSalary, pickExpenseBranch, type LessonRow, type SalaryRule } from "./engine";
+import { collectLessons, computeSalary, normalizeRule, pickExpenseBranch, type LessonRow, type SalaryRule } from "./engine";
 
 // One group, Mon/Wed/Fri, October 2026 = 13 lessons; two students at 600 000/month (46 153.8 per lesson each).
 function setup(opts: { trialSecond?: boolean; asOf?: string } = {}) {
@@ -193,5 +193,16 @@ describe("salary", () => {
     const changed = lessons.map((l) => (l.date === "2026-10-05" ? { ...l, status: "CANCELLED" as const } : l));
     const held = collectLessons({ teacherId: "T", month: "2026-10", lessons: changed, enrollmentsByGroup, payTrial: false, paidKeys: new Set() });
     expect(held).toHaveLength(2);
+  });
+});
+
+describe("salary rule form", () => {
+  it("keeps only the chosen model's amounts, missing ones as 0", () => {
+    const typed = { percent: 40, fixedAmount: 3_000_000, perLesson: 80_000 };
+    expect(normalizeRule("PERCENT_EARNED", typed)).toEqual({ model: "PERCENT_EARNED", percent: 40, fixedAmount: null, perLesson: null });
+    expect(normalizeRule("FIXED", typed)).toEqual({ model: "FIXED", percent: null, fixedAmount: 3_000_000, perLesson: null });
+    expect(normalizeRule("PER_LESSON", typed)).toEqual({ model: "PER_LESSON", percent: null, fixedAmount: null, perLesson: 80_000 });
+    expect(normalizeRule("BASE_PLUS_PERCENT", typed)).toEqual({ model: "BASE_PLUS_PERCENT", percent: 40, fixedAmount: 3_000_000, perLesson: null });
+    expect(normalizeRule("BASE_PLUS_PERCENT", {})).toEqual({ model: "BASE_PLUS_PERCENT", percent: 0, fixedAmount: 0, perLesson: null });
   });
 });

@@ -7,6 +7,7 @@ import { formObject, zDate, zId, zMonth, zOptInt, zOptMoney, zStr } from "@/lib/
 import { UserError } from "@/lib/user-error";
 import { parseMoney } from "@/lib/money";
 import { addAdjustment, lockPayslip, markPayslipPaid, setSalaryRule, unlockPayslip } from "@/lib/salary/service";
+import { normalizeRule } from "@/lib/salary/engine";
 import { assertTeacherAccess, type Ctx } from "@/lib/ctx";
 
 const actor = (ctx: Ctx) => ({ userId: ctx.userId, centerId: ctx.centerId });
@@ -17,13 +18,7 @@ export async function saveRuleAction(_: ActionState, fd: FormData): Promise<Acti
       .object({ teacherId: zId, model: z.enum(["PERCENT_EARNED", "FIXED", "PER_LESSON", "BASE_PLUS_PERCENT"]), percent: zOptInt(0, 100), fixedAmount: zOptMoney, perLesson: zOptMoney, validFrom: zDate })
       .parse(formObject(fd));
     await assertTeacherAccess(ctx, f.teacherId);
-    await setSalaryRule(actor(ctx), f.teacherId, {
-      model: f.model,
-      percent: f.model === "PERCENT_EARNED" || f.model === "BASE_PLUS_PERCENT" ? (f.percent ?? 0) : null,
-      fixedAmount: f.model === "FIXED" || f.model === "BASE_PLUS_PERCENT" ? (f.fixedAmount ?? 0) : null,
-      perLesson: f.model === "PER_LESSON" ? (f.perLesson ?? 0) : null,
-      validFrom: f.validFrom,
-    });
+    await setSalaryRule(actor(ctx), f.teacherId, { ...normalizeRule(f.model, f), validFrom: f.validFrom });
     revalidatePath(`/salary/${f.teacherId}`);
   });
 }

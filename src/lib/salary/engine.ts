@@ -2,8 +2,10 @@
 import { monthRange, type ISODate } from "@/lib/dates";
 import { lessonValue } from "@/lib/billing/engine";
 import type { BillingInput } from "@/lib/billing/types";
+import type { SalaryModel } from "./models";
 
-export type SalaryModel = "PERCENT_EARNED" | "FIXED" | "PER_LESSON" | "BASE_PLUS_PERCENT";
+export type { SalaryModel } from "./models";
+export { normalizeRule } from "./models";
 
 export interface SalaryRule {
   model: SalaryModel;
