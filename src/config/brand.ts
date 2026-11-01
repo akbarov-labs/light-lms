@@ -5,13 +5,13 @@ import { demoUrl, isDemoMode, mainSiteUrl } from "@/lib/env";
 
 export const BRAND = {
   /** Product name shown in titles, the landing page, receipts' footer and legal texts. */
-  name: "lms-light",
+  name: "Sabaq",
   /** Short line under the name in the landing header and footer. */
   tagline: { uz: "O'quv markazlari uchun CRM", ru: "CRM для учебных центров" },
   contact: {
     /** e.g. "998901234567" — shown formatted, used for tel: links. */
     phone: "",
-    /** Telegram username without @, e.g. "lmslight_support". */
+    /** Telegram username without @, e.g. "sabaq_support". */
     telegram: "",
     email: "",
   },
@@ -46,4 +46,10 @@ export function demoHref(): string | null {
 export function signupHref(): string {
   const site = mainSiteUrl();
   return site ? `${site}/signup` : "/signup";
+}
+
+/** A demo server with no main site to send signups to: /signup shows the contacts instead of the form,
+ * so no real center is created in a database that is wiped every night. */
+export function signupClosed(): boolean {
+  return demoMode() && !mainSiteUrl();
 }

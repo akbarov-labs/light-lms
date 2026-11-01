@@ -17,7 +17,7 @@ import { issueSession } from "@/lib/auth/session-cookie";
 import { fromISODate, todayISO } from "@/lib/dates";
 import { uzPublicHolidays } from "@/lib/holidays";
 import { looksLikeBot, slugify, uniqueSlug } from "@/lib/signup-rules";
-import { BRAND } from "@/config/brand";
+import { BRAND, signupClosed } from "@/config/brand";
 
 /** `values` refill the form after an error (React resets forms once an action finishes); never the password. */
 export type SignupState = { error?: string; at?: number; values?: { centerName: string; ownerName: string; phone: string; locale: string } } | null;
@@ -31,6 +31,8 @@ export async function signupAction(_: SignupState, fd: FormData): Promise<Signup
   const cookieLang = jar.get(LANG_COOKIE)?.value;
   const locale: Locale = isLocale(pick) ? pick : isLocale(cookieLang) ? cookieLang : "uz";
   const t = makeT(locale);
+  // the page shows contacts instead of the form there; this stops a direct POST too
+  if (signupClosed()) return { error: t("signup.closedBody"), at: Date.now() };
   const now = new Date();
   const ip = clientIp(await headers());
   const values = { centerName: str(fd, "centerName").slice(0, 120), ownerName: str(fd, "ownerName").slice(0, 120), phone: str(fd, "phone").slice(0, 30), locale };

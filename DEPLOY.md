@@ -170,6 +170,15 @@ Har bir konteyner logi 10 MB × 5 fayl bilan cheklangan (disk to'lib qolmaydi).
 - Qo'shimcha (ixtiyoriy): bepul tashqi tekshiruv (masalan, UptimeRobot) `https://<domen>/api/health` manzilini har 5 daqiqada tekshirsin — server butunlay o'chsa ham bilasiz.
 - Worker'ning o'z tekshiruvi bor: har 30 soniyada "yurak urishi" fayli yangilanadi; 2 daqiqadan eski bo'lsa `docker compose ps` da worker `unhealthy` ko'rinadi. Worker ishlar ustma-ust tushmaydi (ikkinchi nusxa yoki qo'lda ishga tushirilgan ish o'tkazib yuboriladi).
 
+## 11c. Bizning demo: sabaq.akbarovlabs.uz
+
+Sabaq demosi akbarov-labs umumiy serverida (Contabo, chet elda) turadi — faqat namunaviy ma'lumot, har kecha tozalanadi. **Haqiqiy markazlar bu serverga qo'yilmaydi** (§0): ular uchun O'zbekistondagi VPS va shu hujjatdagi oddiy o'rnatish.
+
+- Fayllar: `deploy/server/docker-compose.prod.yml` (demo, `/opt/apps/sabaq`) va `docker-compose.staging.yml` (`/opt/apps/sabaq-staging`, parol bilan, `sabaq.staging.sarvarlogs.uz`). Ikkalasi serverda root'niki; CI faqat image tegini aytadi.
+- `main`'ga har push → tekshiruv (lint, typecheck, testlar) → 3 ta image (`ghcr.io/akbarov-labs/light-lms/{web,worker,tools}`) → staging. Demoga: Actions → **Promote to production** → Run workflow.
+- Demo serverda `MAIN_SITE_URL` bo'sh: `/signup` forma o'rniga `brand.ts` dagi aloqa ma'lumotlarini ko'rsatadi, ro'yxatdan o'tish yopiq.
+- Serverga birinchi marta qo'shish — Reads reposidagi `docs/add-app.md`: `deploy/prepare-app sabaq ~/dev/sites/light-lms/deploy/server`, so'ng serverda `sudo add-app --images "web worker tools" --up-flags "--remove-orphans" sabaq ghcr.io/akbarov-labs/light-lms <.env bor papka>`.
+
 ## 12. Muammolar
 
 - **Sertifikat olinmadi**: DNS A yozuvini, 80/443 portlar ochiqligini tekshiring; `logs caddy`.
@@ -308,3 +317,12 @@ docker image prune -f
 - You then get a Telegram message for server errors, failed nightly jobs, a worker crash, and **at 09:00 daily if the newest backup is older than 26 hours**. The same alert repeats at most every 10 minutes.
 - Optional: a free external check (e.g. UptimeRobot) on `https://<domain>/api/health` every 5 minutes tells you when the whole server is down.
 - The worker has its own health signal: a heartbeat file touched every 30 s; older than 2 minutes → `docker compose ps` shows the worker `unhealthy`. Jobs never overlap (a second replica or a manual run while the job is running is skipped).
+
+## 15. Our demo: sabaq.akbarovlabs.uz
+
+Sabaq's public demo runs on the shared akbarov-labs server (Contabo, abroad): sample data only, wiped every night. **Real centers never go on that server** (§0): they get a VPS in Uzbekistan with the plain setup above.
+
+- Files: `deploy/server/docker-compose.prod.yml` (the demo, `/opt/apps/sabaq`) and `docker-compose.staging.yml` (`/opt/apps/sabaq-staging`, password protected, `sabaq.staging.sarvarlogs.uz`). Both are root-owned on the server; CI only names the image tag.
+- Every push to `main` → checks (lint, typecheck, unit tests) → three images (`ghcr.io/akbarov-labs/light-lms/{web,worker,tools}`) → staging. To the demo: Actions → **Promote to production** → Run workflow.
+- The demo has no `MAIN_SITE_URL`, so `/signup` shows the contacts from `brand.ts` instead of the form and signing up is closed.
+- Adding it to the server the first time follows `docs/add-app.md` in the Reads repo: `deploy/prepare-app sabaq ~/dev/sites/light-lms/deploy/server`, then on the server `sudo add-app --images "web worker tools" --up-flags "--remove-orphans" sabaq ghcr.io/akbarov-labs/light-lms <folder with the .env>`.

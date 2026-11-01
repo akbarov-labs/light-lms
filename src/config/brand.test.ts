@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { demoHref, demoMode, signupHref } from "./brand";
+import { demoHref, demoMode, signupClosed, signupHref } from "./brand";
 import { assertNotDemo } from "@/lib/demo-guard";
 import { UserError } from "@/lib/user-error";
 
@@ -36,6 +36,16 @@ describe("demo switches", () => {
     expect(signupHref()).toBe("/signup");
     process.env.MAIN_SITE_URL = "https://crm.example.uz/";
     expect(signupHref()).toBe("https://crm.example.uz/signup");
+  });
+
+  it("signup is closed only on a demo server with no main site", () => {
+    delete process.env.DEMO_MODE;
+    delete process.env.MAIN_SITE_URL;
+    expect(signupClosed()).toBe(false);
+    process.env.DEMO_MODE = "true";
+    expect(signupClosed()).toBe(true);
+    process.env.MAIN_SITE_URL = "https://crm.example.uz";
+    expect(signupClosed()).toBe(false);
   });
 
   it("guarded actions throw a translated error only in demo mode", () => {

@@ -1,0 +1,97 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Build once, then promote: every push to main is checked, becomes one set of images (web, worker, tools)
+# and goes to staging automatically. The public demo gets that exact set only when someone runs
+# promote.yml ("Promote to production") by hand: this repository is private, and GitHub's free plan offers
+# no Required reviewers for it.
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/light-lms
+
+jobs:
+  checks:
+    name: lint + typecheck + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  build:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Three targets of one Dockerfile sharing the deps and source stages. Built one after another in one
+      # job so BuildKit reuses those stages instead of running npm ci three times.
+      - name: Build and push web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: web
+          push: true
+          tags: |
+            ${{ env.IMAGE }}/web:latest
+            ${{ env.IMAGE }}/web:${{ github.sha }}
+          cache-from: type=gha,scope=lms
+          cache-to: type=gha,scope=lms,mode=max
+
+      - name: Build and push worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: worker
+          push: true
+          tags: |
+            ${{ env.IMAGE }}/worker:latest
+            ${{ env.IMAGE }}/worker:${{ github.sha }}
+          cache-from: type=gha,scope=lms
+          cache-to: type=gha,scope=lms,mode=max
+
+      - name: Build and push tools (migrations, seed, scripts)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: tools
+          push: true
+          tags: |
+            ${{ env.IMAGE }}/tools:latest
+            ${{ env.IMAGE }}/tools:${{ github.sha }}
+          cache-from: type=gha,scope=lms
+          cache-to: type=gha,scope=lms,mode=max
+
+  deploy-staging:
+    needs: build
+    uses: ./.github/workflows/deploy-to.yml
+    permissions:
+      packages: read
+    with:
+      environment: staging
+      image_tag: ${{ github.sha }}
+    secrets: inherit

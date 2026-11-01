@@ -1,0 +1,118 @@
+# Staging copy of docker-compose.prod.yml for the same server, at /opt/apps/sabaq-staging (set up by `sudo add-app`).
+# Every push to main lands here first; the demo gets that exact image only via "Promote to production".
+# What differs: its own folder (so its own compose project and database), a password prompt (user `staging`),
+# noindex, SMS never really sent, no backup service, and the demo center seeded into its empty database.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://lms:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@lms-db:5432/lms?schema=public
+  AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env (openssl rand -base64 32)}
+  APP_URL: https://${DOMAIN:?set DOMAIN in .env, e.g. sabaq.staging.sarvarlogs.uz}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  # staging never sends a real SMS, whatever .env says
+  SMS_DRY_RUN: "true"
+  SEED_DEMO: ${SEED_DEMO:-true}
+  DEMO_MODE: ${DEMO_MODE:-false}
+  DEMO_URL: ${DEMO_URL:-}
+  MAIN_SITE_URL: ${MAIN_SITE_URL:-}
+  OPS_TELEGRAM_CHAT_ID: ${OPS_TELEGRAM_CHAT_ID:-}
+  TZ: Asia/Tashkent
+  DB_POOL_TIMEOUT_MS: ${DB_POOL_TIMEOUT_MS:-15000}
+
+x-worker-healthcheck: &worker-healthcheck
+  test: ["CMD", "node", "-e", "process.exit(Date.now() - require('fs').statSync('/tmp/worker-heartbeat').mtimeMs < 120000 ? 0 : 1)"]
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 60s
+
+networks:
+  default: {}
+  edge:
+    external: true
+
+services:
+  db:
+    image: postgres:16.14-alpine
+    environment:
+      POSTGRES_USER: lms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: lms
+      TZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      default:
+        aliases: [lms-db]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lms -d lms"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 384m
+    restart: unless-stopped
+    logging: *logging
+
+  migrate:
+    image: ${IMAGE:-ghcr.io/akbarov-labs/light-lms}/tools:${IMAGE_TAG:-latest}
+    environment: *app-env
+    command: ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed-if-empty.ts"]
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 768m
+    restart: "no"
+    logging: *logging
+
+  web:
+    image: ${IMAGE:-ghcr.io/akbarov-labs/light-lms}/web:${IMAGE_TAG:-latest}
+    environment:
+      <<: *app-env
+      TRUST_PROXY: "true"
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+    init: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      default: {}
+      edge: {}
+    labels:
+      caddy: ${DOMAIN:?set DOMAIN in .env, e.g. sabaq.staging.sarvarlogs.uz}
+      # Username "staging"; add-app replaces the placeholder with the hash of the password it asks for.
+      caddy.basic_auth.staging: STAGING_AUTH_HASH
+      caddy.header: X-Robots-Tag "noindex, nofollow"
+      caddy.encode: zstd gzip
+      caddy.request_body.max_size: 10MB
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    mem_limit: 768m
+    restart: unless-stopped
+    logging: *logging
+
+  worker:
+    image: ${IMAGE:-ghcr.io/akbarov-labs/light-lms}/worker:${IMAGE_TAG:-latest}
+    environment:
+      <<: *app-env
+      DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-5}
+    init: true
+    stop_grace_period: 20s
+    healthcheck: *worker-healthcheck
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 384m
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  pgdata:
