@@ -705,6 +705,7 @@ export const ru: Record<DictKey, string> = {
   "demo.blocked": "В демо-режиме это действие отключено.",
   "demo.banner": "Демо-режим: это тестовый центр, данные восстанавливаются каждую ночь.",
   "demo.create": "Создайте свой центр",
+  "demo.exit": "Выйти из демо",
   "demo.enter": "Войти в демо-центр без пароля",
   "legal.consent": "Я ознакомился и согласен с {offer} и {privacy}",
   "legal.offer": "Публичной офертой",

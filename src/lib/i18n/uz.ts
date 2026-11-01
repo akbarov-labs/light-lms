@@ -704,6 +704,7 @@ export const uz = {
   "demo.blocked": "Demo rejimida bu amal o'chirilgan.",
   "demo.banner": "Demo rejimi: bu sinov markazi, ma'lumotlar har kecha qayta tiklanadi.",
   "demo.create": "O'z markazingizni yarating",
+  "demo.exit": "Demodan chiqish",
   "demo.enter": "Demo markazga parolsiz kirish",
   "legal.consent": "{offer} va {privacy} bilan tanishdim va roziman",
   "legal.offer": "Ommaviy oferta",

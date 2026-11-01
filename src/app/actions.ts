@@ -7,6 +7,7 @@ import { BRANCH_COOKIE, getCtx } from "@/lib/ctx";
 import { isLocale, LANG_COOKIE } from "@/lib/i18n";
 import { SESSION_COOKIE } from "@/lib/session";
 import { db } from "@/lib/db";
+import { demoMode } from "@/config/brand";
 
 const YEAR = 60 * 60 * 24 * 365;
 
@@ -32,5 +33,6 @@ export async function logoutAction() {
   const jar = await cookies();
   jar.delete(SESSION_COOKIE);
   jar.delete(BRANCH_COOKIE);
-  redirect("/login");
+  // a demo visitor has no login of their own: leaving the demo goes back to the product site
+  redirect(demoMode() ? "/" : "/login");
 }

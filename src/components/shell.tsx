@@ -7,7 +7,7 @@ import type { Perm } from "@/lib/perms";
 import { db } from "@/lib/db";
 import { accentVars } from "@/lib/color";
 import { demoMode, signupHref } from "@/config/brand";
-import { setBranchAction } from "@/app/actions";
+import { logoutAction, setBranchAction } from "@/app/actions";
 import { AutoSubmitSelect, CloseLabelProvider, SavedLabelProvider, Toaster } from "./client";
 import { CommandPalette, QuickPayButton, SearchTrigger } from "./command-palette";
 import { MobileNav, NavLink, UserMenu } from "./nav-link";
@@ -152,6 +152,10 @@ export async function AdminShell({ ctx, children }: { ctx: Ctx; children: ReactN
                 <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-zinc-900 px-4 py-2 text-center text-[13px] text-zinc-300 print:hidden">
                   <span>{t("demo.banner")}</span>
                   <a href={signupHref()} className="font-medium text-white underline decoration-zinc-500 underline-offset-4 hover:decoration-white">{t("demo.create")}</a>
+                  {/* the demo signs visitors in, so without this "/" shows the dashboard and the product site is unreachable */}
+                  <form action={logoutAction}>
+                    <button type="submit" className="font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-4 hover:text-white hover:decoration-white">{t("demo.exit")}</button>
+                  </form>
                 </div>
               )}
               <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line bg-white/90 px-3 backdrop-blur-md sm:gap-3 sm:px-6 print:hidden">
