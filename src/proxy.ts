@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
 import { buildCsp, securityHeaders, TELEGRAM_FRAME_ANCESTORS } from "@/lib/auth/headers";
-import { rawAppUrl } from "@/lib/env";
+import { isDemoMode, rawAppUrl } from "@/lib/env";
 
 const PUBLIC = [/^\/login/, /^\/signup/, /^\/welcome/, /^\/legal\//, /^\/demo$/, /^\/f\//, /^\/pay\//, /^\/api\/payme/, /^\/api\/click\//, /^\/api\/uzum\//, /^\/api\/tg\//, /^\/tg(\/|$)/, /^\/rc\//, /^\/v(\/|$)/, /^\/api\/health/, /^\/_next\//, /^\/favicon/];
 
@@ -26,18 +26,28 @@ export async function proxy(req: NextRequest) {
     return res;
   };
 
+  const landing = () => {
+    const url = req.nextUrl.clone();
+    url.pathname = "/welcome";
+    const h = new Headers(req.headers);
+    h.set("x-nonce", nonce);
+    h.set("content-security-policy", csp);
+    return withHeaders(NextResponse.rewrite(url, { request: { headers: h } }));
+  };
+
   if (PUBLIC.some((r) => r.test(pathname))) return pass();
+  // Public demo: /demo signs every visitor in, and "/" is also the dashboard, so the product site would be
+  // gone after one look. Arriving from outside (typed address, bookmark, a Telegram link: Sec-Fetch-Site
+  // none / cross-site) shows the product site; clicks inside the app, and /demo's own redirect (?demo),
+  // open the dashboard.
+  if (pathname === "/" && isDemoMode() && !req.nextUrl.searchParams.has("demo")) {
+    const site = req.headers.get("sec-fetch-site");
+    if (site === "none" || site === "cross-site") return landing();
+  }
   const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) {
     // visitors without a session see the product site at the root; staff see their dashboard
-    if (pathname === "/") {
-      const url = req.nextUrl.clone();
-      url.pathname = "/welcome";
-      const h = new Headers(req.headers);
-      h.set("x-nonce", nonce);
-      h.set("content-security-policy", csp);
-      return withHeaders(NextResponse.rewrite(url, { request: { headers: h } }));
-    }
+    if (pathname === "/") return landing();
     if (pathname.startsWith("/api/")) return withHeaders(NextResponse.json({ error: "unauthorized" }, { status: 401 }));
     const url = req.nextUrl.clone();
     url.pathname = "/login";

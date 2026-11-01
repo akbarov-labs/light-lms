@@ -17,5 +17,6 @@ export async function GET() {
   });
   if (!owner) return go("/login");
   await issueSession({ sub: owner.id, cid: owner.centerId });
-  return go("/");
+  // ?demo: the proxy opens the dashboard here even when the visitor came from outside (see proxy.ts)
+  return go("/?demo");
 }
