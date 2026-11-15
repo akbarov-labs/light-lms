@@ -15,6 +15,14 @@ npm run 01
 API kalit: console.anthropic.com → API Keys → Create Key. Hisobga ozgina kredit
 kerak bo'ladi (5 dollar o'rganish uchun bemalol yetadi). Har bir suhbat qancha turganini `/narx` buyrug'i ko'rsatadi.
 
+Standart model eng arzoni, **Claude Haiku 5.5**: bitta xabar taxminan $0.0003, to'liq suhbat
+1 sentdan kam. Kuchliroq modellar bilan solishtirish uchun:
+
+```bash
+MODEL=claude-sonnet-5-5 npm run 01   # ~20 baravar qimmat
+MODEL=claude-opus-5-5 npm run 01     # ~40 baravar qimmat
+```
+
 ## 01-raw-loop.ts — qo'lda yozilgan agent sikli
 
 Matematika markaziga yangi mijoz yozadi. Agent darajasini aniqlaydi, guruh topadi,
@@ -48,6 +56,9 @@ Buyruqlar: `/xotira` (model har safar ko'radigan massiv), `/baza` (vositalar nim
    Agent tartibni buzadimi? Kod (`book_trial` ichidagi tekshiruv) uni baribir to'xtatadimi?
 7. **Rus tilida** yozib ko'ring.
 8. **Effort.** `effort: "medium"` ni `"low"` ga o'zgartiring: tezlik, narx va sifat qanday o'zgaradi?
+9. **Model solishtirish.** Bir xil suhbatni Haiku va Sonnet'da o'tkazing. O'zbek tili, daraja
+   aniqlash va o'qituvchiga yozilgan xabar sifatini solishtiring. Farq narx farqiga arziydimi?
+   Bu savolga javob topish "evals" deyiladi va 2-bosqichda uni tizimli qilamiz.
 
 Har tajribadan keyin bitta savolga javob bering: **bu xatti-harakatni prompt
 boshqaryaptimi yoki kod?** Bu loyihadagi eng muhim savol: xavfsizlik va pul

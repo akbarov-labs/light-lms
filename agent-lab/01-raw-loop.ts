@@ -224,7 +224,24 @@ Qoidalar:
 // 5. AGENT SIKLI: butun "sehr" shu funksiyada
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MODEL = "claude-opus-5-5";
+// Standart: eng arzon model. Solishtirish uchun kuchliroq modelni yoqing:
+//   MODEL=claude-sonnet-5-5 npm run 01      yoki      MODEL=claude-opus-5-5 npm run 01
+const MODEL = process.env.MODEL ?? "claude-haiku-5-5";
+
+// 1 million token narxi, dollar: [kirish, chiqish]
+const PRICES: Record<string, [number, number]> = {
+  "claude-haiku-5-5": [0.1, 0.5],
+  "claude-sonnet-5-5": [2, 10],
+  "claude-opus-5-5": [4, 20],
+};
+
+// Xavfsizlik filtri so'rovni rad etsa, server uni boshqa modelda qayta ishlaydi.
+// Haiku 5.5 da bunday imkoniyat yo'q, shuning uchun faqat Sonnet va Opus uchun yoqamiz.
+const FALLBACK =
+  MODEL === "claude-haiku-5-5"
+    ? {}
+    : { betas: ["server-side-fallback-2026-07-01" as const], fallbacks: "default" as const };
+
 const MAX_STEPS = 8; // bitta xabar uchun eng ko'p qadam: agent cheksiz aylanib qolmasin
 
 // "Xotira" bu shunchaki massiv. Model hech narsani eslab qolmaydi:
@@ -246,9 +263,7 @@ async function agentTurn(userText: string): Promise<void> {
       tools: TOOLS,
       messages,
       output_config: { effort: "medium" }, // fikrlash chuqurligi: low | medium | high | xhigh | max
-      // Xavfsizlik filtri so'rovni rad etsa, server uni boshqa modelda qayta ishlaydi.
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
+      ...FALLBACK,
     });
 
     usage.calls += 1;
@@ -342,10 +357,13 @@ function showDb(): void {
 }
 
 function showUsage(): void {
-  // Narxlar: Claude Opus 5.5, 1M token uchun $4 kirish / $20 chiqish.
-  const cost = (usage.input / 1e6) * 4 + (usage.output / 1e6) * 20;
+  const price = PRICES[MODEL];
+  const cost = price ? (usage.input / 1e6) * price[0] + (usage.output / 1e6) * price[1] : NaN;
   console.log(
-    c.yellow(`\nJami: ${usage.calls} ta API chaqiruv · kirish ${usage.input} · chiqish ${usage.output} token · taxminan $${cost.toFixed(4)}`),
+    c.yellow(
+      `\nJami (${MODEL}): ${usage.calls} ta API chaqiruv · kirish ${usage.input} · chiqish ${usage.output} token · ` +
+        (price ? `taxminan $${cost.toFixed(4)}` : "narx jadvalda yo'q"),
+    ),
   );
 }
 
@@ -358,7 +376,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log(c.yellow("Matematika markazi · lead agenti (0-bosqich)"));
+  console.log(c.yellow(`Matematika markazi · lead agenti (0-bosqich) · model: ${MODEL}`));
   console.log(c.dim("Siz mijozsiz: yangi o'quvchi yoki ota-ona sifatida yozing."));
   console.log(c.dim("Buyruqlar: /xotira · /baza · /narx · /yangi · /chiqish"));
 
