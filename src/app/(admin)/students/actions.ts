@@ -11,6 +11,7 @@ import { formObject, zBool, zId, zOptDate, zOptId, zOptPhone, zOptStr, zPhone, z
 import { UserError } from "@/lib/user-error";
 import { fromISODate, todayISO } from "@/lib/dates";
 import { enrollStudent } from "@/lib/services/enrollments";
+import { createStudentWithFamily } from "@/lib/services/students";
 import { unlinkIfPhoneChanged } from "@/lib/telegram-links";
 
 const studentFields = {
@@ -42,49 +43,17 @@ export async function createStudentAction(_: ActionState, fd: FormData): Promise
     const f = createSchema.parse(formObject(fd));
     const branchId = f.branchId ?? ctx.activeBranchId ?? ctx.branchIds?.[0] ?? null;
     if (branchId) assertBranch(ctx, branchId);
-    id = await db.$transaction(async (tx) => {
-      let familyId = f.familyId ?? null;
-      if (familyId) await assertFamilyAccess(ctx, familyId);
-      // Sibling detection: a known guardian phone joins the same family (one wallet) —
-      // only a family this user may already see, so nobody gains another branch's wallet.
-      if (!familyId && f.guardianPhone) {
-        const g = await tx.guardian.findFirst({ where: { phone: f.guardianPhone, family: { centerId: ctx.centerId } } });
-        if (g && (await assertFamilyAccess(ctx, g.familyId).then(() => true, () => false))) familyId = g.familyId;
-      }
-      if (!familyId) {
-        const fam = await tx.family.create({ data: { centerId: ctx.centerId, name: `${f.lastName}lar oilasi` } });
-        familyId = fam.id;
-        const gPhone = f.guardianPhone ?? f.phone;
-        if (gPhone) {
-          await tx.guardian.create({ data: { familyId, name: f.guardianName ?? `${f.firstName} ${f.lastName}`, phone: gPhone, relation: f.guardianPhone ? (f.relation ?? null) : "self", isPrimary: true } });
-        }
-      }
-      const s = await tx.student.create({
-        data: {
-          centerId: ctx.centerId,
-          familyId,
-          branchId,
-          firstName: f.firstName,
-          lastName: f.lastName,
-          phone: f.phone ?? null,
-          birthDate: f.birthDate ? fromISODate(f.birthDate) : null,
-          gender: f.gender ?? null,
-          source: f.source ?? null,
-          tags: f.tags,
-          notes: f.notes ?? null,
-        },
-      });
-      await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Student", entityId: s.id, action: "create", after: s });
-      if (f.leadId) {
-        const lead = await tx.lead.findFirst({ where: { id: f.leadId, centerId: ctx.centerId } });
-        if (lead) {
-          await tx.lead.update({ where: { id: lead.id }, data: { studentId: s.id, stage: f.groupId ? (f.trial ? "TRIAL_BOOKED" : "ENROLLED") : lead.stage } });
-          await tx.leadNote.create({ data: { leadId: lead.id, text: `→ ${f.lastName} ${f.firstName}`, createdById: ctx.userId } });
-          await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Lead", entityId: lead.id, action: "convert", after: { studentId: s.id } });
-        }
-      }
-      return s.id;
-    });
+    if (f.familyId) await assertFamilyAccess(ctx, f.familyId);
+    id = await db.$transaction((tx) =>
+      createStudentWithFamily(
+        tx,
+        { userId: ctx.userId, centerId: ctx.centerId, actor: "USER" },
+        { ...f, branchId, leadStage: f.groupId ? (f.trial ? "TRIAL_BOOKED" : "ENROLLED") : undefined },
+        // Sibling detection: a known guardian phone joins the same family (one wallet) —
+        // only a family this user may already see, so nobody gains another branch's wallet.
+        { canJoinFamily: (familyId) => assertFamilyAccess(ctx, familyId).then(() => true, () => false) },
+      ),
+    );
     if (f.groupId) {
       await enrollStudent({ userId: ctx.userId, centerId: ctx.centerId }, { studentId: id, groupId: f.groupId, startDate: todayISO(), trial: f.trial }, (b) => assertBranch(ctx, b));
     }

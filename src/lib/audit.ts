@@ -1,9 +1,11 @@
-import type { Prisma } from "@/generated/prisma/client";
+import type { ActorKind, Prisma } from "@/generated/prisma/client";
 import type { Tx } from "./db";
 
 export interface AuditInput {
   centerId: string;
   userId?: string | null;
+  /** Who made the change. Default: USER when there is a user, otherwise SYSTEM (a background job). */
+  actor?: ActorKind;
   entity: string;
   entityId: string;
   action: string;
@@ -20,6 +22,7 @@ export async function audit(tx: Tx, a: AuditInput): Promise<void> {
     data: {
       centerId: a.centerId,
       userId: a.userId ?? null,
+      actor: a.actor ?? (a.userId ? "USER" : "SYSTEM"),
       entity: a.entity,
       entityId: a.entityId,
       action: a.action,

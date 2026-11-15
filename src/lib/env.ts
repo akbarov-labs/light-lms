@@ -20,6 +20,16 @@ export function telegramBotToken(): string | undefined {
   return str(process.env.TELEGRAM_BOT_TOKEN);
 }
 
+/** Anthropic API key for the AI lead agent. Empty = agent off everywhere (each center also has its own switch). */
+export function anthropicApiKey(): string | undefined {
+  return str(process.env.ANTHROPIC_API_KEY);
+}
+
+/** Claude model the agent uses. Default: the cheapest current one; raise it only where evals show a need. */
+export function agentModel(): string {
+  return str(process.env.AGENT_MODEL) ?? "claude-haiku-5-5";
+}
+
 export function opsTelegramChatId(): string | undefined {
   return str(process.env.OPS_TELEGRAM_CHAT_ID);
 }

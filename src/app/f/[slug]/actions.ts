@@ -41,7 +41,7 @@ export async function submitLeadAction(_: PublicLeadState, fd: FormData): Promis
   await db.$transaction(async (tx) => {
     const open = await tx.lead.findFirst({ where: { centerId: center.id, phone, archivedAt: null, stage: { notIn: ["ENROLLED", "LOST"] } } });
     if (open) {
-      await tx.leadNote.create({ data: { leadId: open.id, text: `↻ ${name}${comment ? `: ${comment}` : ""}` } });
+      await tx.leadNote.create({ data: { leadId: open.id, text: `↻ ${name}${comment ? `: ${comment}` : ""}`, actor: "PUBLIC" } });
       return;
     }
     const lead = await tx.lead.create({
@@ -55,8 +55,8 @@ export async function submitLeadAction(_: PublicLeadState, fd: FormData): Promis
         nextContactAt: new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z"),
       },
     });
-    if (comment) await tx.leadNote.create({ data: { leadId: lead.id, text: comment } });
-    await audit(tx, { centerId: center.id, userId: null, entity: "Lead", entityId: lead.id, action: "create.public", after: { name, phone, utm } });
+    if (comment) await tx.leadNote.create({ data: { leadId: lead.id, text: comment, actor: "PUBLIC" } });
+    await audit(tx, { centerId: center.id, userId: null, actor: "PUBLIC", entity: "Lead", entityId: lead.id, action: "create.public", after: { name, phone, utm } });
   });
   return { ok: true };
 }
