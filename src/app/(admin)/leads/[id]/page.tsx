@@ -10,6 +10,8 @@ import { Badge, Card, KV, LinkButton, PageHeader } from "@/components/ui";
 import { Field, Input, Select, Textarea } from "@/components/fields";
 import { ActionForm, Modal, SubmitButton } from "@/components/client";
 import { LeadForm } from "../lead-form";
+import { actorName } from "@/lib/actor";
+import { AgentTranscript } from "./agent-transcript";
 import { addLeadNoteAction, moveLeadAction, toggleLeadArchiveAction } from "../actions";
 
 const STAGES: LeadStage[] = ["NEW", "CONTACTED", "TRIAL_BOOKED", "TRIAL_DONE", "ENROLLED", "LOST"];
@@ -26,6 +28,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       assignedTo: true,
       student: true,
       notes: { orderBy: { createdAt: "desc" } },
+      agentChats: { orderBy: { lastMessageAt: "desc" }, select: { id: true, messages: true, phoneSource: true, inputTokens: true, outputTokens: true, lastMessageAt: true } },
       examResults: { include: { exam: { select: { id: true, title: true, date: true, maxScore: true } } }, orderBy: { createdAt: "desc" } },
     },
   });
@@ -106,12 +109,17 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             {lead.notes.map((n) => (
               <li key={n.id} className="rounded-lg bg-zinc-50 p-3 text-sm">
                 <div className="whitespace-pre-line text-zinc-800">{n.text}</div>
-                <div className="mt-1 text-xs text-zinc-500">{formatDateTime(n.createdAt)} · {n.createdById ? authors.get(n.createdById) : t("leads.formSource")}</div>
+                <div className="mt-1 text-xs text-zinc-500">{formatDateTime(n.createdAt)} · {actorName(t, n.actor, n.createdById ? authors.get(n.createdById) : null)}</div>
               </li>
             ))}
           </ul>
           {lead.student && <p className="mt-3 text-sm"><Link className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900" href={`/students/${lead.student.id}`}>{fullName(lead.student)}</Link></p>}
         </Card>
+        {lead.agentChats.map((c) => (
+          <div key={c.id} className="lg:col-span-2 lg:col-start-2">
+            <AgentTranscript chat={c} t={t} />
+          </div>
+        ))}
       </div>
     </>
   );

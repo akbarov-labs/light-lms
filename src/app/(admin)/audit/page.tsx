@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/dates";
+import { actorName } from "@/lib/actor";
 import { listAudit } from "@/lib/queries/audit";
 import { pageParam } from "@/lib/queries/params";
 import { Card, EmptyState, LinkButton, PageHeader, Pagination, Table, Td, Th, Tr } from "@/components/ui";
@@ -52,6 +53,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
         <Select name="userId" aria-label={t("audit.user")} defaultValue={sp.userId ?? ""}>
           <option value="">{t("audit.user")}: {t("common.all")}</option>
           <option value="system">{t("audit.system")}</option>
+          <option value="agent">{t("agent.actor")}</option>
           {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </Select>
         <Input name="action" defaultValue={sp.action} placeholder={t("audit.action")} aria-label={t("audit.action")} />
@@ -72,7 +74,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
                 return (
                   <Tr key={l.id}>
                     <Td className="whitespace-nowrap text-xs">{formatDateTime(l.createdAt)}</Td>
-                    <Td className="text-xs">{l.userId ? names.get(l.userId) : t("audit.system")}</Td>
+                    <Td className="text-xs">{actorName(t, l.actor, l.userId ? names.get(l.userId) : null)}</Td>
                     <Td className="text-xs">{href ? <Link href={href} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{l.entity}</Link> : l.entity}</Td>
                     <Td className="text-xs font-medium">{l.action}</Td>
                     <Td className="max-w-xl break-all font-mono text-[11px] text-zinc-500">
