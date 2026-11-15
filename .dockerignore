@@ -19,3 +19,4 @@ docs
 deploy
 **/*.md
 src/generated
+agent-lab
