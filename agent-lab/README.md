@@ -35,10 +35,29 @@ Ekranda nimani ko'rasiz:
 - `[qadam N] stop_reason=...`: bitta API chaqiruv. `tool_use` model vosita so'radi, `end_turn` javob berdi degani.
 - `🔧 list_groups({...})`: model so'ragan vosita va parametrlari.
 - `↳ ...`: bizning kod qaytargan natija (model keyingi qadamda shuni o'qiydi).
-- Sariq ramka: o'qituvchiga ketgan xabar.
+- Sariq ramka: o'qituvchiga ketgan xabar (`notify_teacher`) yoki Ustozga savol (`ask_teacher`).
+
+Vositalar (5 ta): `list_groups`, `create_lead`, `book_trial` (aniq sana qaytaradi),
+`notify_teacher` (ma'lumot uchun), `ask_teacher` (javob yoki qaror kerak bo'lganda).
 
 Buyruqlar: `/xotira` (model har safar ko'radigan massiv), `/baza` (vositalar nimani o'zgartirdi),
 `/narx` (token va dollar), `/yangi` (suhbatni tozalash), `/chiqish`.
+
+## 02-evals.ts — agentni avtomatik tekshirish
+
+```bash
+npm run evals            # har holat 3 marta, Haiku'da ~1 sent
+RUNS=10 npm run evals    # aniqroq natija
+```
+
+Har bir holat birinchi jonli suhbatda topilgan haqiqiy xato: telefonni model o'zi rad etgani,
+vositasiz va'da bergani, aytilgan narsani qayta so'ragani, sinov darsining sanasi yo'qligi.
+Promptni har o'zgartirganda shu evalni ishga tushiring.
+
+- **Kod testlari** (sana hisoblash) bir marta tekshiriladi: kod har doim bir xil natija beradi.
+- **Model testlari** bir necha marta ishlaydi, chunki model har safar boshqacha javob beradi.
+  3/3 natija "xato yo'q" degani emas, "3 urinishda chiqmadi" degani.
+- Model testlari suhbatni boshidan o'ynamaydi, tayyor tarixdan boshlanadi: arzonroq va barqarorroq.
 
 ## Tajribalar (shu tartibda qiling)
 
@@ -58,7 +77,12 @@ Buyruqlar: `/xotira` (model har safar ko'radigan massiv), `/baza` (vositalar nim
 8. **Effort.** `effort: "medium"` ni `"low"` ga o'zgartiring: tezlik, narx va sifat qanday o'zgaradi?
 9. **Model solishtirish.** Bir xil suhbatni Haiku va Sonnet'da o'tkazing. O'zbek tili, daraja
    aniqlash va o'qituvchiga yozilgan xabar sifatini solishtiring. Farq narx farqiga arziydimi?
-   Bu savolga javob topish "evals" deyiladi va 2-bosqichda uni tizimli qilamiz.
+   `MODEL=claude-sonnet-5-5 npm run evals` bilan evalni ham solishtiring.
+10. **Evalni buzib ko'ring.** `SYSTEM_PROMPT` dan "Vosita bilan bajara olmaydigan ishni hech qachon
+    va'da qilma" qatorini va `ask_teacher` tavsifidagi "AVVAL shu vositani chaqir" qismini olib tashlang,
+    keyin `RUNS=5 npm run evals`. 2-holat necha marta yiqiladi?
+11. **Noto'g'ri javob.** Daraja savoliga ataylab xato javob bering. Haiku "To'g'ri" deydimi?
+    Bu 2-bosqich (vazifa tekshirish) uchun eng muhim savol.
 
 Har tajribadan keyin bitta savolga javob bering: **bu xatti-harakatni prompt
 boshqaryaptimi yoki kod?** Bu loyihadagi eng muhim savol: xavfsizlik va pul

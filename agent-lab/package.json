@@ -5,6 +5,7 @@
   "description": "O'quv laboratoriyasi: AI agent qanday ishlashini qo'lda o'rganish. LMS kodiga tegmaydi.",
   "scripts": {
     "01": "tsx --env-file-if-exists=.env 01-raw-loop.ts",
+    "evals": "tsx --env-file-if-exists=.env 02-evals.ts",
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
