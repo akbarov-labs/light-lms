@@ -23,6 +23,8 @@ export const RULES = {
   signupCreatedIp: { limit: 3, windowMs: 24 * 60 * MIN, resetOnSuccess: false },
   // public lead form: a real visitor sends one or two; a script sending hundreds is stopped
   leadIp: { limit: 10, windowMs: 60 * MIN, resetOnSuccess: false },
+  // AI lead agent: a person writes a few messages a minute; a script flooding the bot burns API money
+  agentChat: { limit: 20, windowMs: 10 * MIN, resetOnSuccess: false },
 } satisfies Record<string, Rule>;
 
 export type RuleName = keyof typeof RULES;
@@ -82,6 +84,7 @@ export const attemptKey = {
   signupIp: (ip: string) => `signup:ip:${ip}`,
   signupCreatedIp: (ip: string) => `signup-created:ip:${ip}`,
   leadIp: (ip: string) => `lead:ip:${ip}`,
+  agentChat: (chatId: string) => `agent:chat:${chatId}`,
 };
 
 /** In-memory store for tests and scripts. */

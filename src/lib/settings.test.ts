@@ -16,9 +16,17 @@ const defaults = {
   paymeFiscal: null,
   reportCards: { autoSend: false, sendDay: 3 },
   sms: { payment: false, reminder: true, debt: true, absence: false, trial: true, reportCard: false, examResult: false, onlyWithoutTelegram: true },
+  agent: { enabled: false, rules: "", monthlyTokenCap: 5_000_000 },
 };
 
 describe("readSettings (Center.settings JSON)", () => {
+  it("keeps the AI agent off by default, and a broken agent block does not reset other settings", () => {
+    expect(readSettings({}).agent.enabled).toBe(false);
+    expect(readSettings({ agent: { enabled: true, rules: "Chegirma yo'q" } }).agent).toEqual({ enabled: true, rules: "Chegirma yo'q", monthlyTokenCap: 5_000_000 });
+    const s = readSettings({ trialLessons: 2, agent: { enabled: "yes", monthlyTokenCap: -1 } });
+    expect(s).toEqual({ ...defaults, trialLessons: 2 });
+  });
+
   it("fills every default, including the nested notify object, from nothing", () => {
     expect(readSettings(undefined)).toEqual(defaults);
     expect(readSettings(null)).toEqual(defaults);

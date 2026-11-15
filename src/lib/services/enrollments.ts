@@ -3,7 +3,7 @@
 import { db, type Tx } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { addDays, fromISODate, toISODate, todayISO, type ISODate } from "@/lib/dates";
-import type { Prisma } from "@/generated/prisma/client";
+import type { ActorKind, Prisma } from "@/generated/prisma/client";
 import { loadBillingInput, parseTermsHistory, syncEnrollment } from "@/lib/billing/sync";
 import { wholeCourseExhausted } from "@/lib/billing/engine";
 import { transferTerms } from "@/lib/billing/terms";
@@ -17,6 +17,8 @@ import { assertSeatFor } from "./plan-usage";
 export interface Actor {
   userId: string | null;
   centerId: string;
+  /** who acts when there is no user: the AI agent (AGENT); default USER / SYSTEM from userId */
+  actor?: ActorKind;
 }
 
 const TX = { timeout: 30_000 };
@@ -90,8 +92,8 @@ export async function enrollStudent(actor: Actor, input: EnrollInput, branchChec
       },
     });
     if (!input.trial) await assertBillable(tx, e.id);
-    await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "Enrollment", entityId: e.id, action: input.trial ? "enroll.trial" : "enroll.active", after: e });
-    await advanceLeadsForStudent(tx, actor.centerId, student.id, input.trial ? "TRIAL_BOOKED" : "ENROLLED", actor.userId);
+    await audit(tx, { centerId: actor.centerId, userId: actor.userId, actor: actor.actor, entity: "Enrollment", entityId: e.id, action: input.trial ? "enroll.trial" : "enroll.active", after: e });
+    await advanceLeadsForStudent(tx, actor.centerId, student.id, input.trial ? "TRIAL_BOOKED" : "ENROLLED", actor.userId, actor.actor);
     if (input.trial && readSettings(group.center.settings).notify.trial) {
       const first = await tx.lesson.findFirst({
         where: { groupId: group.id, date: { gte: fromISODate(input.startDate) }, status: { not: "CANCELLED" } },

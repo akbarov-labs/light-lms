@@ -13,6 +13,7 @@ import { UserError } from "@/lib/user-error";
 import { ownerReport } from "../jobs";
 import { createResetCodeForChat } from "@/lib/auth/password";
 import { B, buttonKey } from "./texts";
+import { agentOnContact, agentOnStart, agentOnText } from "./agent";
 import { appUrl } from "@/lib/env";
 import {
   attendanceText,
@@ -82,6 +83,8 @@ export function createBot(token: string): Bot {
 
   bot.command("start", async (ctx) => {
     const l = await localeOf(ctx);
+    // t.me/<bot>?start=<center-slug>: the center's AI lead agent (when that center switched it on)
+    if (ctx.match && (await agentOnStart(ctx, ctx.match, l))) return;
     const chatId = String(ctx.chat.id);
     const roles = await chatRoles(chatId);
     if (roles.family || roles.teacher || roles.owner) {
@@ -115,6 +118,7 @@ export function createBot(token: string): Bot {
       return;
     }
     const phone = normalizePhone(contact.phone_number);
+    if (await agentOnContact(ctx, phone, l)) return;
     const chatId = String(ctx.chat.id);
     const linked = phone ? await linkChat(chatId, phone, l) : { guardians: 0, students: 0, staff: [] };
     if (!linked.guardians && !linked.students && linked.staff.length === 0) {
@@ -191,6 +195,7 @@ export function createBot(token: string): Bot {
         return;
       }
       default:
+        if (await agentOnText(ctx, ctx.message.text, l)) return;
         await ctx.reply(B.notLinked[l], { reply_markup: await menu(chatId, l) });
     }
   });
