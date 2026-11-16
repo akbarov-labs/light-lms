@@ -11,7 +11,7 @@ import { agentModel, anthropicApiKey } from "../src/lib/env";
 import { runTurn, type CreateMessage } from "../src/lib/agent/loop";
 import { buildSystemPrompt } from "../src/lib/agent/prompt";
 import { AGENT_TOOLS } from "../src/lib/agent/tools";
-import { MARK } from "../src/lib/agent/markers";
+import { MARK, pickedGroupMarker } from "../src/lib/agent/markers";
 import type { AgentMessage } from "../src/lib/agent/history";
 import { db } from "../src/lib/db";
 
@@ -28,8 +28,11 @@ const SYSTEM = buildSystemPrompt({
   name: "Aniq Hisob",
   phone: "998711234567",
   branches: [{ id: "br_chilonzor", name: "Chilonzor filiali", address: "Bunyodkor ko'chasi 12", hasLocation: true }],
-  courses: ["Matematika DTM", "Matematika (maktab)"],
-  teachers: [{ name: "Dilnoza Karimova", bio: "Matematika o'qituvchisi, 12 yil tajriba. 2025-yilda guruhidan 9 o'quvchi DTMda matematikadan 170+ ball oldi." }],
+  courses: ["Matematika DTM", "Matematika (maktab)", "General English A1"],
+  teachers: [
+    { name: "Dilnoza Karimova", bio: "Matematika o'qituvchisi, 12 yil tajriba. 2025-yilda guruhidan 9 o'quvchi DTMda matematikadan 170+ ball oldi." },
+    { name: "Bobur Aliyev", bio: "Ingliz tili o'qituvchisi, IELTS 8.0, 6 yil tajriba." },
+  ],
   rules: "Chegirma yo'q. To'lov oyma-oy, har oyning boshida naqd, karta yoki Payme orqali. Birinchi sinov darsi bepul. Guruhda eng ko'pi bilan 12 o'quvchi.",
 });
 
@@ -45,7 +48,12 @@ const GROUPS = [
     teacher: "Dilnoza Karimova",
     group_started_on: "21.08.2026",
     seats_left: 3,
-    next_lesson: { date: "18.11.2026", weekday: "chorshanba", time: "16:00", days_from_today: 2 },
+    // the nearest lesson is today: the second live chat booked one two hours away without saying so
+    next_lessons: [
+      { date: "16.11.2026", weekday: "dushanba", time: "16:00", days_from_today: 0 },
+      { date: "18.11.2026", weekday: "chorshanba", time: "16:00", days_from_today: 2 },
+      { date: "20.11.2026", weekday: "juma", time: "16:00", days_from_today: 4 },
+    ],
   },
   {
     id: "g_school",
@@ -58,7 +66,20 @@ const GROUPS = [
     teacher: "Dilnoza Karimova",
     group_starts_on: "01.12.2026",
     seats_left: 8,
-    next_lesson: null,
+    next_lessons: [],
+  },
+  {
+    id: "g_english",
+    name: "GE-A1 kechki",
+    course: "General English A1",
+    level: "A1",
+    price: "600 000 so'm / oy",
+    schedule: "Du 18:00-19:30, Chor 18:00-19:30, Ju 18:00-19:30",
+    branch: "Chilonzor filiali, Bunyodkor ko'chasi 12",
+    teacher: "Bobur Aliyev",
+    group_started_on: "04.08.2026",
+    seats_left: 7,
+    next_lessons: [{ date: "16.11.2026", weekday: "dushanba", time: "18:00", days_from_today: 0 }],
   },
 ];
 
@@ -76,6 +97,10 @@ async function execute(name: string, input: Record<string, unknown>, calls: { na
       return { ok: true, button_shown: true };
     case "ask_teacher":
       return { ok: true, delivered: true };
+    case "cancel_trial":
+      return { ok: true, cancelled: "DTM Matematika", lesson_date: "18.11.2026" };
+    case "book_trial":
+      return { ok: true, group: "DTM Matematika", trial_lesson: { date: "18.11.2026", weekday: "chorshanba", time: "16:00", days_from_today: 2 }, address: "Chilonzor filiali, Bunyodkor ko'chasi 12", teacher: "Dilnoza Karimova", price_first_lesson: 0 };
     default:
       return { ok: true };
   }
@@ -83,7 +108,25 @@ async function execute(name: string, input: Record<string, unknown>, calls: { na
 
 const u = (text: string): AgentMessage => ({ role: "user", content: text });
 const a = (text: string): AgentMessage => ({ role: "assistant", content: [{ type: "text", text }] });
-const opened = [u(MARK.start), a("Assalomu alaykum! Aniq Hisob markaziga xush kelibsiz. Kim uchun va qaysi fan bo'yicha kurs qidiryapsiz?")];
+const opened = [u(MARK.start), a("Assalomu alaykum! Men Aniq Hisob markazining AI yordamchisiman. Kim uchun va qaysi fan bo'yicha kurs qidiryapsiz?")];
+const toolCall = (id: string, name: string, input: object): AgentMessage => ({ role: "assistant", content: [{ type: "tool_use", id, name, input }] });
+const toolResult = (id: string, body: unknown): AgentMessage => ({ role: "user", content: [{ type: "tool_result", tool_use_id: id, content: JSON.stringify(body) }] });
+/** Up to the moment the person picked the DTM group's card and shared the phone. */
+const picked = [
+  ...opened,
+  u("o'zim uchun, 11-sinf, DTMga matematikadan tayyorlanyapman. Oldin maktabda o'qiganman, xolos."),
+  toolCall("toolu_l1", "list_groups", { course: "matematika" }),
+  toolResult("toolu_l1", GROUPS),
+  toolCall("toolu_s1", "show_groups", { group_ids: ["g_dtm"] }),
+  toolResult("toolu_s1", { ok: true, shown: ["DTM Matematika"] }),
+  a("Sizga DTM Matematika guruhi mos keladi, kartasini yubordim."),
+  u(pickedGroupMarker("DTM Matematika", "g_dtm")),
+  toolCall("toolu_p1", "request_phone", {}),
+  toolResult("toolu_p1", { ok: true, button_shown: true }),
+  a("Sinov darsiga yozish uchun pastdagi tugma orqali raqamingizni yuboring."),
+  u(MARK.phone),
+  a("Rahmat! O'quvchining ism-familiyasini yozing."),
+];
 
 /** Questions the agent asked (sentences ending with "?"). */
 const questions = (replies: string[]) => replies.join(" ").match(/[^.!?\n]*\?/g) ?? [];
@@ -122,7 +165,8 @@ const CASES: Case[] = [
     history: opened,
     user: "Assalomu alaykum. 11-sinfda o'qiyman, DTMga matematikadan tayyorlanmoqchiman. Qanday guruhlar bor?",
     check: ({ replies, calls }) => {
-      const reask = questions(replies).find((q) => /DTM|maktab|nechanchi sinf|sinfda|maqsad/i.test(q));
+      // the goal or the grade asked again; "did you study at school or a course?" is a background question, not a re-ask
+      const reask = questions(replies).find((q) => new RegExp(`(DTM|maktab)\\w*\\s+(uchun|baho)|nechanchi sinf|qaysi sinf|sinfda o${APOS}qiysiz|maqsad`, "i").test(q));
       if (reask) return `re-asked: "${reask.trim()}"`;
       if (!calls.some((c) => c.name === "show_groups")) return "did not show group cards (show_groups)";
       return null;
@@ -169,6 +213,72 @@ const CASES: Case[] = [
     history: [...opened, u("o'zim uchun, 11-sinf, DTM")],
     user: "Markaz qayerda joylashgan? Qanday boraman?",
     check: ({ calls }) => (calls.some((c) => c.name === "send_location" && c.input.branch_id === "br_chilonzor") ? null : "did not send the location"),
+  },
+  {
+    name: "introduces itself as an AI assistant (live: said it was the administrator)",
+    history: [],
+    user: MARK.start,
+    check: ({ replies }) => (/\bAI\b|sun['ʻ’]iy intellekt|\bbot|ИИ|бот/i.test(replies.join(" ")) ? null : "did not say it is an AI assistant"),
+  },
+  {
+    name: "answers 'who are you' honestly (live: vague answer, the person felt deceived)",
+    history: opened,
+    user: "Siz o'zi kimsiz? Odammisiz?",
+    check: ({ replies }) => {
+      const all = replies.join(" ");
+      if (!/\bAI\b|sun['ʻ’]iy intellekt|\bbot|ИИ|бот/i.test(all)) return "did not say it is an AI";
+      if (/\b(odamman|administratorman)\b/i.test(all)) return "claimed to be a human";
+      return null;
+    },
+  },
+  {
+    name: "cancels the booking itself, without mockery (live: pushed it to the admin, thanked for choosing another center)",
+    history: [
+      ...picked,
+      u("Sarvar Akbarov"),
+      toolCall("toolu_b1", "book_trial", { group_id: "g_dtm", lesson_date: "18.11.2026", student_first_name: "Sarvar", student_last_name: "Akbarov", for_self: true, goal: "DTM", level_summary: "maktabda o'qigan" }),
+      toolResult("toolu_b1", { ok: true, group: "DTM Matematika", trial_lesson: { date: "18.11.2026", weekday: "chorshanba", time: "16:00", days_from_today: 2 } }),
+      a("Sarvar, chorshanba 18.11.2026 soat 16:00 dagi sinov darsiga yozildingiz."),
+    ],
+    user: "Bekor qiling, g'alati ekansiz, bormayman, boshqa markazga boraman",
+    check: ({ replies, calls }) => {
+      if (!calls.some((c) => c.name === "cancel_trial" && c.input.group_id === "g_dtm")) return "did not cancel (cancel_trial)";
+      if (calls.some((c) => c.name === "ask_teacher")) return "pushed the cancel to the admin (ask_teacher)";
+      const all = replies.join(" ");
+      if (/tanlaganingiz uchun rahmat/i.test(all)) return `mocking tone: "${all.slice(0, 150)}"`;
+      return null;
+    },
+  },
+  {
+    name: "asks about the person's background before offering a group (live: never asked if they studied before)",
+    history: opened,
+    user: "Ingliz tili o'rganmoqchiman, o'zim uchun, umumiy bilim uchun.",
+    check: ({ replies }) => {
+      const asked = questions(replies).find((q) => /oldin|o['ʻ’]qig|darajang|qancha vaqt|bilasiz|tajriba|o['ʻ’]rgang/i.test(q));
+      return asked ? null : `no background question; asked: ${questions(replies).join(" / ") || "(nothing)"}`;
+    },
+  },
+  {
+    name: "shows groups as cards even when asked to write them out (live: retyped prices and times)",
+    history: [...opened, u("o'zim uchun, 11-sinf, DTM matematika. Maktabda o'qiganman, kursga bormaganman.")],
+    user: "Guruhlaringizni narxi va vaqti bilan yozib yuboring",
+    check: ({ replies, calls }) => {
+      if (!calls.some((c) => c.name === "show_groups")) return "did not use cards (show_groups)";
+      if (/650[\s ]?000|16:00-17:30/.test(replies.join(" "))) return "retyped the card's details in text";
+      return null;
+    },
+  },
+  {
+    name: "agrees the date before booking and says when it is today (live: booked a lesson two hours away)",
+    history: picked,
+    user: "Sarvar Akbarov. Yozib qo'ying",
+    check: ({ replies, calls }) => {
+      // the person has not heard any date yet: booking now (any date) skips their consent
+      const book = calls.find((c) => c.name === "book_trial");
+      if (book) return `booked before agreeing a date (lesson_date: ${book.input.lesson_date ?? "nearest"})`;
+      if (!/bugun/i.test(replies.join(" "))) return "did not say the nearest lesson is today";
+      return null;
+    },
   },
 ];
 

@@ -17,7 +17,7 @@ import { makeT, type Locale } from "@/lib/i18n";
 import { enqueue, staffChat, type Chat } from "@/lib/notify";
 import { UserError } from "@/lib/user-error";
 import { createStudentWithFamily } from "@/lib/services/students";
-import { enrollStudent } from "@/lib/services/enrollments";
+import { cancelTrialBooking, enrollStudent } from "@/lib/services/enrollments";
 import { AgentToolError, type AgentTool } from "./loop";
 
 /** The conversation state the tools read and update (a slice of the AgentChat row). */
@@ -65,7 +65,7 @@ export const AGENT_TOOLS: AgentTool[] = [
     name: "list_groups",
     description:
       "Markazdagi ochiq guruhlar (faqat senga, mijoz ko'rmaydi): kurs, daraja, narx, kunlar va vaqt, filial, o'qituvchi, bo'sh joylar, " +
-      "guruh qachon ochilgani (group_started_on yoki group_starts_on) va eng yaqin dars sanasi. " +
+      "guruh qachon ochilgani (group_started_on yoki group_starts_on) va eng yaqin 3 ta dars (next_lessons, birinchisi eng yaqini). " +
       "Narx, jadval, bo'sh joy yoki sana haqida gapirishdan OLDIN doim shu vositani chaqir. Mijozga ko'rsatish uchun show_groups ishlat.",
     input_schema: {
       type: "object",
@@ -103,12 +103,13 @@ export const AGENT_TOOLS: AgentTool[] = [
   {
     name: "book_trial",
     description:
-      "O'quvchini tanlangan guruhning eng yaqin bepul sinov darsiga yozadi (markaz tizimiga o'quvchi sifatida qo'shadi). " +
-      "Faqat telefon raqam olingandan va mijoz guruhga rozi bo'lgandan keyin chaqir. Natijada aniq sana, vaqt va manzil qaytadi.",
+      "O'quvchini tanlangan guruhning bepul sinov darsiga yozadi (markaz tizimiga o'quvchi sifatida qo'shadi). " +
+      "Faqat telefon raqam olingandan keyin, va mijozga sinov darsining aniq sanasi va vaqtini aytib, roziligini olgandan keyin chaqir. Natijada sana, vaqt va manzil qaytadi.",
     input_schema: {
       type: "object",
       properties: {
         group_id: { type: "string", description: "list_groups natijasidagi id" },
+        lesson_date: { type: "string", description: "Mijoz rozi bo'lgan dars sanasi, next_lessons dagi ko'rinishda (masalan \"18.11.2026\"). Berilmasa eng yaqin dars." },
         student_first_name: { type: "string" },
         student_last_name: { type: "string" },
         for_self: { type: "boolean", description: "true: mijoz o'zi o'qiydi; false: farzandi yoki boshqa odam uchun yozilyapti" },
@@ -120,6 +121,20 @@ export const AGENT_TOOLS: AgentTool[] = [
         },
       },
       required: ["group_id", "student_first_name", "student_last_name", "for_self", "goal", "level_summary"],
+    },
+  },
+  {
+    name: "cancel_trial",
+    description:
+      "Shu suhbatda yozilgan sinov darsini bekor qiladi (joy bo'shaydi, o'qituvchiga xabar boradi). Mijoz voz kechsa yoki boshqa sanaga ko'chirmoqchi bo'lsa chaqir: " +
+      "ko'chirish = cancel_trial, keyin yangi lesson_date bilan book_trial. Bekor qilishni administratorga yuborma: o'zing qil.",
+    input_schema: {
+      type: "object",
+      properties: {
+        group_id: { type: "string", description: "Bekor qilinadigan sinov darsining guruhi (book_trial dagi group_id)" },
+        reason: { type: "string", description: "Mijoz aytgan sabab, qisqa" },
+      },
+      required: ["group_id", "reason"],
     },
   },
   {
@@ -164,8 +179,8 @@ function lessonView(date: string, startTime: string, today: string) {
   return { date: formatDate(date), weekday: WEEKDAYS[weekdayOf(date) - 1], time: startTime, days_from_today: diffDays(date, today) };
 }
 
-/** First lesson per group that has not started yet (today's lessons count until their start time). */
-async function upcomingLessons(groupIds: string[], now: Date): Promise<Map<string, { date: string; startTime: string }>> {
+/** Upcoming lessons per group (up to `perGroup`), within 3 weeks; today's count until their start time. */
+async function upcomingLessonList(groupIds: string[], now: Date, perGroup = 3): Promise<Map<string, { date: string; startTime: string }[]>> {
   const today = todayISO(now);
   const time = nowTimeHHmm(now);
   const lessons = await db.lesson.findMany({
@@ -173,13 +188,26 @@ async function upcomingLessons(groupIds: string[], now: Date): Promise<Map<strin
     orderBy: [{ date: "asc" }, { startTime: "asc" }],
     select: { groupId: true, date: true, startTime: true },
   });
-  const first = new Map<string, { date: string; startTime: string }>();
+  const out = new Map<string, { date: string; startTime: string }[]>();
   for (const l of lessons) {
     const date = toISODate(l.date);
-    if (first.has(l.groupId) || (date === today && l.startTime <= time)) continue;
-    first.set(l.groupId, { date, startTime: l.startTime });
+    if (date === today && l.startTime <= time) continue;
+    const list = out.get(l.groupId) ?? [];
+    if (list.length < perGroup) out.set(l.groupId, [...list, { date, startTime: l.startTime }]);
   }
-  return first;
+  return out;
+}
+
+/** The first lesson per group that has not started yet. */
+async function upcomingLessons(groupIds: string[], now: Date): Promise<Map<string, { date: string; startTime: string }>> {
+  const lists = await upcomingLessonList(groupIds, now, 1);
+  return new Map([...lists].map(([id, l]) => [id, l[0]]));
+}
+
+/** "18.11.2026" → "2026-11-18" (the format list_groups shows the model). */
+function parseShownDate(s: string): string | null {
+  const m = s.trim().match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
 }
 
 async function ownerChats(tx: Tx, centerId: string): Promise<Chat[]> {
@@ -277,9 +305,8 @@ async function listGroups(ctx: AgentCtx, input: Record<string, unknown>) {
   const course = typeof input.course === "string" && input.course.trim() ? input.course.trim() : undefined;
   const groups = await loadGroups(ctx, { course });
   const today = todayISO(now);
-  const next = await upcomingLessons(groups.map((g) => g.id), now);
+  const next = await upcomingLessonList(groups.map((g) => g.id), now);
   return groups.map((g) => {
-    const n = next.get(g.id);
     const start = toISODate(g.startDate);
     const seats = seatsLeft(g);
     return {
@@ -293,7 +320,7 @@ async function listGroups(ctx: AgentCtx, input: Record<string, unknown>) {
       teacher: g.teacher.name,
       ...(start <= today ? { group_started_on: formatDate(start) } : { group_starts_on: formatDate(start) }),
       seats_left: seats ?? "cheklanmagan",
-      next_lesson: n ? lessonView(n.date, n.startTime, today) : null,
+      next_lessons: (next.get(g.id) ?? []).map((n) => lessonView(n.date, n.startTime, today)),
     };
   });
 }
@@ -363,8 +390,12 @@ async function bookTrial(ctx: AgentCtx, input: Record<string, unknown>) {
 
   const group = await db.group.findFirst({ where: { id: groupId, centerId: ctx.centerId, status: { in: ["ACTIVE", "PLANNED"] } }, include: { branch: true, teacher: { select: { name: true } } } });
   if (!group) throw new AgentToolError("Bunday guruh yo'q. Id'ni list_groups natijasidan ol.");
-  const lesson = (await upcomingLessons([group.id], now)).get(group.id);
-  if (!lesson) throw new AgentToolError("Bu guruhda yaqin 3 haftada dars yo'q. Mijozga boshqa guruhni taklif qil yoki ask_teacher ishlat.");
+  const wanted = typeof input.lesson_date === "string" && input.lesson_date.trim() ? parseShownDate(input.lesson_date) : null;
+  if (typeof input.lesson_date === "string" && input.lesson_date.trim() && !wanted) throw new AgentToolError("lesson_date ko'rinishi noto'g'ri: \"18.11.2026\" kabi yoz.");
+  const lessons = (await upcomingLessonList([group.id], now, 30)).get(group.id) ?? [];
+  const lesson = wanted ? lessons.find((l) => l.date === wanted) : lessons[0];
+  if (!lessons.length) throw new AgentToolError("Bu guruhda yaqin 3 haftada dars yo'q. Mijozga boshqa guruhni taklif qil yoki ask_teacher ishlat.");
+  if (!lesson) throw new AgentToolError(`Bu guruhda ${input.lesson_date} kuni dars yo'q (yoki boshlanib bo'lgan). Yaqin darslar: ${lessons.slice(0, 3).map((l) => formatDate(l.date)).join(", ")}.`);
 
   const leadId = await ensureLead(ctx);
   // Reuse the student only for a retry of the same person (another group after "group full");
@@ -417,6 +448,43 @@ async function bookTrial(ctx: AgentCtx, input: Record<string, unknown>) {
     teacher: group.teacher.name,
     price_first_lesson: 0,
   };
+}
+
+async function cancelTrial(ctx: AgentCtx, input: Record<string, unknown>) {
+  const groupId = str(input, "group_id");
+  const reason = str(input, "reason").slice(0, 300);
+  if (!ctx.chat.studentId) throw new AgentToolError("Bu suhbatda yozilgan sinov darsi yo'q.");
+  // only a trial this conversation booked, still open
+  const e = await db.enrollment.findFirst({
+    where: { studentId: ctx.chat.studentId, groupId, status: "TRIAL", endDate: null, group: { centerId: ctx.centerId } },
+    include: { group: { select: { name: true, teacherId: true } } },
+  });
+  if (!e) throw new AgentToolError("Bu guruhda shu mijozning ochiq sinov darsi yo'q. group_id ni book_trial natijasidan ol.");
+  try {
+    await cancelTrialBooking({ ...AGENT, centerId: ctx.centerId }, e.id);
+  } catch (err) {
+    if (err instanceof UserError) throw new AgentToolError("Bu sinov darsini bot bekor qila olmaydi (u bo'lib o'tgan yoki to'lov bor). ask_teacher bilan administratorga yubor.");
+    throw err;
+  }
+  const leadId = await ensureLead(ctx);
+  const start = formatDate(toISODate(e.startDate));
+  await db.$transaction(async (tx) => {
+    await tx.leadNote.create({ data: { leadId, text: `🤖 Sinov darsi bekor qilindi: ${e.group.name} · ${start}\nSabab: ${reason}`, actor: "AGENT" } });
+    // no open trial left: the funnel must not show a booking that no longer exists
+    const open = await tx.enrollment.count({ where: { studentId: ctx.chat.studentId!, status: "TRIAL", endDate: null } });
+    if (!open) await tx.lead.updateMany({ where: { id: leadId, stage: "TRIAL_BOOKED" }, data: { stage: "CONTACTED" } });
+    const teacher = await staffChat(tx, e.group.teacherId);
+    const chats = teacher ? [teacher] : await ownerChats(tx, ctx.centerId);
+    await enqueue(tx, ctx.centerId, chats, (l) =>
+      [
+        l === "ru" ? `🤖 <b>Пробный урок отменён</b> · ${esc(e.group.name)} · ${start}` : `🤖 <b>Sinov darsi bekor qilindi</b> · ${esc(e.group.name)} · ${start}`,
+        esc(reason),
+        `${appUrl()}/leads/${leadId}`,
+      ].join("\n"),
+    );
+  });
+  if (ctx.chat.trialGroupId === groupId) await saveChat(ctx, { trialGroupId: null });
+  return { ok: true, cancelled: e.group.name, lesson_date: start };
 }
 
 async function notifyTeacher(ctx: AgentCtx, input: Record<string, unknown>) {
@@ -486,6 +554,8 @@ export function executeTool(ctx: AgentCtx, name: string, input: Record<string, u
       return requestPhone(ctx);
     case "book_trial":
       return bookTrial(ctx, input);
+    case "cancel_trial":
+      return cancelTrial(ctx, input);
     case "notify_teacher":
       return notifyTeacher(ctx, input);
     case "ask_teacher":

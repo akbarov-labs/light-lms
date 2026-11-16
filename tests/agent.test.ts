@@ -115,7 +115,7 @@ describe("lead agent: the whole path to a trial lesson", () => {
         branch: "Chilonzor, Bunyodkor 1",
         group_started_on: formatDate(addDays(today, -30)),
         seats_left: 10,
-        next_lesson: expect.objectContaining({ days_from_today: 1, time: "15:00" }),
+        next_lessons: [expect.objectContaining({ days_from_today: 1, time: "15:00" }), expect.objectContaining({ days_from_today: 3 })],
       }),
       expect.objectContaining({ id: fullGroupId, seats_left: 0 }),
     ]);
@@ -244,14 +244,17 @@ describe("lead agent: switches, limits and memory", () => {
     expect(m.seen).toHaveLength(0);
   });
 
-  it("an idle conversation starts over but keeps the phone; a typed phone never replaces a verified one", async () => {
+  it("an idle conversation is reopened, not erased: the model is told how long it was away; a typed phone never replaces a verified one", async () => {
     const chatId = newChatId();
     const chat = await openAgentChat(centerId, chatId);
     await recordPhone(chat, "998901234504", "telegram", "X");
-    await db.agentChat.update({ where: { id: chat.id }, data: { messages: [{ role: "user", content: "eski" }], lastMessageAt: new Date(Date.now() - 8 * 86_400_000) } });
-    expect(await activeAgentChat(chatId)).toBeNull();
+    await db.agentChat.update({ where: { id: chat.id }, data: { messages: [{ role: "user", content: "eski" }], awaitingPhone: true, lastMessageAt: new Date(Date.now() - 8 * 86_400_000) } });
+    expect(await activeAgentChat(chatId)).toBeNull(); // free text no longer reaches it, only the center's link
     const reopened = await openAgentChat(centerId, chatId);
-    expect(reopened).toMatchObject({ messages: [], phone: "998901234504" });
+    expect(reopened).toMatchObject({ phone: "998901234504", awaitingPhone: false });
+    const msgs = reopened.messages as { role: string; content: string }[];
+    expect(msgs[0]).toEqual({ role: "user", content: "eski" }); // the transcript is kept for staff
+    expect(msgs[1].content).toMatch(/^\[Mijoz 8 kundan keyin qayta yozdi/);
     await recordPhone(reopened, "998909999999", "typed", "X");
     expect((await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).phone).toBe("998901234504");
   });
@@ -352,5 +355,63 @@ describe("lead agent: cards, location and leads without a phone", () => {
     const text = await ownerReport(ownerId, today);
     expect(text).toMatch(/Telegram AI: bugun \+\d+ mijoz, \d+ tasi raqam qoldirmagan/);
     expect(text).toContain("/leads?nophone=1");
+  });
+});
+
+describe("lead agent: second live chat fixes", () => {
+  async function bookedChat(first: string, lessonDate?: string) {
+    const chat = await chatFor();
+    await recordPhone(chat, `99890${String(Math.floor(Math.random() * 1e7)).padStart(7, "0")}`, "telegram", `${first} Test`);
+    const m = model(
+      msg([call("book_trial", { group_id: groupId, ...(lessonDate ? { lesson_date: lessonDate } : {}), student_first_name: first, student_last_name: "Test", for_self: true, goal: "x", level_summary: "y" })], "tool_use"),
+      msg([text("Yozildingiz")], "end_turn"),
+    );
+    await turn(chat.id, "yozing", m.create);
+    return { chat, m };
+  }
+
+  it("book_trial takes the date the person agreed to, and refuses a date without a lesson", async () => {
+    const { chat, m } = await bookedChat("Sanali", formatDate(addDays(today, 3)));
+    expect(JSON.parse(lastToolResult(m.seen).body).trial_lesson).toMatchObject({ days_from_today: 3 });
+    const student = (await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).studentId!;
+    expect(await db.enrollment.findFirstOrThrow({ where: { studentId: student, groupId } })).toMatchObject({ startDate: fromISODate(addDays(today, 3)) });
+    const { m: m2 } = await bookedChat("Notogri", formatDate(addDays(today, 2)));
+    expect(lastToolResult(m2.seen)).toEqual({ error: true, body: expect.stringContaining("dars yo'q") });
+  });
+
+  it("cancel_trial removes a booking that never happened: off the roster, not counted as 'left', lead back to contacted, teacher told", async () => {
+    const { chat } = await bookedChat("Bekor");
+    const row = await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } });
+    const enrollment = await db.enrollment.findFirstOrThrow({ where: { studentId: row.studentId!, groupId } });
+    expect(await db.lead.findUniqueOrThrow({ where: { id: row.leadId! } })).toMatchObject({ stage: "TRIAL_BOOKED" });
+    const m = model(msg([call("cancel_trial", { group_id: groupId, reason: "boshqa markazga boradi" })], "tool_use"), msg([text("Bekor qildim")], "end_turn"));
+    await turn(chat.id, "bekor qiling", m.create);
+    expect(JSON.parse(lastToolResult(m.seen).body)).toMatchObject({ ok: true, cancelled: "Abituriyentlar" });
+    expect(await db.enrollment.findUnique({ where: { id: enrollment.id } })).toBeNull();
+    expect(await db.enrollment.count({ where: { status: "LEFT", studentId: row.studentId! } })).toBe(0);
+    expect(await db.lead.findUniqueOrThrow({ where: { id: row.leadId! } })).toMatchObject({ stage: "CONTACTED" });
+    const log = await db.auditLog.findFirstOrThrow({ where: { entityId: enrollment.id, action: "trial.cancel" } });
+    expect(log.actor).toBe("AGENT");
+    expect(await db.notification.findFirst({ where: { centerId, chatId: TEACHER_CHAT, text: { contains: "Sinov darsi bekor qilindi" } } })).not.toBeNull();
+    // a second cancel finds nothing to cancel
+    const m2 = model(msg([call("cancel_trial", { group_id: groupId, reason: "x" })], "tool_use"), msg([text("ok")], "end_turn"));
+    await turn(chat.id, "bekor qiling", m2.create);
+    expect(lastToolResult(m2.seen)).toEqual({ error: true, body: expect.stringContaining("ochiq sinov darsi yo'q") });
+  });
+
+  it("stores the whole conversation for staff while the model sees only the last part", async () => {
+    const chat = await chatFor();
+    const long = Array.from({ length: 80 }, (_, i) => [
+      { role: "user", content: `savol ${i}` },
+      { role: "assistant", content: [{ type: "text", text: `javob ${i}` }] },
+    ]).flat();
+    await db.agentChat.update({ where: { id: chat.id }, data: { messages: long } });
+    const m = model(msg([text("yangi javob")], "end_turn"));
+    await turn(chat.id, "yangi savol", m.create);
+    expect(m.seen[0].messages.length).toBeLessThanOrEqual(60 + 1); // the window, plus the new message
+    expect(JSON.stringify(m.seen[0].messages)).not.toContain("savol 0\"");
+    const saved = (await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).messages as unknown[];
+    expect(saved).toHaveLength(162);
+    expect(JSON.stringify(saved[0])).toContain("savol 0");
   });
 });

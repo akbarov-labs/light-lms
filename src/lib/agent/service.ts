@@ -15,7 +15,7 @@ import { attemptKey, checkAttempts, recordAttempt, RULES } from "@/lib/auth/rate
 import { esc } from "@/lib/messages";
 import { enqueue } from "@/lib/notify";
 import { audit } from "@/lib/audit";
-import { stripThinking, trimHistory, type AgentMessage } from "./history";
+import { HISTORY_LIMITS, stripThinking, trimHistory, type AgentMessage } from "./history";
 import { runTurn, type CreateMessage } from "./loop";
 import { buildSystemPrompt } from "./prompt";
 import { staffMarker } from "./markers";
@@ -23,8 +23,18 @@ import { AGENT_TOOLS, ensureLead, executeTool, type AgentCtx, type Outbound } fr
 
 export { MARK } from "./markers";
 
-/** A conversation silent this long starts over (the phone, lead and student links are kept). */
+/**
+ * A conversation silent this long is no longer picked up by free text (only by the center's link again),
+ * and on reopening the model is told how long it was away, so old prices, dates and seats are re-checked.
+ * Nothing is deleted: staff keep the whole transcript.
+ */
 export const IDLE_RESET_DAYS = 7;
+
+/** What is kept in the database (the staff transcript); the model gets only the last HISTORY_LIMITS of it. */
+export const STORED_LIMITS = { maxMessages: 400, maxChars: 400_000 };
+
+const awayMarker = (days: number) =>
+  `[Mijoz ${days} kundan keyin qayta yozdi. Oldingi narx, sana va bo'sh joy ma'lumotlari eskirgan bo'lishi mumkin: kerak bo'lsa vositalar bilan qayta tekshir.]`;
 
 const TEXT: Record<"busy" | "tooMany" | "paused" | "error" | "refused", Record<Locale, string>> = {
   busy: { uz: "Bir daqiqa, oldingi xabaringizga javob yozyapman…", ru: "Минуту, отвечаю на предыдущее сообщение…" },
@@ -55,9 +65,12 @@ export async function openAgentChat(centerId: string, chatId: string, now = new 
   const stale = new Date(now.getTime() - IDLE_RESET_DAYS * 86_400_000);
   const existing = await db.agentChat.findUnique({ where: { centerId_chatId: { centerId, chatId } } });
   if (!existing) return db.agentChat.create({ data: { centerId, chatId, lastMessageAt: now } });
+  if (existing.lastMessageAt >= stale) return db.agentChat.update({ where: { id: existing.id }, data: { lastMessageAt: now } });
+  const days = Math.floor((now.getTime() - existing.lastMessageAt.getTime()) / 86_400_000);
+  const messages = [...((existing.messages ?? []) as unknown as AgentMessage[]), { role: "user", content: awayMarker(days) } as AgentMessage];
   return db.agentChat.update({
     where: { id: existing.id },
-    data: { lastMessageAt: now, ...(existing.lastMessageAt < stale ? { messages: [], awaitingPhone: false, trialGroupId: null } : {}) },
+    data: { lastMessageAt: now, messages: JSON.parse(JSON.stringify(messages)), awaitingPhone: false, trialGroupId: null },
   });
 }
 
@@ -149,7 +162,10 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
 
   const out: Outbound[] = [];
   const ctx = ctxOf(chat, h.personName, now, h.locale, out);
-  const history = (chat.messages ?? []) as unknown as AgentMessage[];
+  // the whole conversation is stored for staff; the model sees only its last part
+  const stored = (chat.messages ?? []) as unknown as AgentMessage[];
+  const history = trimHistory(stored, HISTORY_LIMITS);
+  const before = stored.slice(0, stored.length - history.length);
   // teachers of open groups, by name and public bio only: phone, salary and login never leave the database
   const teachers = await db.user.findMany({
     where: { centerId: chat.centerId, archivedAt: null, groups: { some: { status: { in: ["ACTIVE", "PLANNED"] } } } },
@@ -188,7 +204,7 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
       onUsage: meter,
       onReply: (text) => out.push({ kind: "text", text }),
     });
-    await saveHistory(chat.id, r.history, history.length, now);
+    await saveHistory(chat.id, [...before, ...r.history], stored.length, now);
     if (r.stopped === "refusal") out.push({ kind: "text", text: agentText("refused", h.locale) });
     else if (!out.length) out.push({ kind: "text", text: agentText("error", h.locale) });
     const replies = out.flatMap((o) => (o.kind === "text" ? [o.text] : []));
@@ -196,7 +212,7 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
   } catch (e) {
     console.error("[agent] turn failed", e);
     // keep the person's message so the next turn still knows it
-    await saveHistory(chat.id, [...history, { role: "user", content: h.text }], history.length, now);
+    await saveHistory(chat.id, [...stored, { role: "user", content: h.text }], stored.length, now);
     return say("error");
   }
 }
@@ -208,7 +224,7 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
 async function saveHistory(id: string, messages: AgentMessage[], loaded: number, now: Date): Promise<void> {
   const current = await db.agentChat.findUnique({ where: { id }, select: { messages: true } });
   const added = Array.isArray(current?.messages) ? (current.messages as unknown as AgentMessage[]).slice(loaded) : [];
-  const kept = trimHistory(stripThinking([...messages, ...added]));
+  const kept = trimHistory(stripThinking([...messages, ...added]), STORED_LIMITS);
   await db.agentChat.update({ where: { id }, data: { messages: JSON.parse(JSON.stringify(kept)), lastMessageAt: now } });
 }
 

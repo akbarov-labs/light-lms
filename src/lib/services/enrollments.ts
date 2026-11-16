@@ -231,8 +231,29 @@ export async function leaveEnrollment(actor: Actor, enrollmentId: string, endDat
     if (e.endDate) throw new UserError("error.notFound");
     const end = endDate < toISODate(e.startDate) ? toISODate(e.startDate) : endDate;
     await tx.enrollment.update({ where: { id: e.id }, data: { endDate: fromISODate(end), status: "LEFT", leftReason: reason } });
-    await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "Enrollment", entityId: e.id, action: "leave", before: { status: e.status }, after: { status: "LEFT", endDate: end, reason } });
+    await audit(tx, { centerId: actor.centerId, userId: actor.userId, actor: actor.actor, entity: "Enrollment", entityId: e.id, action: "leave", before: { status: e.status }, after: { status: "LEFT", endDate: end, reason } });
     await syncEnrollment(e.id, { tx, userId: actor.userId });
+  }, TX);
+}
+
+/**
+ * Cancel a trial booking that never happened: TRIAL, not activated, no attendance, charges, freezes or
+ * report cards. The row is deleted (the audit row keeps it), not ended as LEFT: a cancelled booking is
+ * not a student who left — it must not count in "left" reports, and an end date on the lesson day would
+ * keep the student on that day's roster. Anything with history goes through leaveEnrollment instead.
+ */
+export async function cancelTrialBooking(actor: Actor, enrollmentId: string): Promise<{ groupId: string; startDate: ISODate }> {
+  return db.$transaction(async (tx) => {
+    const e = await loadEnrollment(tx, actor, enrollmentId);
+    const history = await tx.enrollment.findUnique({
+      where: { id: e.id },
+      select: { _count: { select: { attendance: true, ledger: true, freezes: true, reportCards: true, transferredFrom: true } } },
+    });
+    const used = history ? Object.values(history._count).some((n) => n > 0) : true;
+    if (e.status !== "TRIAL" || e.endDate || e.activatedAt || used) throw new UserError("error.trialHasHistory");
+    await tx.enrollment.delete({ where: { id: e.id } });
+    await audit(tx, { centerId: actor.centerId, userId: actor.userId, actor: actor.actor, entity: "Enrollment", entityId: e.id, action: "trial.cancel", before: e });
+    return { groupId: e.groupId, startDate: toISODate(e.startDate) };
   }, TX);
 }
 
