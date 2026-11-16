@@ -106,7 +106,7 @@ ${rules}
 export interface PromptState {
   phone: "telegram" | "typed" | null;
   /** open trial bookings this chat made, nearest first */
-  trials: { student: string; group: string; groupId: string; date: string; weekday: string; time: string; address: string; daysFromToday: number }[];
+  trials: { student: string; group: string; groupId: string; date: string; weekday: string; time: string; address: string; daysFromToday: number; started: boolean }[];
 }
 
 /**
@@ -117,9 +117,10 @@ export interface PromptState {
  */
 export function buildStateBlock(s: PromptState): string {
   const phone = s.phone === "telegram" ? "olingan (Telegram kontakt)" : s.phone === "typed" ? "olingan (qo'lda yozilgan)" : "olinmagan";
-  const when = (d: number) => (d === 0 ? " — BUGUN" : d < 0 ? ` — ${-d} kun oldin bo'lgan` : "");
+  // the date alone is not enough: at 20:47 a 14:00 lesson "today" is already over
+  const when = (d: number, started: boolean) => (d === 0 ? (started ? " — bugun bo'lib o'tgan" : " — BUGUN") : d < 0 ? ` — ${-d} kun oldin bo'lgan` : "");
   const trials = s.trials.length
-    ? s.trials.map((t) => `- ${t.student}: «${t.group}» (group_id: ${t.groupId}), ${t.date}, ${t.weekday}, ${t.time}, ${t.address}${when(t.daysFromToday)}`).join("\n")
+    ? s.trials.map((t) => `- ${t.student}: «${t.group}» (group_id: ${t.groupId}), ${t.date}, ${t.weekday}, ${t.time}, ${t.address}${when(t.daysFromToday, t.started)}`).join("\n")
     : "- yo'q";
   return `<mijoz_holati>
 Bu ma'lumot har xabarda markaz bazasidan olinadi va suhbat tarixidan ustun: tarixda boshqacha yoki umuman yo'q bo'lsa ham, shunga ishon.

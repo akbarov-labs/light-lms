@@ -109,8 +109,8 @@ async function execute(name: string, input: Record<string, unknown>, calls: { na
 const u = (text: string): AgentMessage => ({ role: "user", content: text });
 const a = (text: string): AgentMessage => ({ role: "assistant", content: [{ type: "text", text }] });
 const opened = [u(MARK.start), a("Assalomu alaykum! Men Aniq Hisob markazining AI yordamchisiman. Kim uchun va qaysi fan bo'yicha kurs qidiryapsiz?")];
-const DTM_TRIAL = { student: "Sarvar Akbarov", group: "DTM Matematika", groupId: "g_dtm", date: "18.11.2026", weekday: "chorshanba", time: "16:00", address: "Chilonzor filiali, Bunyodkor ko'chasi 12", daysFromToday: 2 };
-const EN_TRIAL = { student: "Sarvar Akbarov", group: "GE-A1 kechki", groupId: "g_english", date: "16.11.2026", weekday: "dushanba", time: "18:00", address: "Chilonzor filiali, Bunyodkor ko'chasi 12", daysFromToday: 0 };
+const DTM_TRIAL = { student: "Sarvar Akbarov", group: "DTM Matematika", groupId: "g_dtm", date: "18.11.2026", weekday: "chorshanba", time: "16:00", address: "Chilonzor filiali, Bunyodkor ko'chasi 12", daysFromToday: 2, started: false };
+const EN_TRIAL = { student: "Sarvar Akbarov", group: "GE-A1 kechki", groupId: "g_english", date: "16.11.2026", weekday: "dushanba", time: "18:00", address: "Chilonzor filiali, Bunyodkor ko'chasi 12", daysFromToday: 0, started: false };
 const toolCall = (id: string, name: string, input: object): AgentMessage => ({ role: "assistant", content: [{ type: "tool_use", id, name, input }] });
 const toolResult = (id: string, body: unknown): AgentMessage => ({ role: "user", content: [{ type: "tool_result", tool_use_id: id, content: JSON.stringify(body) }] });
 /** Up to the moment the person picked the DTM group's card and shared the phone. */

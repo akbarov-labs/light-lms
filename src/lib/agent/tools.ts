@@ -304,6 +304,7 @@ export async function chatState(ctx: AgentCtx): Promise<PromptState> {
         time: lesson?.startTime ?? "?",
         address: t.group.branch.address ? `${t.group.branch.name}, ${t.group.branch.address}` : t.group.branch.name,
         daysFromToday: diffDays(date, today),
+        started: date < today || (date === today && !!lesson && lesson.startTime <= nowTimeHHmm(ctx.now ?? new Date())),
       };
     }),
   };

@@ -47,11 +47,14 @@ describe("buildStateBlock", () => {
   it("lists the chat's open trials with group ids, flags today, and says it outranks the history", () => {
     const b = buildStateBlock({
       phone: "telegram",
-      trials: [{ student: "Sarvar Akbarov", group: "DTM Matematika", groupId: "g1", date: "16.11.2026", weekday: "dushanba", time: "14:00", address: "Yunusobod", daysFromToday: 0 }],
+      trials: [{ student: "Sarvar Akbarov", group: "DTM Matematika", groupId: "g1", date: "16.11.2026", weekday: "dushanba", time: "14:00", address: "Yunusobod", daysFromToday: 0, started: false }],
     });
     expect(b).toContain("Telefon raqam: olingan (Telegram kontakt)");
     expect(b).toContain("«DTM Matematika» (group_id: g1), 16.11.2026, dushanba, 14:00, Yunusobod — BUGUN");
     expect(b).toContain("suhbat tarixidan ustun");
     expect(buildStateBlock({ phone: null, trials: [] })).toMatch(/olinmagan[\s\S]*- yo'q/);
+    // a lesson earlier today is over, not upcoming
+    const t = { student: "A", group: "G", groupId: "g", date: "16.11.2026", weekday: "dushanba", time: "14:00", address: "X", daysFromToday: 0, started: true };
+    expect(buildStateBlock({ phone: null, trials: [t] })).toContain("— bugun bo'lib o'tgan");
   });
 });
