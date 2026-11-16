@@ -415,3 +415,40 @@ describe("lead agent: second live chat fixes", () => {
     expect(JSON.stringify(saved[0])).toContain("savol 0");
   });
 });
+
+describe("lead agent: third live chat fixes", () => {
+  it("a booking that fell out of the model's window still reaches it through the state block", async () => {
+    const chat = await chatFor();
+    await recordPhone(chat, "998901234520", "telegram", "Unutilgan");
+    await turn(chat.id, "yozing", model(msg([call("book_trial", { group_id: groupId, student_first_name: "Unutilgan", student_last_name: "Bron", for_self: true, goal: "x", level_summary: "y" })], "tool_use"), msg([text("ok")], "end_turn")).create);
+    const row = await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } });
+    const filler = Array.from({ length: 80 }, (_, i) => [
+      { role: "user", content: `gap ${i}` },
+      { role: "assistant", content: [{ type: "text", text: `javob ${i}` }] },
+    ]).flat();
+    await db.agentChat.update({ where: { id: chat.id }, data: { messages: [...(row.messages as object[]), ...filler] } });
+    const m = model(msg([text("Sizda bitta sinov darsi bor")], "end_turn"));
+    await turn(chat.id, "darslarim qachon?", m.create);
+    expect(JSON.stringify(m.seen[0].messages)).not.toContain("book_trial"); // gone from the window…
+    expect(m.seen[0].system).toContain(`«Abituriyentlar» (group_id: ${groupId})`); // …but not from the state
+    expect(m.seen[0].system).toContain("Telefon raqam: olingan (Telegram kontakt)");
+  });
+
+  it("a parent's two children: both trials are in the state and each can be cancelled", async () => {
+    const chat = await chatFor();
+    await recordPhone(chat, "998901234521", "telegram", "Ota");
+    const book = (first: string, gid: string) =>
+      model(msg([call("book_trial", { group_id: gid, student_first_name: first, student_last_name: "Aka", for_self: false, parent_name: "Ota", goal: "x", level_summary: "y" })], "tool_use"), msg([text("ok")], "end_turn"));
+    const base = await db.group.findUniqueOrThrow({ where: { id: groupId } });
+    const extra = await db.group.create({ data: { centerId, branchId, courseId: base.courseId, teacherId: base.teacherId, code: 9, name: "Ikkinchi guruh", capacity: 10, startDate: fromISODate(addDays(today, -5)) } });
+    await db.lesson.create({ data: { groupId: extra.id, date: fromISODate(addDays(today, 2)), startTime: "10:00", endTime: "11:30", teacherId: base.teacherId } });
+    await turn(chat.id, "birinchisi", book("Birinchi", groupId).create);
+    await turn(chat.id, "ikkinchisi", book("Ikkinchi", extra.id).create);
+    expect((await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).studentIds).toHaveLength(2);
+    const m = model(msg([call("cancel_trial", { group_id: groupId, reason: "birinchisi bormaydi" })], "tool_use"), msg([text("ok")], "end_turn"));
+    await turn(chat.id, "birinchisini bekor qiling", m.create);
+    expect(m.seen[0].system).toContain("Birinchi Aka: «Abituriyentlar»");
+    expect(m.seen[0].system).toContain("Ikkinchi Aka: «Ikkinchi guruh»");
+    expect(JSON.parse(lastToolResult(m.seen).body)).toMatchObject({ ok: true, cancelled: "Abituriyentlar" }); // the earlier child, not chat.studentId
+  });
+});

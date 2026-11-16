@@ -9,7 +9,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { agentModel, anthropicApiKey } from "../src/lib/env";
 import { runTurn, type CreateMessage } from "../src/lib/agent/loop";
-import { buildSystemPrompt } from "../src/lib/agent/prompt";
+import { buildStateBlock, buildSystemPrompt, type PromptState } from "../src/lib/agent/prompt";
 import { AGENT_TOOLS } from "../src/lib/agent/tools";
 import { MARK, pickedGroupMarker } from "../src/lib/agent/markers";
 import type { AgentMessage } from "../src/lib/agent/history";
@@ -109,6 +109,8 @@ async function execute(name: string, input: Record<string, unknown>, calls: { na
 const u = (text: string): AgentMessage => ({ role: "user", content: text });
 const a = (text: string): AgentMessage => ({ role: "assistant", content: [{ type: "text", text }] });
 const opened = [u(MARK.start), a("Assalomu alaykum! Men Aniq Hisob markazining AI yordamchisiman. Kim uchun va qaysi fan bo'yicha kurs qidiryapsiz?")];
+const DTM_TRIAL = { student: "Sarvar Akbarov", group: "DTM Matematika", groupId: "g_dtm", date: "18.11.2026", weekday: "chorshanba", time: "16:00", address: "Chilonzor filiali, Bunyodkor ko'chasi 12", daysFromToday: 2 };
+const EN_TRIAL = { student: "Sarvar Akbarov", group: "GE-A1 kechki", groupId: "g_english", date: "16.11.2026", weekday: "dushanba", time: "18:00", address: "Chilonzor filiali, Bunyodkor ko'chasi 12", daysFromToday: 0 };
 const toolCall = (id: string, name: string, input: object): AgentMessage => ({ role: "assistant", content: [{ type: "tool_use", id, name, input }] });
 const toolResult = (id: string, body: unknown): AgentMessage => ({ role: "user", content: [{ type: "tool_result", tool_use_id: id, content: JSON.stringify(body) }] });
 /** Up to the moment the person picked the DTM group's card and shared the phone. */
@@ -136,6 +138,8 @@ const GRADES = new RegExp(`(?<![\\p{L}])(to${APOS}g${APOS}ri|noto${APOS}g${APOS}
 
 interface Case {
   name: string;
+  /** the state block the service would append (default: no phone, no bookings) */
+  state?: PromptState;
   history: AgentMessage[];
   user: string;
   check: (r: { replies: string[]; calls: { name: string; input: Record<string, unknown> }[] }) => string | null;
@@ -233,6 +237,7 @@ const CASES: Case[] = [
   },
   {
     name: "cancels the booking itself, without mockery (live: pushed it to the admin, thanked for choosing another center)",
+    state: { phone: "telegram", trials: [DTM_TRIAL] },
     history: [
       ...picked,
       u("Sarvar Akbarov"),
@@ -270,6 +275,7 @@ const CASES: Case[] = [
   },
   {
     name: "agrees the date before booking and says when it is today (live: booked a lesson two hours away)",
+    state: { phone: "telegram", trials: [] },
     history: picked,
     user: "Sarvar Akbarov. Yozib qo'ying",
     check: ({ replies, calls }) => {
@@ -277,6 +283,42 @@ const CASES: Case[] = [
       const book = calls.find((c) => c.name === "book_trial");
       if (book) return `booked before agreeing a date (lesson_date: ${book.input.lesson_date ?? "nearest"})`;
       if (!/bugun/i.test(replies.join(" "))) return "did not say the nearest lesson is today";
+      return null;
+    },
+  },
+  {
+    name: "knows a booking that fell out of the window, from the state block (live: denied the math booking)",
+    state: { phone: "telegram", trials: [DTM_TRIAL, EN_TRIAL] },
+    history: [
+      ...opened,
+      u("ingliz tili, umumiy bilim uchun. Sarvar Akbarov"),
+      toolCall("toolu_b2", "book_trial", { group_id: "g_english", student_first_name: "Sarvar", student_last_name: "Akbarov", for_self: true, goal: "umumiy", level_summary: "savol berilmadi" }),
+      toolResult("toolu_b2", { ok: true, group: "GE-A1 kechki", trial_lesson: { date: "16.11.2026", weekday: "dushanba", time: "18:00", days_from_today: 0 } }),
+      a("Sarvar, bugun soat 18:00 dagi GE-A1 kechki sinov darsiga yozildingiz."),
+    ],
+    user: "Yaxshisi ingliz tili darsini ham, matematika darsini ham bekor qiling",
+    check: ({ calls }) => {
+      const ids = calls.filter((c) => c.name === "cancel_trial").map((c) => c.input.group_id);
+      if (!ids.includes("g_dtm")) return `did not cancel the math trial (cancelled: ${ids.join(", ") || "nothing"})`;
+      if (!ids.includes("g_english")) return "did not cancel the English trial";
+      return null;
+    },
+  },
+  {
+    name: "no stock closing lines; a 'thanks' gets a short answer (live: 'any questions, write' until the person got annoyed)",
+    state: { phone: "telegram", trials: [] },
+    history: [
+      ...opened,
+      u("DTM matematika kursi prezident maktabiga ham to'g'ri keladimi?"),
+      toolCall("toolu_a1", "ask_teacher", { question: "DTM kursi prezident maktabiga mosmi?" }),
+      toolResult("toolu_a1", { ok: true, delivered: true }),
+      a("Bu savolni Ustozga yubordim, javobi shu chatga keladi."),
+    ],
+    user: "tushunarli, rahmat",
+    check: ({ replies }) => {
+      const all = replies.join(" ");
+      if (/savol|yozaver|administrator|ustoz|yordam kerak/i.test(all)) return `added a reminder or stock line: "${all.slice(0, 150)}"`;
+      if (all.length > 160) return `too long for a thanks (${all.length} chars)`;
       return null;
     },
   },
@@ -299,23 +341,23 @@ async function main() {
           const r = await runTurn({
             create,
             model,
-            system: SYSTEM,
+            system: `${SYSTEM}\n\n${buildStateBlock(c.state ?? { phone: null, trials: [] })}`,
             tools: AGENT_TOOLS,
             history: c.history,
             userText: c.user,
             execute: (name, input) => execute(name, input, calls),
             onUsage: async (x) => void ((usage.in += x.input), (usage.out += x.output)),
           });
-          return { problem: c.check({ replies: r.replies, calls }), replies: r.replies };
+          return { problem: c.check({ replies: r.replies, calls }), replies: r.replies, tools: calls.map((x) => x.name) };
         } catch (e) {
-          return { problem: `error: ${(e as Error).message}`, replies: [] };
+          return { problem: `error: ${(e as Error).message}`, replies: [], tools: [] };
         }
       }),
     );
     const passed = results.filter((r) => !r.problem).length;
     if (passed < RUNS) failed++;
     console.log(`${passed === RUNS ? "PASS" : "FAIL"} ${passed}/${RUNS}  ${c.name}`);
-    for (const r of results.filter((x) => x.problem)) console.log(`       ✗ ${r.problem}\n         reply: ${r.replies.join(" | ").slice(0, 300)}`);
+    for (const r of results.filter((x) => x.problem)) console.log(`       ✗ ${r.problem}\n         tools: ${r.tools.join(", ") || "-"}\n         reply: ${r.replies.join(" | ").slice(0, 600)}`);
   }
   const p = PRICE[model];
   console.log(`\ntokens: in ${usage.in} · out ${usage.out}${p ? ` · ≈ $${((usage.in * p.in + usage.out * p.out) / 1e6).toFixed(4)}` : ""}`);

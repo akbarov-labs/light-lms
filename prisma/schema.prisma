@@ -741,6 +741,8 @@ model AgentChat {
   lead          Lead?    @relation(fields: [leadId], references: [id])
   /// the student the agent created for this chat (reused if a trial booking is retried)
   studentId     String?
+  /// every student this chat booked (a parent may book two children): the state block and cancel_trial read it
+  studentIds    String[] @default([])
   trialGroupId  String?
   /// contact phone (998…): stored here and on the lead, never sent to the model
   phone         String?

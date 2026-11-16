@@ -17,9 +17,9 @@ import { enqueue } from "@/lib/notify";
 import { audit } from "@/lib/audit";
 import { HISTORY_LIMITS, stripThinking, trimHistory, type AgentMessage } from "./history";
 import { runTurn, type CreateMessage } from "./loop";
-import { buildSystemPrompt } from "./prompt";
+import { buildStateBlock, buildSystemPrompt } from "./prompt";
 import { staffMarker } from "./markers";
-import { AGENT_TOOLS, ensureLead, executeTool, type AgentCtx, type Outbound } from "./tools";
+import { AGENT_TOOLS, chatState, ensureLead, executeTool, type AgentCtx, type Outbound } from "./tools";
 
 export { MARK } from "./markers";
 
@@ -97,6 +97,7 @@ function ctxOf(chat: AgentChat, personName: string, now?: Date, locale?: Locale,
       chatId: chat.chatId,
       leadId: chat.leadId,
       studentId: chat.studentId,
+      studentIds: chat.studentIds,
       trialGroupId: chat.trialGroupId,
       phone: chat.phone,
       phoneSource: chat.phoneSource,
@@ -179,7 +180,7 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
     courses: chat.center.courses.map((c) => c.name),
     teachers,
     rules: settings.rules,
-  });
+  }) + `\n\n${buildStateBlock(await chatState(ctx))}`;
   const meter = async (u: { input: number; output: number }) => {
     await db.$transaction([
       db.agentUsage.upsert({

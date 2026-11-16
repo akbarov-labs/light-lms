@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSystemPrompt } from "./prompt";
+import { buildStateBlock, buildSystemPrompt } from "./prompt";
 
 const center = {
   name: "Aniq Hisob",
@@ -40,5 +40,18 @@ describe("buildSystemPrompt", () => {
   it("holds nothing that changes between turns (dates, seats): those come from tools", () => {
     expect(buildSystemPrompt(center)).toBe(buildSystemPrompt(center));
     expect(buildSystemPrompt(center)).not.toMatch(/\d{2}\.\d{2}\.\d{4}/);
+  });
+});
+
+describe("buildStateBlock", () => {
+  it("lists the chat's open trials with group ids, flags today, and says it outranks the history", () => {
+    const b = buildStateBlock({
+      phone: "telegram",
+      trials: [{ student: "Sarvar Akbarov", group: "DTM Matematika", groupId: "g1", date: "16.11.2026", weekday: "dushanba", time: "14:00", address: "Yunusobod", daysFromToday: 0 }],
+    });
+    expect(b).toContain("Telefon raqam: olingan (Telegram kontakt)");
+    expect(b).toContain("«DTM Matematika» (group_id: g1), 16.11.2026, dushanba, 14:00, Yunusobod — BUGUN");
+    expect(b).toContain("suhbat tarixidan ustun");
+    expect(buildStateBlock({ phone: null, trials: [] })).toMatch(/olinmagan[\s\S]*- yo'q/);
   });
 });

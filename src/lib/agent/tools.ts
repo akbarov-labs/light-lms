@@ -19,6 +19,7 @@ import { UserError } from "@/lib/user-error";
 import { createStudentWithFamily } from "@/lib/services/students";
 import { cancelTrialBooking, enrollStudent } from "@/lib/services/enrollments";
 import { AgentToolError, type AgentTool } from "./loop";
+import type { PromptState } from "./prompt";
 
 /** The conversation state the tools read and update (a slice of the AgentChat row). */
 export interface AgentChatState {
@@ -26,6 +27,8 @@ export interface AgentChatState {
   chatId: string;
   leadId: string | null;
   studentId: string | null;
+  /** every student this chat booked */
+  studentIds: string[];
   trialGroupId: string | null;
   phone: string | null;
   phoneSource: string | null;
@@ -264,6 +267,48 @@ export async function ensureLead(ctx: AgentCtx): Promise<string> {
   return leadId;
 }
 
+/** Students this chat booked (studentIds; studentId for chats from before the list existed). */
+function chatStudents(ctx: AgentCtx): string[] {
+  return [...new Set([...ctx.chat.studentIds, ...(ctx.chat.studentId ? [ctx.chat.studentId] : [])])];
+}
+
+/** The conversation's facts for the state block: phone status and open trial bookings, from the database. */
+export async function chatState(ctx: AgentCtx): Promise<PromptState> {
+  const students = chatStudents(ctx);
+  const today = todayISO(ctx.now);
+  const trials = students.length
+    ? await db.enrollment.findMany({
+        where: { studentId: { in: students }, status: "TRIAL", endDate: null, group: { centerId: ctx.centerId } },
+        include: { student: { select: { firstName: true, lastName: true } }, group: { select: { id: true, name: true, branch: { select: { name: true, address: true } } } } },
+        orderBy: { startDate: "asc" },
+      })
+    : [];
+  const lessons = trials.length
+    ? await db.lesson.findMany({
+        where: { OR: trials.map((t) => ({ groupId: t.groupId, date: t.startDate })), status: { not: "CANCELLED" } },
+        select: { groupId: true, date: true, startTime: true },
+        orderBy: { startTime: "asc" },
+      })
+    : [];
+  return {
+    phone: ctx.chat.phone ? (ctx.chat.phoneSource === "telegram" ? "telegram" : "typed") : null,
+    trials: trials.map((t) => {
+      const date = toISODate(t.startDate);
+      const lesson = lessons.find((l) => l.groupId === t.groupId && toISODate(l.date) === date);
+      return {
+        student: `${t.student.firstName} ${t.student.lastName}`,
+        group: t.group.name,
+        groupId: t.group.id,
+        date: formatDate(date),
+        weekday: WEEKDAYS[weekdayOf(date) - 1],
+        time: lesson?.startTime ?? "?",
+        address: t.group.branch.address ? `${t.group.branch.name}, ${t.group.branch.address}` : t.group.branch.name,
+        daysFromToday: diffDays(date, today),
+      };
+    }),
+  };
+}
+
 // ---------------------------------------------------------------- executors
 
 type OpenGroup = Awaited<ReturnType<typeof loadGroups>>[number];
@@ -429,6 +474,7 @@ async function bookTrial(ctx: AgentCtx, input: Record<string, unknown>) {
     );
     await saveChat(ctx, { studentId });
   }
+  if (!ctx.chat.studentIds.includes(studentId)) await saveChat(ctx, { studentIds: [...ctx.chat.studentIds, studentId] });
 
   try {
     await enrollStudent({ ...AGENT, centerId: ctx.centerId }, { studentId, groupId: group.id, startDate: lesson.date, trial: true });
@@ -453,10 +499,11 @@ async function bookTrial(ctx: AgentCtx, input: Record<string, unknown>) {
 async function cancelTrial(ctx: AgentCtx, input: Record<string, unknown>) {
   const groupId = str(input, "group_id");
   const reason = str(input, "reason").slice(0, 300);
-  if (!ctx.chat.studentId) throw new AgentToolError("Bu suhbatda yozilgan sinov darsi yo'q.");
+  const students = chatStudents(ctx);
+  if (!students.length) throw new AgentToolError("Bu suhbatda yozilgan sinov darsi yo'q.");
   // only a trial this conversation booked, still open
   const e = await db.enrollment.findFirst({
-    where: { studentId: ctx.chat.studentId, groupId, status: "TRIAL", endDate: null, group: { centerId: ctx.centerId } },
+    where: { studentId: { in: students }, groupId, status: "TRIAL", endDate: null, group: { centerId: ctx.centerId } },
     include: { group: { select: { name: true, teacherId: true } } },
   });
   if (!e) throw new AgentToolError("Bu guruhda shu mijozning ochiq sinov darsi yo'q. group_id ni book_trial natijasidan ol.");
@@ -471,7 +518,7 @@ async function cancelTrial(ctx: AgentCtx, input: Record<string, unknown>) {
   await db.$transaction(async (tx) => {
     await tx.leadNote.create({ data: { leadId, text: `🤖 Sinov darsi bekor qilindi: ${e.group.name} · ${start}\nSabab: ${reason}`, actor: "AGENT" } });
     // no open trial left: the funnel must not show a booking that no longer exists
-    const open = await tx.enrollment.count({ where: { studentId: ctx.chat.studentId!, status: "TRIAL", endDate: null } });
+    const open = await tx.enrollment.count({ where: { studentId: { in: students }, status: "TRIAL", endDate: null } });
     if (!open) await tx.lead.updateMany({ where: { id: leadId, stage: "TRIAL_BOOKED" }, data: { stage: "CONTACTED" } });
     const teacher = await staffChat(tx, e.group.teacherId);
     const chats = teacher ? [teacher] : await ownerChats(tx, ctx.centerId);
