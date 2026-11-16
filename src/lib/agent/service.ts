@@ -12,19 +12,19 @@ import { monthKey, todayISO } from "@/lib/dates";
 import type { Locale } from "@/lib/i18n";
 import { dbAttemptStore } from "@/lib/auth/attempts-db";
 import { attemptKey, checkAttempts, recordAttempt, RULES } from "@/lib/auth/ratelimit";
+import { esc } from "@/lib/messages";
+import { enqueue } from "@/lib/notify";
+import { audit } from "@/lib/audit";
 import { stripThinking, trimHistory, type AgentMessage } from "./history";
 import { runTurn, type CreateMessage } from "./loop";
 import { buildSystemPrompt } from "./prompt";
-import { AGENT_TOOLS, ensureLead, executeTool, type AgentCtx } from "./tools";
+import { staffMarker } from "./markers";
+import { AGENT_TOOLS, ensureLead, executeTool, type AgentCtx, type Outbound } from "./tools";
+
+export { MARK } from "./markers";
 
 /** A conversation silent this long starts over (the phone, lead and student links are kept). */
 export const IDLE_RESET_DAYS = 7;
-
-/** System markers the model sees instead of raw events. The phone number itself never reaches it. */
-export const MARK = {
-  start: "[Mijoz botni markaz havolasi orqali ochdi]",
-  phone: "[telefon raqam olindi]",
-};
 
 const TEXT: Record<"busy" | "tooMany" | "paused" | "error" | "refused", Record<Locale, string>> = {
   busy: { uz: "Bir daqiqa, oldingi xabaringizga javob yozyapman…", ru: "Минуту, отвечаю на предыдущее сообщение…" },
@@ -67,11 +67,18 @@ export async function activeAgentChat(chatId: string, now = new Date()): Promise
   return db.agentChat.findFirst({ where: { chatId, lastMessageAt: { gte: stale } }, orderBy: { lastMessageAt: "desc" } });
 }
 
-function ctxOf(chat: AgentChat, personName: string, now?: Date): AgentCtx {
+/** Keep the person's Telegram @username current (staff can then write to them directly). */
+export async function setAgentUsername(chatRowId: string, username: string | null): Promise<void> {
+  await db.agentChat.update({ where: { id: chatRowId }, data: { username: username?.slice(0, 64) ?? null } });
+}
+
+function ctxOf(chat: AgentChat, personName: string, now?: Date, locale?: Locale, out?: Outbound[]): AgentCtx {
   return {
     centerId: chat.centerId,
     personName,
     now,
+    locale,
+    out,
     chat: {
       id: chat.id,
       chatId: chat.chatId,
@@ -94,6 +101,9 @@ export async function recordPhone(chat: AgentChat, phone: string, source: "teleg
 }
 
 export interface AgentReply {
+  /** everything to send, in order: the agent's texts, group cards, map pins */
+  out: Outbound[];
+  /** the agent's texts only (out filtered) */
   replies: string[];
   /** show the "share my phone" button with the last reply */
   askPhone: boolean;
@@ -106,6 +116,8 @@ export interface HandleInput {
   text: string;
   personName: string;
   locale: Locale;
+  /** the person wrote or pressed something (not a system event such as /start): the lead must exist */
+  fromPerson?: boolean;
   /** injected model call (tests); default: the Anthropic API */
   create?: CreateMessage;
   now?: Date;
@@ -117,7 +129,12 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
     where: { id: h.chatRowId },
     include: { center: { include: { branches: { where: { archivedAt: null } }, courses: { where: { archivedAt: null }, select: { name: true } } } } },
   });
-  const say = (k: keyof typeof TEXT): AgentReply => ({ replies: [agentText(k, h.locale)], askPhone: false, booked: false });
+  // everyone who wrote is a lead, even when the agent is paused or over its limits
+  if (h.fromPerson) await ensureLead(ctxOf(chat, h.personName, now)).then((id) => (chat.leadId = id));
+  const say = (k: keyof typeof TEXT): AgentReply => {
+    const text = agentText(k, h.locale);
+    return { out: [{ kind: "text", text }], replies: [text], askPhone: false, booked: false };
+  };
   const settings = readSettings(chat.center.settings).agent;
   if ((!h.create && !anthropicApiKey()) || !settings.enabled || chat.center.disabledAt) return say("paused");
 
@@ -130,13 +147,21 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
   const used = await db.agentUsage.findUnique({ where: { centerId_month: { centerId: chat.centerId, month } } });
   if (used && used.inputTokens + used.outputTokens >= settings.monthlyTokenCap) return say("paused");
 
-  const ctx = ctxOf(chat, h.personName, now);
+  const out: Outbound[] = [];
+  const ctx = ctxOf(chat, h.personName, now, h.locale, out);
   const history = (chat.messages ?? []) as unknown as AgentMessage[];
+  // teachers of open groups, by name and public bio only: phone, salary and login never leave the database
+  const teachers = await db.user.findMany({
+    where: { centerId: chat.centerId, archivedAt: null, groups: { some: { status: { in: ["ACTIVE", "PLANNED"] } } } },
+    select: { name: true, bio: true },
+    orderBy: { name: "asc" },
+  });
   const system = buildSystemPrompt({
     name: chat.center.name,
     phone: chat.center.phone,
-    branches: chat.center.branches.map((b) => ({ name: b.name, address: b.address })),
+    branches: chat.center.branches.map((b) => ({ id: b.id, name: b.name, address: b.address, hasLocation: b.latitude !== null && b.longitude !== null })),
     courses: chat.center.courses.map((c) => c.name),
+    teachers,
     rules: settings.rules,
   });
   const meter = async (u: { input: number; output: number }) => {
@@ -161,19 +186,56 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
       userText: h.text,
       execute: (name, input) => executeTool(ctx, name, input),
       onUsage: meter,
+      onReply: (text) => out.push({ kind: "text", text }),
     });
-    await saveHistory(chat.id, r.history, now);
-    const replies = r.stopped === "refusal" ? [agentText("refused", h.locale)] : r.replies.length ? r.replies : [agentText("error", h.locale)];
-    return { replies, askPhone: ctx.chat.awaitingPhone && !ctx.chat.phone, booked: !!ctx.chat.trialGroupId && ctx.chat.trialGroupId !== trialBefore };
+    await saveHistory(chat.id, r.history, history.length, now);
+    if (r.stopped === "refusal") out.push({ kind: "text", text: agentText("refused", h.locale) });
+    else if (!out.length) out.push({ kind: "text", text: agentText("error", h.locale) });
+    const replies = out.flatMap((o) => (o.kind === "text" ? [o.text] : []));
+    return { out, replies, askPhone: ctx.chat.awaitingPhone && !ctx.chat.phone, booked: !!ctx.chat.trialGroupId && ctx.chat.trialGroupId !== trialBefore };
   } catch (e) {
     console.error("[agent] turn failed", e);
     // keep the person's message so the next turn still knows it
-    await saveHistory(chat.id, [...history, { role: "user", content: h.text }], now);
+    await saveHistory(chat.id, [...history, { role: "user", content: h.text }], history.length, now);
     return say("error");
   }
 }
 
-async function saveHistory(id: string, messages: AgentMessage[], now: Date): Promise<void> {
-  const kept = trimHistory(stripThinking(messages));
+/**
+ * Save a turn's history. A staff message may have been appended while the turn ran (the lead page writes
+ * to the same row): whatever was added after the `loaded` messages this turn started from is kept, after it.
+ */
+async function saveHistory(id: string, messages: AgentMessage[], loaded: number, now: Date): Promise<void> {
+  const current = await db.agentChat.findUnique({ where: { id }, select: { messages: true } });
+  const added = Array.isArray(current?.messages) ? (current.messages as unknown as AgentMessage[]).slice(loaded) : [];
+  const kept = trimHistory(stripThinking([...messages, ...added]));
   await db.agentChat.update({ where: { id }, data: { messages: JSON.parse(JSON.stringify(kept)), lastMessageAt: now } });
+}
+
+export const STAFF_MESSAGE_MAX = 2000;
+
+/**
+ * A staff member writes to the person through the bot (from the lead page): the message is queued for
+ * Telegram and added to the agent's history as a marker, so when the person answers, the agent knows
+ * what was said and by whom. A new lead moves to "contacted", like a note does.
+ */
+export async function sendStaffMessage(a: { centerId: string; chatRowId: string; userId: string; staffName: string; text: string; now?: Date }): Promise<void> {
+  const text = a.text.trim().slice(0, STAFF_MESSAGE_MAX);
+  if (!text) return;
+  const now = a.now ?? new Date();
+  await db.$transaction(async (tx) => {
+    const chat = await tx.agentChat.findFirst({ where: { id: a.chatRowId, centerId: a.centerId }, select: { id: true, chatId: true, leadId: true } });
+    if (!chat) throw new Error("agent chat not found");
+    await enqueue(tx, a.centerId, [{ chatId: chat.chatId, locale: "uz" }], () => esc(text));
+    // atomic append: a turn running right now keeps it too (saveHistory re-reads what was added)
+    const marker: AgentMessage = { role: "user", content: staffMarker(a.staffName, text) };
+    await tx.$executeRaw`UPDATE "AgentChat" SET messages = messages || ${JSON.stringify([marker])}::jsonb WHERE id = ${chat.id}`;
+    // the conversation is live again: the person's answer goes to the agent, not to the idle reset
+    await tx.agentChat.update({ where: { id: chat.id }, data: { lastMessageAt: now } });
+    if (chat.leadId) {
+      await tx.leadNote.create({ data: { leadId: chat.leadId, text: `✉️ Telegram (bot orqali): ${text}`, createdById: a.userId, actor: "USER" } });
+      await tx.lead.updateMany({ where: { id: chat.leadId, stage: "NEW" }, data: { stage: "CONTACTED" } });
+      await audit(tx, { centerId: a.centerId, userId: a.userId, entity: "Lead", entityId: chat.leadId, action: "agent.staffMessage", after: { chat: chat.id, length: text.length } });
+    }
+  });
 }

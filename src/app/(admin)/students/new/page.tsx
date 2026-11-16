@@ -14,7 +14,7 @@ export default async function NewStudentPage({ searchParams }: { searchParams: P
       <PageHeader title={ctx.t("students.new")} back={{ href: lead ? `/leads/${lead.id}` : "/students", label: lead ? lead.name : ctx.t("nav.students") }} />
       <StudentForm
         ctx={ctx}
-        prefill={lead ? { firstName: rest.length ? rest.join(" ") : first, lastName: rest.length ? first : "", phone: formatPhone(lead.phone), guardianPhone: formatPhone(lead.phone), source: lead.source ?? undefined, leadId: lead.id, courseId: lead.courseId } : undefined}
+        prefill={lead ? { firstName: rest.length ? rest.join(" ") : first, lastName: rest.length ? first : "", phone: lead.phone ? formatPhone(lead.phone) : "", guardianPhone: lead.phone ? formatPhone(lead.phone) : "", source: lead.source ?? undefined, leadId: lead.id, courseId: lead.courseId } : undefined}
       />
     </>
   );

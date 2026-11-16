@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPersonTurn, stripThinking, trimHistory, type AgentMessage } from "./history";
+import { isPersonTurn, mergeUserTurns, stripThinking, trimHistory, type AgentMessage } from "./history";
 
 const user = (text: string): AgentMessage => ({ role: "user", content: text });
 const toolCall = (id: string): AgentMessage => ({
@@ -54,5 +54,20 @@ describe("trimHistory", () => {
 
   it("repairs a history that starts mid-turn", () => {
     expect(trimHistory([toolResult("t0"), answer("a"), user("b"), answer("c")])).toEqual([user("b"), answer("c")]);
+  });
+});
+
+describe("mergeUserTurns", () => {
+  it("joins a staff marker and the person's answer into one user turn, each its own text block", () => {
+    expect(mergeUserTurns([user("salom"), answer("a"), user("[Markaz xodimi Ega mijozga Telegram orqali yozdi: «Kelasizmi?»]"), user("ha")])).toEqual([
+      user("salom"),
+      answer("a"),
+      { role: "user", content: [{ type: "text", text: "[Markaz xodimi Ega mijozga Telegram orqali yozdi: «Kelasizmi?»]" }, { type: "text", text: "ha" }] },
+    ]);
+  });
+
+  it("never merges tool results into a person turn", () => {
+    const h = [toolCall("t1"), toolResult("t1"), user("keyin")];
+    expect(mergeUserTurns(h)).toEqual(h);
   });
 });

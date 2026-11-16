@@ -1,16 +1,21 @@
 // Telegram side of the AI lead agent (src/lib/agent). A stranger opens t.me/<bot>?start=<center-slug>,
-// the center's agent answers. Three entry points, each returns false when the message is not the agent's.
+// the center's agent answers. Four entry points (start, contact, text, a group card's button), each returns
+// false when the update is not the agent's.
 //
 // Turns run in the background: grammY handles updates one by one, so awaiting a 5–15 s model call here
 // would make every other user of the bot (teachers marking attendance) wait. Because turns now run in
 // parallel, each chat has a queue: a second message waits for the running turn, and messages that pile
 // up meanwhile are merged into one turn — two turns never write the same history at once.
-import { Keyboard, type Api, type Context } from "grammy";
+import { InlineKeyboard, Keyboard, type Api, type Context } from "grammy";
 import type { AgentChat } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { normalizePhone } from "@/lib/phone";
 import type { Locale } from "@/lib/i18n";
-import { MARK, activeAgentChat, agentCenterBySlug, agentText, handleAgentMessage, openAgentChat, recordPhone } from "@/lib/agent/service";
+import { MARK, activeAgentChat, agentCenterBySlug, agentText, handleAgentMessage, openAgentChat, recordPhone, setAgentUsername } from "@/lib/agent/service";
+import { pickedGroupMarker } from "@/lib/agent/markers";
+
+/** Callback data of a group card's "book a trial" button. */
+export const PICK = /^ag:g:([a-z0-9]{1,40})$/;
 import { linkChat } from "./data";
 
 const queues = new Map<string, { running: boolean; pending: string[] }>();
@@ -40,11 +45,19 @@ function personName(ctx: Context): string {
 
 async function runFor(api: Api, chat: AgentChat, text: string, name: string, l: Locale): Promise<void> {
   await api.sendChatAction(chat.chatId, "typing").catch(() => {});
-  const r = await handleAgentMessage({ chatRowId: chat.id, text, personName: name, locale: l });
-  for (const [i, reply] of r.replies.entries()) {
-    const last = i === r.replies.length - 1;
-    const markup = last && r.askPhone ? { reply_markup: new Keyboard().requestContact(l === "ru" ? "📱 Отправить номер" : "📱 Raqamni yuborish").resized().oneTime() } : {};
-    await api.sendMessage(chat.chatId, reply.slice(0, 4000), markup);
+  // everything but the bare /start event is the person speaking (a merged "/start + hello" included)
+  const r = await handleAgentMessage({ chatRowId: chat.id, text, personName: name, locale: l, fromPerson: text !== MARK.start });
+  const lastText = r.out.map((o) => o.kind).lastIndexOf("text");
+  for (const [i, o] of r.out.entries()) {
+    if (o.kind === "card") {
+      await api.sendMessage(chat.chatId, o.html.slice(0, 4000), { parse_mode: "HTML", reply_markup: new InlineKeyboard().text(o.button, `ag:g:${o.groupId}`) });
+    } else if (o.kind === "venue") {
+      await api.sendVenue(chat.chatId, o.latitude, o.longitude, o.title.slice(0, 100), o.address.slice(0, 200));
+    } else {
+      // the "share my phone" button rides on the agent's last text of the turn
+      const markup = i === lastText && r.askPhone ? { reply_markup: new Keyboard().requestContact(l === "ru" ? "📱 Отправить номер" : "📱 Raqamni yuborish").resized().oneTime() } : {};
+      await api.sendMessage(chat.chatId, o.text.slice(0, 4000), markup);
+    }
   }
   // A booked trial with a Telegram-verified number: link the chat like a contact share would, so this
   // family gets schedule, reminders and the bot menu. A typed number never links (it is unverified).
@@ -57,6 +70,8 @@ async function runFor(api: Api, chat: AgentChat, text: string, name: string, l: 
 function schedule(ctx: Context, chat: AgentChat, text: string, l: Locale): void {
   const api = ctx.api;
   const name = personName(ctx);
+  const username = ctx.from?.username ?? null;
+  if (username !== chat.username) void setAgentUsername(chat.id, username).catch((e) => console.error("[agent] username", e));
   void queueTurn(chat.chatId, text, (t) => runFor(api, chat, t, name, l)).catch(async (e) => {
     console.error("[agent] turn", e);
     await api.sendMessage(chat.chatId, agentText("error", l)).catch(() => {});
@@ -100,4 +115,16 @@ export async function agentOnText(ctx: Context, text: string, l: Locale): Promis
   }
   schedule(ctx, chat, text.slice(0, 2000), l);
   return true;
+}
+
+/** "Book a trial" under a group card: the agent hears it as a marker and goes on to book. */
+export async function agentOnPick(ctx: Context, groupId: string, l: Locale): Promise<void> {
+  const chat = ctx.chat && ctx.chat.type === "private" ? await activeAgentChat(String(ctx.chat.id)) : null;
+  const group = chat ? await db.group.findFirst({ where: { id: groupId, centerId: chat.centerId, status: { in: ["ACTIVE", "PLANNED"] } }, select: { id: true, name: true } }) : null;
+  if (!chat || !group) {
+    await ctx.answerCallbackQuery({ text: l === "ru" ? "Эта группа больше недоступна. Напишите нам." : "Bu guruh endi mavjud emas. Bizga yozing." });
+    return;
+  }
+  await ctx.answerCallbackQuery();
+  schedule(ctx, chat, pickedGroupMarker(group.name, group.id), l);
 }

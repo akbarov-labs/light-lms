@@ -18,6 +18,10 @@ import { fromISODate } from "@/lib/dates";
 import { generateLessons } from "@/lib/services/lessons";
 import { syncGroup } from "@/lib/billing/sync";
 import { assertBranch, staffInScope, staffPermsFor, type Ctx } from "@/lib/ctx";
+import { parseGeo } from "@/lib/geo";
+
+/** Teacher bio length: enough for experience and results, short enough for every agent prompt. */
+const BIO_MAX = 600;
 import { adminResetPassword, BCRYPT_ROUNDS, setPassword } from "@/lib/auth/password";
 import { MIN_PASSWORD } from "@/lib/auth/security";
 import { issueSession } from "@/lib/auth/session-cookie";
@@ -179,7 +183,15 @@ async function queueTestSms(ctx: Ctx): Promise<string> {
 
 // ---------------------------------------------------------------- branches & rooms
 
-const branchSchema = z.object({ id: zOptId, name: zStr, address: zOptStr, phone: zOptStr });
+const branchSchema = z.object({ id: zOptId, name: zStr, address: zOptStr, phone: zOptStr, location: zOptStr });
+
+/** The map point from coordinates or a full map link; empty clears it. */
+function branchPoint(location: string | undefined): { latitude: number | null; longitude: number | null } {
+  if (!location) return { latitude: null, longitude: null };
+  const r = parseGeo(location);
+  if (!r.ok) throw new UserError(r.reason === "short_link" ? "settings.locationShortLink" : "settings.locationInvalid");
+  return { latitude: r.point.lat, longitude: r.point.lng };
+}
 
 export async function saveBranchAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction("settings", async (ctx) => {
@@ -188,10 +200,10 @@ export async function saveBranchAction(_: ActionState, fd: FormData): Promise<Ac
       if (f.id) {
         const b = await tx.branch.findFirst({ where: { id: f.id, centerId: ctx.centerId } });
         if (!b) throw new UserError("error.notFound");
-        const after = await tx.branch.update({ where: { id: b.id }, data: { name: f.name, address: f.address ?? null, phone: f.phone ?? null } });
+        const after = await tx.branch.update({ where: { id: b.id }, data: { name: f.name, address: f.address ?? null, phone: f.phone ?? null, ...branchPoint(f.location) } });
         await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Branch", entityId: b.id, action: "update", before: b, after });
       } else {
-        const b = await tx.branch.create({ data: { centerId: ctx.centerId, name: f.name, address: f.address ?? null, phone: f.phone ?? null } });
+        const b = await tx.branch.create({ data: { centerId: ctx.centerId, name: f.name, address: f.address ?? null, phone: f.phone ?? null, ...branchPoint(f.location) } });
         await audit(tx, { centerId: ctx.centerId, userId: ctx.userId, entity: "Branch", entityId: b.id, action: "create", after: b });
       }
     });
@@ -292,6 +304,7 @@ const staffSchema = z.object({
   role: z.enum(["OWNER", "MANAGER", "ADMIN", "TEACHER"]),
   isTeacher: zBool,
   password: zOptStr,
+  bio: zOptStr,
 });
 
 function canManageRole(ctx: Ctx, role: RoleName): boolean {
@@ -321,6 +334,8 @@ export async function saveStaffAction(_: ActionState, fd: FormData): Promise<Act
         phone: f.phone,
         role: f.role,
         isTeacher: f.role === "TEACHER" ? true : f.isTeacher,
+        // public text for the AI agent; only teachers have one
+        bio: (f.role === "TEACHER" || f.isTeacher) && f.bio ? f.bio.slice(0, BIO_MAX) : null,
         // a manager/admin can only hand out switches they hold — the role defaults included (S2)
         perms: staffPermsFor(ctx, f.role, picked, u?.perms),
       };

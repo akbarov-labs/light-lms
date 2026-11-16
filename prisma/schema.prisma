@@ -206,6 +206,9 @@ model Branch {
   name       String
   address    String?
   phone      String?
+  /// map point (WGS84) for the AI agent's "send location"; set from coordinates or a map link in settings
+  latitude   Float?
+  longitude  Float?
   archivedAt DateTime?
   createdAt  DateTime  @default(now())
 
@@ -246,6 +249,8 @@ model User {
   perms              String[]
   telegramChatId     String?
   locale             String?
+  /// public text about a teacher (experience, results) — the only profile field the AI agent may show customers
+  bio                String?
   archivedAt         DateTime?
   createdAt          DateTime  @default(now())
   /// sessions issued before this moment are rejected (password changed or reset)
@@ -668,7 +673,8 @@ model Lead {
   branchId      String?
   branch        Branch?   @relation(fields: [branchId], references: [id])
   name          String
-  phone         String
+  /// null only for a Telegram AI lead that has not shared a number yet (follow-up goes through the bot)
+  phone         String?
   source        String?
   courseId      String?
   course        Course?   @relation(fields: [courseId], references: [id])
@@ -729,6 +735,8 @@ model AgentChat {
   centerId      String
   center        Center   @relation(fields: [centerId], references: [id])
   chatId        String
+  /// Telegram @username (without @), if the person has one: staff can write to them directly
+  username      String?
   leadId        String?
   lead          Lead?    @relation(fields: [leadId], references: [id])
   /// the student the agent created for this chat (reused if a trial booking is retried)

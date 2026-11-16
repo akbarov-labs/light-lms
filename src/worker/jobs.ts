@@ -20,6 +20,7 @@ import { formatMoney } from "@/lib/money";
 import { purgeOldAttempts } from "@/lib/auth/attempts-db";
 import { purgeOldNotifications } from "./notifications";
 import { errText } from "./util";
+import { appUrl } from "@/lib/env";
 
 export type JobResult = Record<string, number | string>;
 
@@ -246,7 +247,8 @@ export async function ownerReport(userId: string, today: ISODate = todayISO()): 
   if (!ctx.can("finance.view")) return null;
   const t = ctx.t;
   const m = monthRange(today.slice(0, 7));
-  const [day, month, aging, newStudents, left, missing] = await Promise.all([
+  const agentToday = { centerId: ctx.centerId, source: "Telegram AI", archivedAt: null, createdAt: zonedRange(today, today) };
+  const [day, month, aging, newStudents, left, missing, agentLeads, agentNoPhone] = await Promise.all([
     revenue(ctx, { from: today, to: today }),
     revenue(ctx, { from: m.start, to: m.end }),
     debtAging(ctx),
@@ -254,6 +256,9 @@ export async function ownerReport(userId: string, today: ISODate = todayISO()): 
     db.student.count({ where: { centerId: ctx.centerId, createdAt: zonedRange(today, today), ...studentScope(ctx) } }),
     db.enrollment.count({ where: { status: "LEFT", endDate: fromISODate(today), group: { centerId: ctx.centerId, ...branchWhere(ctx) } } }),
     db.lesson.count({ where: { date: fromISODate(today), status: "SCHEDULED", group: { centerId: ctx.centerId, ...branchWhere(ctx) } } }),
+    // AI agent leads of the day, and those who left without a number (staff follow up through the bot)
+    db.lead.count({ where: agentToday }),
+    db.lead.count({ where: { ...agentToday, phone: null } }),
   ]);
   const money = (n: number) => formatMoney(n, ctx.locale === "ru" ? "сум" : "so'm");
   return [
@@ -263,6 +268,7 @@ export async function ownerReport(userId: string, today: ISODate = todayISO()): 
     `${t("reports.totalDebt")}: <b>${money(aging.total)}</b>`,
     `${t("reports.new")}: +${newStudents} · ${t("reports.left")}: −${left}`,
     `${t("reports.missing")}: ${missing}`,
+    ...(agentLeads ? [`${t("reports.agentLeads", { n: agentLeads, noPhone: agentNoPhone })}${agentNoPhone ? `\n${appUrl()}/leads?nophone=1` : ""}`] : []),
   ].join("\n");
 }
 

@@ -4,12 +4,13 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { addDays, fromISODate, monthKey, todayISO } from "@/lib/dates";
+import { addDays, formatDate, fromISODate, monthKey, todayISO } from "@/lib/dates";
 import { dbAttemptStore } from "@/lib/auth/attempts-db";
 import { attemptKey, recordAttempt } from "@/lib/auth/ratelimit";
 import type { CreateMessage } from "@/lib/agent/loop";
-import { MARK, activeAgentChat, agentCenterBySlug, handleAgentMessage, openAgentChat, recordPhone } from "@/lib/agent/service";
+import { MARK, activeAgentChat, agentCenterBySlug, handleAgentMessage, openAgentChat, recordPhone, sendStaffMessage } from "@/lib/agent/service";
 import { queueTurn } from "@/worker/bot/agent";
+import { ownerReport } from "@/worker/jobs";
 
 type Block = Anthropic.Beta.BetaContentBlock;
 const msg = (content: Block[], stop: Anthropic.Beta.BetaMessage["stop_reason"]) =>
@@ -42,6 +43,8 @@ const PHONE = "998901234500";
 const TEACHER_CHAT = "920000001";
 const OWNER_CHAT = "920000002";
 let centerId = "";
+let branchId = "";
+let ownerId = "";
 let groupId = "";
 let fullGroupId = "";
 let chatSeq = 0;
@@ -53,9 +56,10 @@ beforeAll(async () => {
   });
   centerId = c.id;
   const branch = await db.branch.create({ data: { centerId, name: "Chilonzor", address: "Bunyodkor 1" } });
+  branchId = branch.id;
   const hash = await bcrypt.hash("x-password-1", 4);
   const teacher = await db.user.create({ data: { centerId, phone: "998901230001", name: "Ustoz", passwordHash: hash, role: "TEACHER", isTeacher: true, perms: [], telegramChatId: TEACHER_CHAT } });
-  await db.user.create({ data: { centerId, phone: "998901230002", name: "Ega", passwordHash: hash, role: "OWNER", perms: [], telegramChatId: OWNER_CHAT } });
+  ownerId = (await db.user.create({ data: { centerId, phone: "998901230002", name: "Ega", passwordHash: hash, role: "OWNER", perms: [], telegramChatId: OWNER_CHAT } })).id;
   const course = await db.course.create({ data: { centerId, name: "Matematika DTM", pricingType: "SUBSCRIPTION", price: 650_000 } });
   const g = await db.group.create({ data: { centerId, branchId: branch.id, courseId: course.id, teacherId: teacher.id, code: 1, name: "Abituriyentlar", capacity: 10, startDate: fromISODate(addDays(today, -30)) } });
   groupId = g.id;
@@ -76,7 +80,9 @@ afterEach(() => {
 async function chatFor(chatId = newChatId()) {
   return openAgentChat(centerId, chatId);
 }
-const turn = (chatRowId: string, t: string, create: CreateMessage) => handleAgentMessage({ chatRowId, text: t, personName: "Sarvar Aliyev", locale: "uz", create });
+// as the bot does: everything but the bare /start event is the person speaking
+const turn = (chatRowId: string, t: string, create: CreateMessage) =>
+  handleAgentMessage({ chatRowId, text: t, personName: "Sarvar Aliyev", locale: "uz", create, fromPerson: t !== MARK.start });
 
 describe("lead agent: the whole path to a trial lesson", () => {
   it("lists real groups, asks for the phone with a button, books the trial, tells the teacher — and never shows the phone to the model", async () => {
@@ -93,11 +99,24 @@ describe("lead agent: the whole path to a trial lesson", () => {
     );
 
     expect((await turn(chat.id, MARK.start, m.create)).replies).toEqual(["Assalomu alaykum! Kim uchun kurs qidiryapsiz?"]);
+    expect((await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).leadId).toBeNull(); // opening the bot is not a lead yet
 
     await turn(chat.id, "o'zim uchun, 11-sinf, DTM", m.create);
+    // the first thing the person wrote makes them a lead, before any phone
+    const early = await db.lead.findUniqueOrThrow({ where: { id: (await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).leadId! } });
+    expect(early).toMatchObject({ phone: null, source: "Telegram AI", name: "Sarvar Aliyev", nextContactAt: null });
     const groups = JSON.parse(lastToolResult(m.seen).body);
     expect(groups).toEqual([
-      expect.objectContaining({ id: groupId, course: "Matematika DTM", price: "650 000 so'm / oy", schedule: "Du 15:00-16:30", branch: "Chilonzor, Bunyodkor 1", seats_left: 10, next_lesson: expect.objectContaining({ days_from_today: 1, time: "15:00" }) }),
+      expect.objectContaining({
+        id: groupId,
+        course: "Matematika DTM",
+        price: "650 000 so'm / oy",
+        schedule: "Du 15:00-16:30",
+        branch: "Chilonzor, Bunyodkor 1",
+        group_started_on: formatDate(addDays(today, -30)),
+        seats_left: 10,
+        next_lesson: expect.objectContaining({ days_from_today: 1, time: "15:00" }),
+      }),
       expect.objectContaining({ id: fullGroupId, seats_left: 0 }),
     ]);
 
@@ -106,7 +125,7 @@ describe("lead agent: the whole path to a trial lesson", () => {
 
     await recordPhone((await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } }))!, PHONE, "telegram", "Sarvar Aliyev");
     const lead = await db.lead.findFirstOrThrow({ where: { centerId, phone: PHONE } });
-    expect(lead).toMatchObject({ source: "Telegram AI", name: "Sarvar Aliyev", stage: "NEW" });
+    expect(lead).toMatchObject({ id: early.id, source: "Telegram AI", name: "Sarvar Aliyev", stage: "NEW", nextContactAt: fromISODate(today) });
 
     const booked = await turn(chat.id, MARK.phone, m.create);
     expect(booked).toMatchObject({ replies: ["Yozildingiz! Ertaga soat 15:00, Chilonzor."], booked: true, askPhone: false });
@@ -146,14 +165,16 @@ describe("lead agent: the whole path to a trial lesson", () => {
 });
 
 describe("lead agent: tools refuse what they must", () => {
-  it("book_trial and ask_teacher need the phone first", async () => {
+  it("book_trial needs the phone; ask_teacher does not (the owner answers through the bot)", async () => {
     const chat = await chatFor();
     const m = model(msg([call("book_trial", { group_id: groupId, student_first_name: "A", student_last_name: "B", for_self: true, goal: "x", level_summary: "y" })], "tool_use"), msg([text("ok")], "end_turn"));
     await turn(chat.id, "yozing", m.create);
     expect(lastToolResult(m.seen)).toEqual({ error: true, body: expect.stringContaining("request_phone") });
-    const m2 = model(msg([call("ask_teacher", { question: "kechki guruh ochiladimi?" })], "tool_use"), msg([text("ok")], "end_turn"));
+    const m2 = model(msg([call("ask_teacher", { question: "Yakshanba kechki guruh ochiladimi?" })], "tool_use"), msg([text("ok")], "end_turn"));
     await turn(chat.id, "kechki guruh bormi", m2.create);
-    expect(lastToolResult(m2.seen)).toEqual({ error: true, body: expect.stringContaining("request_phone") });
+    expect(JSON.parse(lastToolResult(m2.seen).body)).toEqual({ ok: true, delivered: true });
+    const n = await db.notification.findFirstOrThrow({ where: { centerId, chatId: OWNER_CHAT, text: { contains: "Yakshanba" } } });
+    expect(n.text).toContain("raqamsiz");
   });
 
   it("a full group is refused with the reason, so the model offers another group", async () => {
@@ -248,5 +269,88 @@ describe("lead agent: switches, limits and memory", () => {
     release();
     await first;
     expect(ran).toEqual(["a", "b\nc"]);
+  });
+});
+
+describe("lead agent: cards, location and leads without a phone", () => {
+  it("show_groups sends code-rendered cards after the agent's text; unknown ids are refused", async () => {
+    const chat = await chatFor();
+    const m = model(
+      msg([text("Mos guruh:"), call("show_groups", { group_ids: [groupId] })], "tool_use"),
+      msg([text("Qaysi biri qulay?")], "end_turn"),
+      msg([call("show_groups", { group_ids: ["nope"] })], "tool_use"),
+      msg([text("ok")], "end_turn"),
+    );
+    const r = await turn(chat.id, "matematika guruhlari", m.create);
+    expect(r.out.map((o) => o.kind)).toEqual(["text", "card", "text"]);
+    const card = r.out[1];
+    expect(card).toMatchObject({ kind: "card", groupId, button: "✍️ Sinov darsiga yozilish" });
+    if (card.kind !== "card") throw new Error("not a card");
+    for (const part of ["<b>Abituriyentlar</b>", "Du 15:00-16:30", "650 000 so'm / oy", "Chilonzor, Bunyodkor 1", "dan beri o'qiyapti", "Eng yaqin dars"]) expect(card.html).toContain(part);
+    expect(card.html).toMatch(/Bo'sh joy: \d+/); // earlier tests booked into this group
+    expect(r.replies).toEqual(["Mos guruh:", "Qaysi biri qulay?"]);
+    await turn(chat.id, "yana", m.create);
+    expect(lastToolResult(m.seen)).toEqual({ error: true, body: expect.stringContaining("nope") });
+  });
+
+  it("send_location sends the branch's map point, and refuses a branch without one", async () => {
+    const chat = await chatFor();
+    const m = model(msg([call("send_location", { branch_id: branchId })], "tool_use"), msg([text("Manzil: Bunyodkor 1")], "end_turn"));
+    await turn(chat.id, "qanday boraman?", m.create);
+    expect(lastToolResult(m.seen)).toEqual({ error: true, body: expect.stringContaining("joylashuvi kiritilmagan") });
+    await db.branch.update({ where: { id: branchId }, data: { latitude: 41.285, longitude: 69.204 } });
+    const m2 = model(msg([call("send_location", { branch_id: branchId })], "tool_use"), msg([text("Xaritani yubordim")], "end_turn"));
+    const r = await turn(chat.id, "qayerdasiz?", m2.create);
+    expect(r.out[0]).toEqual({ kind: "venue", latitude: 41.285, longitude: 69.204, title: "Chilonzor", address: "Bunyodkor 1" });
+    // the system prompt now tells the model which branches have a map point
+    expect(m2.seen[0].system).toContain(`branch_id: ${branchId}, xaritada joylashuvi bor`);
+  });
+
+  it("a phone that already belongs to an open lead moves the chat there; the phoneless lead is archived with its notes moved", async () => {
+    const form = await db.lead.create({ data: { centerId, name: "Formadan", phone: "998901234510", source: "Sayt formasi" } });
+    const chat = await chatFor();
+    await turn(chat.id, "salom", model(msg([text("Assalomu alaykum")], "end_turn")).create);
+    const temp = (await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).leadId!;
+    await recordPhone(await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } }), "998901234510", "telegram", "Sarvar Aliyev");
+    expect((await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).leadId).toBe(form.id);
+    expect((await db.lead.findUniqueOrThrow({ where: { id: temp } })).archivedAt).not.toBeNull();
+    const notes = await db.leadNote.findMany({ where: { leadId: form.id } });
+    expect(notes.map((n) => n.text)).toEqual(expect.arrayContaining(["🤖 Telegram'da AI agentga yozdi (raqam hali yo'q)", "🤖 ↻ Telegram'da AI agentga yozdi (raqam: Telegram kontakt)"]));
+    expect(await db.leadNote.count({ where: { leadId: temp } })).toBe(0);
+  });
+
+  it("a staff message goes out through the bot and the agent continues with it; one sent mid-turn is not lost", async () => {
+    const chat = await chatFor();
+    await turn(chat.id, "narxi qancha?", model(msg([text("650 000 so'm / oy")], "end_turn")).create);
+    const leadId = (await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).leadId!;
+    await sendStaffMessage({ centerId, chatRowId: chat.id, userId: ownerId, staffName: "Ega", text: "Salom! Ertaga sinov darsiga kelasizmi?" });
+    expect(await db.notification.findFirst({ where: { centerId, chatId: chat.chatId, text: "Salom! Ertaga sinov darsiga kelasizmi?" } })).not.toBeNull();
+    expect(await db.lead.findUniqueOrThrow({ where: { id: leadId } })).toMatchObject({ stage: "CONTACTED" });
+    expect((await db.leadNote.findFirstOrThrow({ where: { leadId, text: { startsWith: "✉️" } } })).createdById).toBe(ownerId);
+
+    // the person answers: the model sees the staff message and the answer as one turn, staff named
+    let staffDuringTurn = false;
+    const m = model(msg([text("Ajoyib, yozib qo'yaman")], "end_turn"));
+    const create: CreateMessage = async (p) => {
+      if (!staffDuringTurn) {
+        staffDuringTurn = true;
+        await sendStaffMessage({ centerId, chatRowId: chat.id, userId: ownerId, staffName: "Ega", text: "Manzil: Bunyodkor 1" });
+      }
+      return m.create(p);
+    };
+    await turn(chat.id, "ha, kelaman", create);
+    const lastUser = m.seen[0].messages.at(-1)!;
+    expect(lastUser.role).toBe("user");
+    expect(JSON.stringify(lastUser.content)).toContain("Markaz xodimi Ega mijozga Telegram orqali yozdi");
+    expect(JSON.stringify(lastUser.content)).toContain("ha, kelaman");
+    // written while the turn ran: still in the saved history, after the turn
+    const saved = JSON.stringify((await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).messages);
+    expect(saved.indexOf("Manzil: Bunyodkor 1")).toBeGreaterThan(saved.indexOf("Ajoyib, yozib qo'yaman"));
+  });
+
+  it("the owner's daily report counts today's Telegram AI leads and those without a number", async () => {
+    const text = await ownerReport(ownerId, today);
+    expect(text).toMatch(/Telegram AI: bugun \+\d+ mijoz, \d+ tasi raqam qoldirmagan/);
+    expect(text).toContain("/leads?nophone=1");
   });
 });

@@ -97,7 +97,7 @@ const exporters: Record<string, Exporter> = {
     if (!ctx.can("leads")) return null;
     const ids = ctx.activeBranchId ? [ctx.activeBranchId] : ctx.branchIds;
     const leads = await db.lead.findMany({
-      where: { centerId: ctx.centerId, archivedAt: sp.archived ? { not: null } : null, ...(ids ? { OR: [{ branchId: { in: ids } }, { branchId: null }] } : {}), ...(sp.source ? { source: sp.source } : {}), ...(sp.assigned ? { assignedToId: sp.assigned } : {}) },
+      where: { centerId: ctx.centerId, archivedAt: sp.archived ? { not: null } : null, ...(ids ? { OR: [{ branchId: { in: ids } }, { branchId: null }] } : {}), ...(sp.source ? { source: sp.source } : {}), ...(sp.assigned ? { assignedToId: sp.assigned } : {}), ...(sp.nophone ? { phone: null } : {}) },
       include: { course: true, assignedTo: true, branch: true },
       orderBy: { createdAt: "desc" },
     });

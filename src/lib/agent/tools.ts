@@ -4,6 +4,8 @@
 // (createStudentWithFamily, enrollStudent, the Notification queue), so capacity checks, billing, audit and
 // parent messages work exactly as for a human admin — with actor AGENT on every audit row and lead note.
 // The contact phone lives in the AgentChat row and is never put into anything the model reads.
+// What the person sees besides the agent's own words (group cards with a button, a map pin) is rendered
+// here by code into ctx.out, so prices, times and addresses are never retyped by the model.
 import type { Tx } from "@/lib/db";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
@@ -11,7 +13,7 @@ import { addDays, formatDate, fromISODate, nowTimeHHmm, toISODate, todayISO, wee
 import { formatMoney } from "@/lib/money";
 import { esc } from "@/lib/messages";
 import { appUrl } from "@/lib/env";
-import { makeT } from "@/lib/i18n";
+import { makeT, type Locale } from "@/lib/i18n";
 import { enqueue, staffChat, type Chat } from "@/lib/notify";
 import { UserError } from "@/lib/user-error";
 import { createStudentWithFamily } from "@/lib/services/students";
@@ -30,17 +32,31 @@ export interface AgentChatState {
   awaitingPhone: boolean;
 }
 
+/** Something to send to the person, in order: the agent's text, a group card, a map pin. */
+export type Outbound =
+  | { kind: "text"; text: string }
+  | { kind: "card"; html: string; groupId: string; button: string }
+  | { kind: "venue"; latitude: number; longitude: number; title: string; address: string };
+
 export interface AgentCtx {
   centerId: string;
   chat: AgentChatState;
   /** the person's Telegram name: the lead's name until a student is booked */
   personName: string;
+  /** the chat's language: cards and labels rendered by code */
+  locale?: Locale;
+  /** what this turn sends besides plain replies; texts are added by the service in the same order */
+  out?: Outbound[];
   now?: Date;
 }
 
 const AGENT = { userId: null, actor: "AGENT" as const };
 const SLOT_DAYS = ["Du", "Se", "Chor", "Pay", "Ju", "Sha", "Yak"]; // GroupSlot.weekday 1..7
 const WEEKDAYS = ["dushanba", "seshanba", "chorshanba", "payshanba", "juma", "shanba", "yakshanba"];
+const SLOT_DAYS_RU = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+const WEEKDAYS_RU = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
+/** Cards per show_groups call: more is a wall of messages, not help. */
+export const MAX_CARDS = 5;
 
 // ---------------------------------------------------------------- tool definitions (sent to the model)
 
@@ -48,8 +64,9 @@ export const AGENT_TOOLS: AgentTool[] = [
   {
     name: "list_groups",
     description:
-      "Markazdagi ochiq guruhlar: kurs, daraja, narx, kunlar va vaqt, filial manzili, o'qituvchi, bo'sh joylar va eng yaqin dars sanasi. " +
-      "Narx, jadval, bo'sh joy yoki sana haqida gapirishdan OLDIN doim shu vositani chaqir.",
+      "Markazdagi ochiq guruhlar (faqat senga, mijoz ko'rmaydi): kurs, daraja, narx, kunlar va vaqt, filial, o'qituvchi, bo'sh joylar, " +
+      "guruh qachon ochilgani (group_started_on yoki group_starts_on) va eng yaqin dars sanasi. " +
+      "Narx, jadval, bo'sh joy yoki sana haqida gapirishdan OLDIN doim shu vositani chaqir. Mijozga ko'rsatish uchun show_groups ishlat.",
     input_schema: {
       type: "object",
       properties: { course: { type: "string", description: "Ixtiyoriy: kurs nomidan bir qism (masalan \"matematika\"). Berilmasa hammasi." } },
@@ -57,9 +74,29 @@ export const AGENT_TOOLS: AgentTool[] = [
     },
   },
   {
+    name: "show_groups",
+    description:
+      `Tanlangan guruhlarni mijozga kartochka qilib yuboradi: kunlar, vaqt, narx, o'qituvchi, manzil, bo'sh joy, eng yaqin dars va "Sinov darsiga yozilish" tugmasi. ` +
+      `Ko'pi bilan ${MAX_CARDS} ta, eng moslarini tanla. Kartadagi ma'lumotni matnda qaytadan yozma.`,
+    input_schema: {
+      type: "object",
+      properties: { group_ids: { type: "array", items: { type: "string" }, description: "list_groups natijasidagi id lar" } },
+      required: ["group_ids"],
+    },
+  },
+  {
+    name: "send_location",
+    description: "Filialning xaritadagi joylashuvini mijozga yuboradi (Telegram'da xarita nuqtasi). Faqat promptda \"xaritada joylashuvi bor\" deb belgilangan filial uchun.",
+    input_schema: {
+      type: "object",
+      properties: { branch_id: { type: "string", description: "promptdagi filiallar ro'yxatidagi branch_id" } },
+      required: ["branch_id"],
+    },
+  },
+  {
     name: "request_phone",
     description:
-      "Mijozga \"Raqamni yuborish\" tugmasini ko'rsatadi. Sinov darsiga yozish yoki Ustozga savol yuborishdan oldin telefon raqam kerak. " +
+      "Mijozga \"Raqamni yuborish\" tugmasini ko'rsatadi. Faqat mijoz sinov darsiga yozilmoqchi bo'lganda chaqir: savollarga javob uchun raqam kerak emas. " +
       "Raqamni matn qilib yozishni so'rama: tugmani bosish kifoya. Raqam olinganda \"[telefon raqam olindi]\" belgisi keladi.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
@@ -77,7 +114,10 @@ export const AGENT_TOOLS: AgentTool[] = [
         for_self: { type: "boolean", description: "true: mijoz o'zi o'qiydi; false: farzandi yoki boshqa odam uchun yozilyapti" },
         parent_name: { type: "string", description: "for_self=false bo'lsa: yozayotgan ota-onaning ismi" },
         goal: { type: "string", description: "Nima uchun kelyapti: maktab, olimpiada, DTM va h.k." },
-        level_summary: { type: "string", description: "Suhbatda aniqlangan daraja: qaysi savollarga to'g'ri yoki xato javob berdi. O'qituvchi o'qiydi." },
+        level_summary: {
+          type: "string",
+          description: "Berilgan har bir savol va mijozning javobi AYNAN, baholamasdan (masalan: \"2x+6=14, x=? — javob: 5\"). Savol berilmagan bo'lsa: \"savol berilmadi\". O'qituvchi o'zi tekshiradi.",
+        },
       },
       required: ["group_id", "student_first_name", "student_last_name", "for_self", "goal", "level_summary"],
     },
@@ -97,7 +137,7 @@ export const AGENT_TOOLS: AgentTool[] = [
     name: "ask_teacher",
     description:
       "Markaz qoidalarida javobi yo'q va qaror talab qiladigan savolni (masalan, yangi vaqtda guruh ochish) markaz egasiga yuboradi. " +
-      "U mijozga o'zi qo'ng'iroq qiladi yoki yozadi, shuning uchun avval telefon raqam kerak. Qoidalarda javobi bor savol uchun chaqirma.",
+      "U javobni shu Telegram chatiga bot orqali yozadi (raqam bo'lsa, qo'ng'iroq ham qilishi mumkin), shuning uchun raqam shart emas. Qoidalarda javobi bor savol uchun chaqirma.",
     input_schema: {
       type: "object",
       properties: { question: { type: "string", description: "Savol va qisqa kontekst: kim, qaysi kurs yoki guruh, aynan nima so'rayapti" } },
@@ -147,36 +187,67 @@ async function ownerChats(tx: Tx, centerId: string): Promise<Chat[]> {
   return owners.map((o) => ({ chatId: o.telegramChatId!, locale: o.locale === "ru" ? "ru" : "uz" }));
 }
 
-/** The lead for this chat: created when the phone first arrives, reused afterwards. Needs the phone. */
+/**
+ * The lead for this chat. It exists from the person's first message, with or without a phone, so the
+ * center sees everyone who wrote. When a phone arrives it is put on the lead — or, if another open lead
+ * already has that number (the public form, an earlier chat), this chat moves to it and the phoneless
+ * one is archived: one person, one lead.
+ */
 export async function ensureLead(ctx: AgentCtx): Promise<string> {
-  if (ctx.chat.leadId) return ctx.chat.leadId;
   const phone = ctx.chat.phone;
-  if (!phone) throw new AgentToolError("Avval request_phone bilan telefon raqamini oling.");
+  if (ctx.chat.leadId && !phone) return ctx.chat.leadId;
+  const how = ctx.chat.phoneSource === "telegram" ? "Telegram kontakt" : "qo'lda yozilgan";
+  const today = fromISODate(todayISO(ctx.now));
   const leadId = await db.$transaction(async (tx) => {
-    const source = ctx.chat.phoneSource === "telegram" ? "Telegram kontakt" : "qo'lda yozilgan";
-    const open = await tx.lead.findFirst({ where: { centerId: ctx.centerId, phone, archivedAt: null, stage: { notIn: ["ENROLLED", "LOST"] } } });
-    if (open) {
-      await tx.leadNote.create({ data: { leadId: open.id, text: `🤖 ↻ Telegram'da AI agentga yozdi (raqam: ${source})`, actor: "AGENT" } });
-      return open.id;
+    const own = ctx.chat.leadId ? await tx.lead.findUnique({ where: { id: ctx.chat.leadId }, select: { id: true, phone: true, nextContactAt: true } }) : null;
+    if (own && (!phone || own.phone === phone)) return own.id;
+    // a typed number never replaces a number already on the lead; a Telegram-verified one may
+    if (own?.phone && ctx.chat.phoneSource !== "telegram") return own.id;
+    const other = phone
+      ? await tx.lead.findFirst({
+          where: { centerId: ctx.centerId, phone, archivedAt: null, stage: { notIn: ["ENROLLED", "LOST"] }, ...(own ? { id: { not: own.id } } : {}) },
+          orderBy: { createdAt: "asc" },
+        })
+      : null;
+    if (other) {
+      await tx.leadNote.create({ data: { leadId: other.id, text: `🤖 ↻ Telegram'da AI agentga yozdi (raqam: ${how})`, actor: "AGENT" } });
+      if (own) {
+        await tx.leadNote.updateMany({ where: { leadId: own.id }, data: { leadId: other.id } });
+        await tx.agentChat.updateMany({ where: { leadId: own.id }, data: { leadId: other.id } });
+        await tx.lead.update({ where: { id: own.id }, data: { archivedAt: new Date() } });
+        await audit(tx, { centerId: ctx.centerId, ...AGENT, entity: "Lead", entityId: own.id, action: "merge.agent", after: { into: other.id } });
+      }
+      return other.id;
+    }
+    if (own) {
+      await tx.lead.update({ where: { id: own.id }, data: { phone, nextContactAt: own.nextContactAt ?? today } });
+      await tx.leadNote.create({ data: { leadId: own.id, text: `🤖 Telefon raqam qoldirdi (${how})`, actor: "AGENT" } });
+      await audit(tx, { centerId: ctx.centerId, ...AGENT, entity: "Lead", entityId: own.id, action: "update.agent", before: { phone: own.phone }, after: { phone } });
+      return own.id;
     }
     const lead = await tx.lead.create({
-      data: { centerId: ctx.centerId, name: ctx.personName.slice(0, 120) || "Telegram", phone, source: "Telegram AI", nextContactAt: fromISODate(todayISO(ctx.now)) },
+      data: { centerId: ctx.centerId, name: ctx.personName.slice(0, 120) || "Telegram", phone, source: "Telegram AI", nextContactAt: phone ? today : null },
     });
-    await tx.leadNote.create({ data: { leadId: lead.id, text: `🤖 Telegram'da AI agentga yozdi (raqam: ${source})`, actor: "AGENT" } });
+    await tx.leadNote.create({ data: { leadId: lead.id, text: phone ? `🤖 Telegram'da AI agentga yozdi (raqam: ${how})` : "🤖 Telegram'da AI agentga yozdi (raqam hali yo'q)", actor: "AGENT" } });
     await audit(tx, { centerId: ctx.centerId, ...AGENT, entity: "Lead", entityId: lead.id, action: "create.agent", after: { name: lead.name, phone } });
     return lead.id;
   });
-  await saveChat(ctx, { leadId });
+  if (leadId !== ctx.chat.leadId) await saveChat(ctx, { leadId });
   return leadId;
 }
 
 // ---------------------------------------------------------------- executors
 
-async function listGroups(ctx: AgentCtx, input: Record<string, unknown>) {
-  const now = ctx.now ?? new Date();
-  const course = typeof input.course === "string" && input.course.trim() ? input.course.trim() : undefined;
-  const groups = await db.group.findMany({
-    where: { centerId: ctx.centerId, status: { in: ["ACTIVE", "PLANNED"] }, ...(course ? { course: { name: { contains: course, mode: "insensitive" } } } : {}) },
+type OpenGroup = Awaited<ReturnType<typeof loadGroups>>[number];
+
+async function loadGroups(ctx: AgentCtx, where: { course?: string; ids?: string[] }) {
+  return db.group.findMany({
+    where: {
+      centerId: ctx.centerId,
+      status: { in: ["ACTIVE", "PLANNED"] },
+      ...(where.ids ? { id: { in: where.ids } } : {}),
+      ...(where.course ? { course: { name: { contains: where.course, mode: "insensitive" } } } : {}),
+    },
     include: {
       course: true,
       branch: { select: { name: true, address: true } },
@@ -187,27 +258,90 @@ async function listGroups(ctx: AgentCtx, input: Record<string, unknown>) {
     orderBy: { code: "asc" },
     take: 30,
   });
+}
+
+function priceText(g: OpenGroup, l: Locale): string {
+  const price = g.priceOverride ?? g.course.price;
+  const cur = l === "ru" ? "сум" : "so'm";
+  if (g.course.pricingType === "SUBSCRIPTION") return `${formatMoney(price, cur)} / ${l === "ru" ? "мес" : "oy"}`;
+  const what = g.course.packageLessons ? (l === "ru" ? `${g.course.packageLessons} уроков` : `${g.course.packageLessons} dars`) : l === "ru" ? "весь курс" : "butun kurs";
+  const split = g.course.installments > 1 ? (l === "ru" ? `, в ${g.course.installments} платежа` : `, ${g.course.installments} bo'lib to'lash`) : "";
+  return `${formatMoney(price, cur)} (${what}${split})`;
+}
+
+const seatsLeft = (g: OpenGroup) => (g.capacity ? Math.max(0, g.capacity - g._count.enrollments) : null);
+const branchText = (g: OpenGroup) => (g.branch.address ? `${g.branch.name}, ${g.branch.address}` : g.branch.name);
+
+async function listGroups(ctx: AgentCtx, input: Record<string, unknown>) {
+  const now = ctx.now ?? new Date();
+  const course = typeof input.course === "string" && input.course.trim() ? input.course.trim() : undefined;
+  const groups = await loadGroups(ctx, { course });
   const today = todayISO(now);
   const next = await upcomingLessons(groups.map((g) => g.id), now);
   return groups.map((g) => {
-    const price = g.priceOverride ?? g.course.price;
     const n = next.get(g.id);
+    const start = toISODate(g.startDate);
+    const seats = seatsLeft(g);
     return {
       id: g.id,
       name: g.name,
       course: g.course.name,
       level: g.course.level,
-      price:
-        g.course.pricingType === "SUBSCRIPTION"
-          ? `${formatMoney(price)} / oy`
-          : `${formatMoney(price)} (${g.course.packageLessons ? `${g.course.packageLessons} dars` : "butun kurs"}${g.course.installments > 1 ? `, ${g.course.installments} bo'lib to'lash` : ""})`,
+      price: priceText(g, "uz"),
       schedule: g.slots.map((s) => `${SLOT_DAYS[s.weekday - 1]} ${s.startTime}-${s.endTime}`).join(", "),
-      branch: g.branch.address ? `${g.branch.name}, ${g.branch.address}` : g.branch.name,
+      branch: branchText(g),
       teacher: g.teacher.name,
-      seats_left: g.capacity ? Math.max(0, g.capacity - g._count.enrollments) : "cheklanmagan",
+      ...(start <= today ? { group_started_on: formatDate(start) } : { group_starts_on: formatDate(start) }),
+      seats_left: seats ?? "cheklanmagan",
       next_lesson: n ? lessonView(n.date, n.startTime, today) : null,
     };
   });
+}
+
+/** A group card as the person sees it (HTML): every fact comes from the database, none from the model. */
+function cardHtml(g: OpenGroup, n: { date: string; startTime: string } | undefined, today: string, l: Locale): string {
+  const ru = l === "ru";
+  const days = ru ? SLOT_DAYS_RU : SLOT_DAYS;
+  const start = toISODate(g.startDate);
+  const seats = seatsLeft(g);
+  const since = start <= today ? (ru ? `занимается с ${formatDate(start)}` : `${formatDate(start)} dan beri o'qiyapti`) : ru ? `старт ${formatDate(start)}` : `${formatDate(start)} da boshlanadi`;
+  const lines = [
+    `<b>${esc(g.name)}</b> · ${esc(g.course.name)}`,
+    `🗓 ${esc(g.slots.map((s) => `${days[s.weekday - 1]} ${s.startTime}-${s.endTime}`).join(", ") || "—")}`,
+    `👩‍🏫 ${esc(g.teacher.name)}`,
+    `📍 ${esc(branchText(g))}`,
+    `💰 ${esc(priceText(g, l))}`,
+    `👥 ${seats === null ? "" : `${ru ? "Свободных мест" : "Bo'sh joy"}: ${seats} · `}${since}`,
+  ];
+  if (n) lines.push(`➡️ ${ru ? "Ближайший урок" : "Eng yaqin dars"}: ${formatDate(n.date)}, ${(ru ? WEEKDAYS_RU : WEEKDAYS)[weekdayOf(n.date) - 1]} ${n.startTime}`);
+  return lines.join("\n");
+}
+
+async function showGroups(ctx: AgentCtx, input: Record<string, unknown>) {
+  const ids = Array.isArray(input.group_ids) ? [...new Set(input.group_ids.filter((x): x is string => typeof x === "string"))] : [];
+  if (ids.length === 0) throw new AgentToolError("'group_ids' bo'sh. list_groups natijasidan id larni ber.");
+  if (ids.length > MAX_CARDS) throw new AgentToolError(`Ko'pi bilan ${MAX_CARDS} ta guruh. Eng moslarini tanla.`);
+  const now = ctx.now ?? new Date();
+  const groups = await loadGroups(ctx, { ids });
+  const missing = ids.filter((id) => !groups.some((g) => g.id === id));
+  if (missing.length) throw new AgentToolError(`Bunday ochiq guruh yo'q: ${missing.join(", ")}. Id'ni list_groups natijasidan ol.`);
+  const next = await upcomingLessons(ids, now);
+  const today = todayISO(now);
+  const l = ctx.locale ?? "uz";
+  for (const id of ids) {
+    const g = groups.find((x) => x.id === id)!;
+    ctx.out?.push({ kind: "card", html: cardHtml(g, next.get(id), today, l), groupId: id, button: l === "ru" ? "✍️ Записаться на пробный урок" : "✍️ Sinov darsiga yozilish" });
+  }
+  return { ok: true, shown: ids.map((id) => groups.find((g) => g.id === id)!.name), note: "Kartalar mijozga yuborildi. Ma'lumotni matnda takrorlama." };
+}
+
+async function sendLocation(ctx: AgentCtx, input: Record<string, unknown>) {
+  const branchId = str(input, "branch_id");
+  const b = await db.branch.findFirst({ where: { id: branchId, centerId: ctx.centerId, archivedAt: null } });
+  if (!b) throw new AgentToolError("Bunday filial yo'q. branch_id ni promptdagi filiallar ro'yxatidan ol.");
+  if (b.latitude === null || b.longitude === null) throw new AgentToolError("Bu filialning xaritadagi joylashuvi kiritilmagan. Manzilni matn bilan ayt.");
+  ctx.out?.push({ kind: "venue", latitude: b.latitude, longitude: b.longitude, title: b.name, address: b.address ?? b.name });
+  return { ok: true, sent: b.name };
 }
 
 async function requestPhone(ctx: AgentCtx) {
@@ -301,7 +435,7 @@ async function notifyTeacher(ctx: AgentCtx, input: Record<string, unknown>) {
     await enqueue(tx, ctx.centerId, chats, (l) =>
       [
         l === "ru" ? `🤖 <b>Новый пробный ученик</b> · ${esc(group.name)}` : `🤖 <b>Yangi sinov o'quvchisi</b> · ${esc(group.name)}`,
-        `${esc(who)} · +${lead.phone}`,
+        `${esc(who)}${lead.phone ? ` · +${lead.phone}` : ""}`,
         "",
         esc(message),
         "",
@@ -316,7 +450,6 @@ async function notifyTeacher(ctx: AgentCtx, input: Record<string, unknown>) {
 
 async function askTeacher(ctx: AgentCtx, input: Record<string, unknown>) {
   const question = str(input, "question");
-  if (!ctx.chat.phone) throw new AgentToolError("Ustoz mijoz bilan bog'lanishi uchun avval request_phone bilan telefon raqamini oling.");
   const leadId = await ensureLead(ctx);
   const lead = await db.lead.findUniqueOrThrow({ where: { id: leadId }, select: { name: true, phone: true } });
   const delivered = await db.$transaction(async (tx) => {
@@ -324,7 +457,9 @@ async function askTeacher(ctx: AgentCtx, input: Record<string, unknown>) {
     await enqueue(tx, ctx.centerId, chats, (l) =>
       [
         l === "ru" ? "🤖❓ <b>Вопрос клиента</b> (AI-агент не может ответить сам)" : "🤖❓ <b>Mijoz savoli</b> (AI agent o'zi javob bera olmaydi)",
-        `${esc(lead.name)} · +${lead.phone}`,
+        lead.phone
+          ? `${esc(lead.name)} · +${lead.phone}`
+          : `${esc(lead.name)} · ${l === "ru" ? "📵 без номера: ответьте со страницы лида, бот передаст" : "📵 raqamsiz: javobni lead sahifasidan yozing, bot yetkazadi"}`,
         "",
         esc(question),
         "",
@@ -343,6 +478,10 @@ export function executeTool(ctx: AgentCtx, name: string, input: Record<string, u
   switch (name) {
     case "list_groups":
       return listGroups(ctx, input);
+    case "show_groups":
+      return showGroups(ctx, input);
+    case "send_location":
+      return sendLocation(ctx, input);
     case "request_phone":
       return requestPhone(ctx);
     case "book_trial":

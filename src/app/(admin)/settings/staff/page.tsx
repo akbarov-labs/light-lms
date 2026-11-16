@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { formatPhone } from "@/lib/phone";
 import { DEFAULT_PERMS, effectivePerms, PERMS, type RoleName } from "@/lib/perms";
 import { Badge, Card, LinkButton, Table, Td, Th, Tr } from "@/components/ui";
-import { Checkbox, Field, FormGrid, Input, Select } from "@/components/fields";
+import { Checkbox, Field, FormGrid, Input, Select, Textarea } from "@/components/fields";
 import { ActionForm, ActionMenu, Modal, ModalForm, SubmitButton } from "@/components/client";
 import { resetStaffPasswordAction, saveStaffAction, toggleStaffArchiveAction } from "../actions";
 
@@ -32,6 +32,7 @@ function StaffForm({ ctx, branches, user }: { ctx: Ctx; branches: { id: string; 
         <Field label={user ? t("settings.newPassword") : t("settings.password")}><Input name="password" type="password" autoComplete="new-password" minLength={8} required={!user} /></Field>
       </FormGrid>
       <Checkbox name="isTeacher" label={t("settings.isTeacher")} defaultChecked={user?.isTeacher} />
+      <Field label={t("settings.bio")} hint={t("settings.bioHint")}><Textarea name="bio" defaultValue={user?.bio ?? ""} maxLength={600} rows={3} /></Field>
       <div>
         <div className="mb-1 text-xs font-medium text-zinc-600">{t("settings.perms")}</div>
         <p className="mb-2 text-xs text-zinc-500">{t("settings.permsHint")}</p>

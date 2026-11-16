@@ -13,7 +13,7 @@ import { UserError } from "@/lib/user-error";
 import { ownerReport } from "../jobs";
 import { createResetCodeForChat } from "@/lib/auth/password";
 import { B, buttonKey } from "./texts";
-import { agentOnContact, agentOnStart, agentOnText } from "./agent";
+import { PICK, agentOnContact, agentOnPick, agentOnStart, agentOnText } from "./agent";
 import { appUrl } from "@/lib/env";
 import {
   attendanceText,
@@ -199,6 +199,9 @@ export function createBot(token: string): Bot {
         await ctx.reply(B.notLinked[l], { reply_markup: await menu(chatId, l) });
     }
   });
+
+  // a group card's "book a trial" button (AI lead agent); registered first, the generic handler below is attendance
+  bot.callbackQuery(PICK, async (ctx) => agentOnPick(ctx, ctx.match[1], await localeOf(ctx)));
 
   bot.on("callback_query:data", async (ctx) => {
     const chatId = String(ctx.chat?.id ?? "");

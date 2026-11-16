@@ -12,7 +12,7 @@ import { ActionForm, Modal, SubmitButton } from "@/components/client";
 import { LeadForm } from "../lead-form";
 import { actorName } from "@/lib/actor";
 import { AgentTranscript } from "./agent-transcript";
-import { addLeadNoteAction, moveLeadAction, toggleLeadArchiveAction } from "../actions";
+import { addLeadNoteAction, moveLeadAction, sendLeadTelegramAction, toggleLeadArchiveAction } from "../actions";
 
 const STAGES: LeadStage[] = ["NEW", "CONTACTED", "TRIAL_BOOKED", "TRIAL_DONE", "ENROLLED", "LOST"];
 
@@ -28,13 +28,15 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       assignedTo: true,
       student: true,
       notes: { orderBy: { createdAt: "desc" } },
-      agentChats: { orderBy: { lastMessageAt: "desc" }, select: { id: true, messages: true, phoneSource: true, inputTokens: true, outputTokens: true, lastMessageAt: true } },
+      agentChats: { orderBy: { lastMessageAt: "desc" }, select: { id: true, username: true, messages: true, phoneSource: true, inputTokens: true, outputTokens: true, lastMessageAt: true } },
       examResults: { include: { exam: { select: { id: true, title: true, date: true, maxScore: true } } }, orderBy: { createdAt: "desc" } },
     },
   });
   if (!lead || (lead.branchId && !canAccessBranch(ctx, lead.branchId))) notFound();
   const authors = new Map((await db.user.findMany({ where: { id: { in: lead.notes.map((n) => n.createdById).filter(Boolean) as string[] } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
   const utm = lead.utm && typeof lead.utm === "object" ? Object.entries(lead.utm as Record<string, string>) : [];
+  // the most recent AI agent conversation: staff write to the person through it
+  const chat = lead.agentChats[0];
   return (
     <>
       <PageHeader
@@ -61,7 +63,14 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
           <Card>
             <KV
               items={[
-                [t("common.phone"), <a key="p" href={`tel:+${lead.phone}`} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{formatPhone(lead.phone)}</a>],
+                [
+                  t("common.phone"),
+                  lead.phone ? (
+                    <a key="p" href={`tel:+${lead.phone}`} className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{formatPhone(lead.phone)}</a>
+                  ) : (
+                    <span key="p" className="font-medium text-amber-700">{t("leads.noPhone")}</span>
+                  ),
+                ],
                 [t("common.source"), lead.source ?? "—"],
                 [t("leads.interestedCourse"), lead.course?.name ?? "—"],
                 [t("common.branch"), lead.branch?.name ?? "—"],
@@ -73,6 +82,22 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               ]}
             />
           </Card>
+          {chat && (
+            <Card title={t("agent.followUp")}>
+              {chat.username && (
+                <p className="mb-3 text-sm">
+                  <a href={`https://t.me/${chat.username}`} target="_blank" rel="noreferrer" className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">{t("agent.writeDirect", { username: chat.username })}</a>
+                </p>
+              )}
+              <ActionForm action={sendLeadTelegramAction} reset className="space-y-2">
+                <input type="hidden" name="id" value={lead.id} />
+                <input type="hidden" name="chatId" value={chat.id} />
+                <Textarea name="text" required maxLength={2000} rows={3} />
+                <p className="text-xs leading-relaxed text-zinc-500">{t("agent.followUpHint")}</p>
+                <SubmitButton variant="secondary">{t("agent.followUpSend")}</SubmitButton>
+              </ActionForm>
+            </Card>
+          )}
           <Card title={t("leads.moveTo")}>
             <ActionForm action={moveLeadAction} className="space-y-2">
               <input type="hidden" name="id" value={lead.id} />

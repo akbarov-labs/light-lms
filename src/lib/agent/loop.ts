@@ -2,7 +2,7 @@
 // asks for, send their results back, repeat until the model answers. No database and no Telegram here;
 // the model call is injected, so tests drive the loop with scripted responses and no API cost.
 import Anthropic from "@anthropic-ai/sdk";
-import type { AgentMessage } from "./history";
+import { mergeUserTurns, type AgentMessage } from "./history";
 
 export type AgentTool = Anthropic.Beta.BetaTool;
 export type CreateMessage = (params: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming) => Promise<Anthropic.Beta.BetaMessage>;
@@ -20,6 +20,8 @@ export interface TurnInput {
   execute: (name: string, input: Record<string, unknown>) => Promise<unknown>;
   /** called after every model call, before tools run (metering) */
   onUsage?: (u: { input: number; output: number }) => Promise<void>;
+  /** called with each text the agent writes, in order, before that step's tools run (so tool output such as group cards lands after it) */
+  onReply?: (text: string) => void;
   maxSteps?: number;
 }
 
@@ -43,7 +45,8 @@ function fallbackParams(model: string): Pick<Anthropic.Beta.Messages.MessageCrea
 }
 
 export async function runTurn(t: TurnInput): Promise<TurnResult> {
-  const history: AgentMessage[] = [...t.history, { role: "user", content: t.userText }];
+  // a staff message (or a failed turn) may have left a person turn unanswered: this message joins it
+  const history: AgentMessage[] = mergeUserTurns([...t.history, { role: "user", content: t.userText }]);
   const replies: string[] = [];
   const toolCalls: string[] = [];
   const maxSteps = t.maxSteps ?? MAX_STEPS;
@@ -65,7 +68,11 @@ export async function runTurn(t: TurnInput): Promise<TurnResult> {
 
     // keep the whole answer (text, tool calls, thinking): tool results must point at these tool_use ids
     history.push({ role: "assistant", content: res.content });
-    for (const b of res.content) if (b.type === "text" && b.text.trim()) replies.push(b.text.trim());
+    for (const b of res.content) {
+      if (b.type !== "text" || !b.text.trim()) continue;
+      replies.push(b.text.trim());
+      t.onReply?.(b.text.trim());
+    }
 
     if (res.stop_reason !== "tool_use") {
       return { history, replies, toolCalls, steps: step, stopped: res.stop_reason === "max_tokens" ? "max_tokens" : undefined };
