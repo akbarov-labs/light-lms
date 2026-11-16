@@ -5,8 +5,13 @@
 
 export const MARK = {
   start: "[Mijoz botni markaz havolasi orqali ochdi]",
+  /** plain /start in a chat already talking to an agent: the conversation goes on */
+  restart: "[Mijoz botni qayta ochdi (/start). Suhbatni davom ettir, qayta tanishma]",
   phone: "[telefon raqam olindi]",
 };
+
+/** Events that are not the person speaking: they never create a lead on their own. */
+export const NOT_PERSON = new Set([MARK.start, MARK.restart]);
 
 /** The person pressed "book a trial" under a group card. */
 export const pickedGroupMarker = (groupName: string, groupId: string) => `[Mijoz «${groupName}» guruhi kartasidagi "Sinov darsiga yozilish" tugmasini bosdi. group_id: ${groupId}]`;

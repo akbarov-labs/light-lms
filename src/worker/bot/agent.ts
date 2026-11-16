@@ -12,7 +12,7 @@ import { db } from "@/lib/db";
 import { normalizePhone } from "@/lib/phone";
 import type { Locale } from "@/lib/i18n";
 import { MARK, activeAgentChat, agentCenterBySlug, agentText, handleAgentMessage, openAgentChat, recordPhone, setAgentUsername } from "@/lib/agent/service";
-import { pickedGroupMarker } from "@/lib/agent/markers";
+import { NOT_PERSON, pickedGroupMarker } from "@/lib/agent/markers";
 
 /** Callback data of a group card's "book a trial" button. */
 export const PICK = /^ag:g:([a-z0-9]{1,40})$/;
@@ -45,8 +45,8 @@ function personName(ctx: Context): string {
 
 async function runFor(api: Api, chat: AgentChat, text: string, name: string, l: Locale): Promise<void> {
   await api.sendChatAction(chat.chatId, "typing").catch(() => {});
-  // everything but the bare /start event is the person speaking (a merged "/start + hello" included)
-  const r = await handleAgentMessage({ chatRowId: chat.id, text, personName: name, locale: l, fromPerson: text !== MARK.start });
+  // everything but a bare /start event is the person speaking (a merged "/start + hello" included)
+  const r = await handleAgentMessage({ chatRowId: chat.id, text, personName: name, locale: l, fromPerson: !NOT_PERSON.has(text) });
   const lastText = r.out.map((o) => o.kind).lastIndexOf("text");
   for (const [i, o] of r.out.entries()) {
     if (o.kind === "card") {
@@ -84,7 +84,22 @@ export async function agentOnStart(ctx: Context, payload: string, l: Locale): Pr
   const center = await agentCenterBySlug(payload.trim().toLowerCase());
   if (!center) return false;
   const chat = await openAgentChat(center.id, String(ctx.chat.id));
+  console.log(`[agent] start chat=${chat.id} center=${center.id}`);
   schedule(ctx, chat, MARK.start, l);
+  return true;
+}
+
+/**
+ * Plain /start (no center in the link) in a chat that is talking to an agent: go on with that
+ * conversation. The shared bot cannot know the center without the link, so a stranger with no agent
+ * chat still gets the usual welcome. The caller checks the chat is not a linked family or staff chat.
+ */
+export async function agentOnRestart(ctx: Context, l: Locale): Promise<boolean> {
+  if (!ctx.chat || ctx.chat.type !== "private") return false;
+  const chat = await activeAgentChat(String(ctx.chat.id));
+  if (!chat) return false;
+  console.log(`[agent] restart chat=${chat.id}`);
+  schedule(ctx, chat, MARK.restart, l);
   return true;
 }
 
@@ -92,6 +107,7 @@ export async function agentOnStart(ctx: Context, payload: string, l: Locale): Pr
 export async function agentOnContact(ctx: Context, phone: string | null, l: Locale): Promise<boolean> {
   if (!ctx.chat || !phone) return false;
   const chat = await activeAgentChat(String(ctx.chat.id));
+  console.log(`[agent] contact chat=${chat?.id ?? "none"} awaiting=${chat?.awaitingPhone ?? "-"} hasPhone=${!!chat?.phone}`);
   if (!chat || (!chat.awaitingPhone && chat.phone)) return false;
   await recordPhone(chat, phone, "telegram", personName(ctx));
   await ctx.reply("✅", { reply_markup: { remove_keyboard: true } });

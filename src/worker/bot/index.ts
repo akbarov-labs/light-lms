@@ -13,7 +13,7 @@ import { UserError } from "@/lib/user-error";
 import { ownerReport } from "../jobs";
 import { createResetCodeForChat } from "@/lib/auth/password";
 import { B, buttonKey } from "./texts";
-import { PICK, agentOnContact, agentOnPick, agentOnStart, agentOnText } from "./agent";
+import { PICK, agentOnContact, agentOnPick, agentOnRestart, agentOnStart, agentOnText } from "./agent";
 import { appUrl } from "@/lib/env";
 import {
   attendanceText,
@@ -91,6 +91,8 @@ export function createBot(token: string): Bot {
       await ctx.reply(B.linked[l], { reply_markup: await menu(chatId, l) });
       return;
     }
+    // a stranger already talking to a center's agent: plain /start goes on with that conversation
+    if (await agentOnRestart(ctx, l)) return;
     await ctx.reply(B.welcome[l], { reply_markup: new Keyboard().requestContact(B.shareContact[l]).resized().oneTime() });
   });
 
