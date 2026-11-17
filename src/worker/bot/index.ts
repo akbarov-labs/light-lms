@@ -13,9 +13,10 @@ import { UserError } from "@/lib/user-error";
 import { ownerReport } from "../jobs";
 import { createResetCodeForChat } from "@/lib/auth/password";
 import { B, buttonKey } from "./texts";
-import { appUrl } from "@/lib/env";
+import { appUrl, telegramRichMessages } from "@/lib/env";
+import { richRefused } from "../notifications";
 import {
-  attendanceText,
+  attendanceReply,
   balanceText,
   centerText,
   chatLocale,
@@ -145,9 +146,21 @@ export function createBot(token: string): Bot {
       case "scheduleBtn":
         await ctx.reply(await scheduleText(chatId, l), html);
         return;
-      case "attendanceBtn":
-        await ctx.reply(await attendanceText(chatId, l), html);
+      case "attendanceBtn": {
+        const { text, rich } = await attendanceReply(chatId, l);
+        if (rich && telegramRichMessages()) {
+          try {
+            await ctx.replyWithRichMessage({ html: rich });
+            return;
+          } catch (e) {
+            // Telegram refused the rich form: answer with the usual text (anything else goes to bot.catch)
+            if (!richRefused(e)) throw e;
+            console.warn("[bot] rich attendance refused, sending text", (e as { description?: string }).description ?? e);
+          }
+        }
+        await ctx.reply(text, html);
         return;
+      }
       case "paymentsBtn":
         await ctx.reply(await paymentsText(chatId, l), html);
         return;

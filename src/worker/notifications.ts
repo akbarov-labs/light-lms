@@ -7,22 +7,57 @@
 import type { Api } from "grammy";
 import type { NotificationChannel } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
+import { telegramRichMessages } from "@/lib/env";
 import { SmsError } from "@/lib/sms/eskiz";
 import { sleep } from "./util";
 
-/** Deliver one queued row; `chatId` is the Telegram chat, or the phone for an SMS row. */
-export type Sender = (chatId: string, text: string, meta: { centerId: string }) => Promise<void>;
+/**
+ * Deliver one queued row; `chatId` is the Telegram chat, or the phone for an SMS row. `meta.rich` is the
+ * row's optional rich-message HTML (Telegram only; SMS senders ignore it).
+ */
+export type Sender = (chatId: string, text: string, meta: { centerId: string; rich?: string | null }) => Promise<void>;
 
 /** One Telegram call may take this long; then it is aborted and retried later (transient), so a hung
  * connection cannot hold the whole batch — and its SENDING rows — until the 10-minute reclaim. */
 export const SEND_TIMEOUT_MS = 15_000;
 
-/** The queue's sender over a grammY Api: HTML, no link previews, aborted after `timeoutMs`. */
-export function telegramSender(api: Pick<Api, "sendMessage">, timeoutMs = SEND_TIMEOUT_MS): Sender {
-  return async (chatId, text) => {
+/**
+ * May a refused rich send be replaced by the plain text right away? Only when Telegram clearly said no to
+ * the rich form itself: 400 (bad rich HTML, unknown method on an older server) other than "chat not found",
+ * or 404 (method missing). A timeout, network error or 5xx may still have delivered it — those are retried
+ * later like any send (no duplicate); 429 and 403 keep their queue meaning (wait / unlink).
+ */
+export function richRefused(e: unknown): boolean {
+  const err = (e ?? {}) as { error_code?: number; description?: string };
+  if (err.error_code === 404) return true;
+  return err.error_code === 400 && !/chat not found/i.test(err.description ?? "");
+}
+
+/**
+ * The queue's sender over a grammY Api: HTML, no link previews, aborted after `timeoutMs`. With
+ * `rich` on (TELEGRAM_RICH_MESSAGES) a row that has a rich form goes out with sendRichMessage, and the
+ * plain text is sent instead if Telegram refuses that form (richRefused).
+ */
+export function telegramSender(
+  api: Pick<Api, "sendMessage" | "sendRichMessage">,
+  timeoutMs = SEND_TIMEOUT_MS,
+  opts: { rich?: boolean; log?: (m: string) => void } = {},
+): Sender {
+  const useRich = opts.rich ?? telegramRichMessages();
+  const log = opts.log ?? ((m: string) => console.warn(m));
+  return async (chatId, text, meta) => {
     // grammY types its signal with the abort-controller shim; it only listens for "abort", so the native one works
-    const signal = AbortSignal.timeout(timeoutMs) as unknown as Parameters<Api["sendMessage"]>[3];
-    await api.sendMessage(chatId, text, { parse_mode: "HTML", link_preview_options: { is_disabled: true } }, signal);
+    const signal = () => AbortSignal.timeout(timeoutMs) as unknown as Parameters<Api["sendMessage"]>[3];
+    if (useRich && meta?.rich) {
+      try {
+        await api.sendRichMessage(chatId, { html: meta.rich }, {}, signal());
+        return;
+      } catch (e) {
+        if (!richRefused(e)) throw e;
+        log(`[notifications] rich message refused, sending plain text: ${errorText(e)}`);
+      }
+    }
+    await api.sendMessage(chatId, text, { parse_mode: "HTML", link_preview_options: { is_disabled: true } }, signal());
   };
 }
 
@@ -63,6 +98,7 @@ interface Claimed {
   centerId: string;
   chatId: string;
   text: string;
+  richText: string | null;
   attempts: number;
   createdAt: Date;
 }
@@ -87,7 +123,7 @@ async function claim(limit: number, channel: NotificationChannel): Promise<Claim
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING id, "centerId", "chatId", text, attempts, "createdAt"`;
+    RETURNING id, "centerId", "chatId", text, "richText", attempts, "createdAt"`;
   return rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
 }
 
@@ -146,7 +182,7 @@ export async function processNotifications(
       continue;
     }
     try {
-      await send(n.chatId, n.text, { centerId: n.centerId });
+      await send(n.chatId, n.text, { centerId: n.centerId, rich: n.richText });
       await db.notification.update({ where: { id: n.id }, data: { status: "SENT", sentAt: new Date(), attempts: n.attempts + 1, error: null, lockedAt: null } });
       res.sent++;
     } catch (e) {

@@ -5,6 +5,8 @@ x-app-env: &app-env
   AUTH_SECRET: ${AUTH_SECRET:-dev-only-secret-change-me-0123456789abcdef}
   APP_URL: ${APP_URL:-http://localhost:3000}
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  # Bot API rich messages (report cards, payment/debt notices, attendance summary); off by default
+  TELEGRAM_RICH_MESSAGES: ${TELEGRAM_RICH_MESSAGES:-false}
   # local stack: SMS rows are logged by the worker, never sent to a paid gateway (set false to send)
   SMS_DRY_RUN: ${SMS_DRY_RUN:-true}
   SEED_DEMO: ${SEED_DEMO:-true}

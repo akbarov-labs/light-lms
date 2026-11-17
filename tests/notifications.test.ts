@@ -32,6 +32,15 @@ beforeEach(async () => {
 });
 
 describe("notification queue", () => {
+  it("passes a row's rich form to the sender (null when it has none)", async () => {
+    await queue("1010", 1, { richText: "<h3>rich</h3>" });
+    await queue("1011", 1);
+    const seen: (string | null | undefined)[] = [];
+    const r = await processNotifications(async (_c, _t, meta) => void seen.push(meta.rich), { gapMs: 0 });
+    expect(r.sent).toBe(2);
+    expect(seen).toEqual(["<h3>rich</h3>", null]);
+  });
+
   it("two workers at once send every row exactly once", async () => {
     await queue("1001", 40);
     const seen: string[] = [];

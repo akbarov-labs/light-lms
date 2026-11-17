@@ -20,6 +20,12 @@ export function telegramBotToken(): string | undefined {
   return str(process.env.TELEGRAM_BOT_TOKEN);
 }
 
+/** Bot API 10.1 rich messages (sendRichMessage) for report cards, payment/debt notices and the attendance
+ * summary. Off unless "true"; a refused rich send falls back to the plain HTML text. */
+export function telegramRichMessages(): boolean {
+  return process.env.TELEGRAM_RICH_MESSAGES === "true";
+}
+
 export function opsTelegramChatId(): string | undefined {
   return str(process.env.OPS_TELEGRAM_CHAT_ID);
 }

@@ -9,6 +9,7 @@ import { computeProgress, type GradeScale, type Progress } from "@/lib/academics
 import { readSettings } from "@/lib/settings";
 import { notifyFamily } from "@/lib/notify";
 import { msg } from "@/lib/messages";
+import { richMsg } from "@/lib/rich-messages";
 import { appUrl } from "@/lib/env";
 import { fullName } from "@/lib/format";
 import { UserError } from "@/lib/user-error";
@@ -162,12 +163,14 @@ export async function sendCards(actor: Actor, cardIds: string[]): Promise<{ sent
       await tx.reportCard.update({ where: { id }, data: { status: "SENT", data: data as unknown as Prisma.InputJsonValue, sentAt: new Date(), sentById: actor.userId } });
       await audit(tx, { centerId: actor.centerId, userId: actor.userId, entity: "ReportCard", entityId: id, action: "send", after: { month: card.month, attendancePct: data.progress.attendancePct, gradeAvg: data.progress.gradeAvg } });
       if (readSettings(card.center.settings).notify.reportCard) {
+        const notice = { center: card.center.name, student: data.student, group: data.group, month: card.month, attendancePct: data.progress.attendancePct, gradeAvg: data.progress.gradeAvg, url: cardUrl(card.token) };
         await notifyFamily(tx, {
           centerId: actor.centerId,
           familyId: card.student.familyId,
           studentId: card.studentId,
           event: "reportCard",
-          text: (l) => msg.reportCard(l, { center: card.center.name, student: data.student, group: data.group, month: card.month, attendancePct: data.progress.attendancePct, gradeAvg: data.progress.gradeAvg, url: cardUrl(card.token) }),
+          text: (l) => msg.reportCard(l, notice),
+          rich: (l) => richMsg.reportCard(l, notice),
           dedupeKey: `reportcard:${id}`,
         });
       }
