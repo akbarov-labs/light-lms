@@ -5,6 +5,7 @@ import { validLinks } from "@/lib/telegram-links";
 import { addDays, formatDate, fromISODate, toISODate, todayISO, weekdayOf } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { esc } from "@/lib/messages";
+import { richAttendance, type AttendanceSummary } from "@/lib/rich-messages";
 import { familyAllocation } from "@/lib/services/wallet";
 import { loadBillingInput } from "@/lib/billing/sync";
 import { computeExpected } from "@/lib/billing/engine";
@@ -144,11 +145,13 @@ export async function scheduleText(chatId: string, l: Locale): Promise<string> {
   return out.join("\n");
 }
 
-export async function attendanceText(chatId: string, l: Locale): Promise<string> {
+/** The "✅ Davomat" reply: plain HTML text (always) and its rich-message form (null when nothing to show). */
+export async function attendanceReply(chatId: string, l: Locale): Promise<{ text: string; rich: string | null }> {
   const students = await chatStudents(chatId);
-  if (students.length === 0) return B.notLinked[l];
+  if (students.length === 0) return { text: B.notLinked[l], rich: null };
   const from = addDays(todayISO(), -30);
   const out: string[] = [`✅ <b>${B.attendance[l]}</b> (30)`];
+  const summary: AttendanceSummary = { title: `✅ ${B.attendance[l]} (30)`, children: [] };
   for (const s of students) {
     const rows = await db.attendance.findMany({
       where: { studentId: s.id, lesson: { date: { gte: fromISODate(from) } } },
@@ -157,9 +160,15 @@ export async function attendanceText(chatId: string, l: Locale): Promise<string>
     });
     const present = rows.filter((r) => r.status === "PRESENT" || r.status === "LATE").length;
     out.push(`\n👤 <b>${esc(fullName(s))}</b> — ${present}/${rows.length}`);
-    for (const r of rows.slice(0, 15)) out.push(`${formatDate(toISODate(r.lesson.date)).slice(0, 5)} ${attendanceMark[r.status]}${r.grade !== null ? ` (${r.grade})` : ""} ${esc(r.lesson.group.name)}`);
+    const shown = rows.slice(0, 15).map((r) => ({ date: formatDate(toISODate(r.lesson.date)).slice(0, 5), mark: attendanceMark[r.status], grade: r.grade, group: r.lesson.group.name }));
+    for (const r of shown) out.push(`${r.date} ${r.mark}${r.grade !== null ? ` (${r.grade})` : ""} ${esc(r.group)}`);
+    summary.children.push({ name: fullName(s), present, total: rows.length, rows: shown });
   }
-  return out.join("\n");
+  return { text: out.join("\n"), rich: richAttendance(summary) };
+}
+
+export async function attendanceText(chatId: string, l: Locale): Promise<string> {
+  return (await attendanceReply(chatId, l)).text;
 }
 
 export async function paymentsText(chatId: string, l: Locale): Promise<string> {

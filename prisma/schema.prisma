@@ -1015,6 +1015,9 @@ model Notification {
   /// destination: the Telegram chat id, or the phone (998…) for SMS
   chatId        String
   text          String
+  /// optional Bot API rich-message HTML (sendRichMessage); sent instead of `text` only when
+  /// TELEGRAM_RICH_MESSAGES=true, and `text` is the fallback if Telegram refuses it. Never used for SMS.
+  richText      String?
   dedupeKey     String?             @unique
   status        NotificationStatus  @default(PENDING)
   error         String?

@@ -92,7 +92,9 @@ services:
       caddy: ${DOMAIN:?set DOMAIN in .env}
       caddy.encode: zstd gzip
       caddy.request_body.max_size: 10MB
-      caddy.reverse_proxy: "{{upstreams 3000}}"
+      # By container name, not {{upstreams 3000}}: that renders as a bare
+      # :3000 while the container restarts (kitoblarim.uz 502s, 2026-11-16).
+      caddy.reverse_proxy: "sabaq-web-1:3000"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
       interval: 15s
