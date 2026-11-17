@@ -129,8 +129,9 @@ export const AGENT_TOOLS: AgentTool[] = [
   {
     name: "cancel_trial",
     description:
-      "Shu suhbatda yozilgan sinov darsini bekor qiladi (joy bo'shaydi, o'qituvchiga xabar boradi). Mijoz voz kechsa yoki boshqa sanaga ko'chirmoqchi bo'lsa chaqir: " +
-      "ko'chirish = cancel_trial, keyin yangi lesson_date bilan book_trial. Bekor qilishni administratorga yuborma: o'zing qil.",
+      "Shu suhbatda yozilgan sinov darsini bekor qiladi (joy bo'shaydi, o'qituvchiga xabar boradi; qaytarib bo'lmaydi). " +
+      "Faqat mijoz OXIRGI xabarida bekor qilishni yoki ko'chirishni so'rasa yoki tasdiqlasa chaqir; eski so'rov bo'yicha avval so'ra. " +
+      "Ko'chirish = cancel_trial, keyin yangi lesson_date bilan book_trial. Bekor qilishni administratorga yuborma: o'zing qil.",
     input_schema: {
       type: "object",
       properties: {

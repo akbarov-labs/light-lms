@@ -17,7 +17,7 @@ import { enqueue } from "@/lib/notify";
 import { audit } from "@/lib/audit";
 import { HISTORY_LIMITS, stripThinking, trimHistory, type AgentMessage } from "./history";
 import { runTurn, type CreateMessage } from "./loop";
-import { buildStateBlock, buildSystemPrompt } from "./prompt";
+import { buildStateBlock, buildSystemPrompt, scriptOf } from "./prompt";
 import { staffMarker } from "./markers";
 import { AGENT_TOOLS, chatState, ensureLead, executeTool, type AgentCtx, type Outbound } from "./tools";
 
@@ -180,7 +180,7 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
     courses: chat.center.courses.map((c) => c.name),
     teachers,
     rules: settings.rules,
-  }) + `\n\n${buildStateBlock(await chatState(ctx))}`;
+  }) + `\n\n${buildStateBlock({ ...(await chatState(ctx)), script: scriptOf(h.text) })}`;
   const meter = async (u: { input: number; output: number }) => {
     await db.$transaction([
       db.agentUsage.upsert({

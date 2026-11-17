@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildStateBlock, buildSystemPrompt } from "./prompt";
+import { buildStateBlock, buildSystemPrompt, scriptOf } from "./prompt";
 
 const center = {
   name: "Aniq Hisob",
@@ -56,5 +56,16 @@ describe("buildStateBlock", () => {
     // a lesson earlier today is over, not upcoming
     const t = { student: "A", group: "G", groupId: "g", date: "16.11.2026", weekday: "dushanba", time: "14:00", address: "X", daysFromToday: 0, started: true };
     expect(buildStateBlock({ phone: null, trials: [t] })).toContain("— bugun bo'lib o'tgan");
+  });
+});
+
+describe("scriptOf", () => {
+  it("tells Cyrillic from Latin, ignoring system markers and short texts", () => {
+    expect(scriptOf("Ассалому алайкум, нархи қанча? DTM")).toBe("cyrillic");
+    expect(scriptOf("Salom, narxi qancha?")).toBe("latin");
+    expect(scriptOf("[telefon raqam olindi]\nРахмат катта")).toBe("cyrillic");
+    expect(scriptOf("👍")).toBeNull();
+    expect(buildStateBlock({ phone: null, trials: [], script: "cyrillic" })).toContain("KIRILL");
+    expect(buildStateBlock({ phone: null, trials: [], script: "latin" })).not.toContain("KIRILL");
   });
 });

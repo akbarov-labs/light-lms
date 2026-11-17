@@ -9,7 +9,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { agentModel, anthropicApiKey } from "../src/lib/env";
 import { runTurn, type CreateMessage } from "../src/lib/agent/loop";
-import { buildStateBlock, buildSystemPrompt, type PromptState } from "../src/lib/agent/prompt";
+import { buildStateBlock, buildSystemPrompt, scriptOf, type PromptState } from "../src/lib/agent/prompt";
 import { AGENT_TOOLS } from "../src/lib/agent/tools";
 import { MARK, pickedGroupMarker } from "../src/lib/agent/markers";
 import type { AgentMessage } from "../src/lib/agent/history";
@@ -322,6 +322,53 @@ const CASES: Case[] = [
       return null;
     },
   },
+  {
+    name: "answers Cyrillic Uzbek in Cyrillic, without mixing scripts (probe: Latin reply with a Cyrillic word)",
+    history: opened,
+    user: "Ассалому алайкум. Ўғлим 11-синфда, DTMга математикадан тайёрланиши керак. Нархи қанча, ўқитувчи ким?",
+    check: ({ replies }) => {
+      const text = replies.join(" ").replace(/DTM|IELTS/g, "");
+      const latin = (text.match(/[a-z]/gi) ?? []).length;
+      const cyr = (text.match(/[\u0400-\u04FF]/g) ?? []).length;
+      if (cyr === 0) return "answered in Latin";
+      if (latin > 0.1 * (latin + cyr)) return `mixed scripts (${latin} Latin vs ${cyr} Cyrillic letters)`;
+      return null;
+    },
+  },
+  {
+    name: "understands Karakalpak and answers in standard Uzbek Latin (probe)",
+    history: opened,
+    user: "Assalawma áleykum. Ulım 11-klassta oqıydı, DTM ge matematikadan tayarlanıwı kerek. Bahası qansha, oqıtıwshı kim?",
+    check: ({ replies }) => {
+      const all = replies.join(" ");
+      // the script is what this case checks; pointing to the card for the price is allowed by the prompt
+      if (/[\u0400-\u04FF]/.test(all)) return "answered in Cyrillic or Russian";
+      return null;
+    },
+  },
+  {
+    name: "never cancels on a day-old request when only asked about lessons (re-test: cancelled without asking)",
+    state: { phone: "telegram", trials: [DTM_TRIAL] },
+    history: [
+      ...picked,
+      u("Sarvar Akbarov"),
+      toolCall("toolu_b3", "book_trial", { group_id: "g_dtm", lesson_date: "18.11.2026", student_first_name: "Sarvar", student_last_name: "Akbarov", for_self: true, goal: "DTM", level_summary: "maktabda o'qigan" }),
+      toolResult("toolu_b3", { ok: true, group: "DTM Matematika", trial_lesson: { date: "18.11.2026", weekday: "chorshanba", time: "16:00", days_from_today: 2 } }),
+      a("Sarvar, chorshanba 18.11.2026 soat 16:00 dagi sinov darsiga yozildingiz."),
+      u("yaxshisi ingliz tili darsini ham matematika darsini ham bekor qiling"),
+      toolCall("toolu_c3", "cancel_trial", { group_id: "g_english", reason: "mijoz so'radi" }),
+      toolResult("toolu_c3", { ok: true, cancelled: "GE-A1 kechki", lesson_date: "16.11.2026" }),
+      a("Ingliz tili sinov darsi bekor qilindi."),
+      u(MARK.start),
+      a("Assalomu alaykum! Men Aniq Hisob markazining AI yordamchisiman. Sizga qanday yordam bera olaman?"),
+    ],
+    user: "Meni qanaqa darslarim bor?",
+    check: ({ replies, calls }) => {
+      if (calls.some((c) => c.name === "cancel_trial")) return "cancelled without a request in the latest message";
+      if (!/DTM|matematika/i.test(replies.join(" "))) return "did not name the open math trial";
+      return null;
+    },
+  },
 ];
 
 async function main() {
@@ -341,7 +388,8 @@ async function main() {
           const r = await runTurn({
             create,
             model,
-            system: `${SYSTEM}\n\n${buildStateBlock(c.state ?? { phone: null, trials: [] })}`,
+            // as the service does: the state block, with the script of the person's message detected by code
+            system: `${SYSTEM}\n\n${buildStateBlock({ ...(c.state ?? { phone: null, trials: [] }), script: scriptOf(c.user) })}`,
             tools: AGENT_TOOLS,
             history: c.history,
             userText: c.user,
