@@ -9,6 +9,7 @@ import type { NotificationChannel } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { telegramRichMessages } from "@/lib/env";
 import { SmsError } from "@/lib/sms/eskiz";
+import { stripTgTime } from "@/lib/messages";
 import { sleep } from "./util";
 
 /**
@@ -57,7 +58,15 @@ export function telegramSender(
         log(`[notifications] rich message refused, sending plain text: ${errorText(e)}`);
       }
     }
-    await api.sendMessage(chatId, text, { parse_mode: "HTML", link_preview_options: { is_disabled: true } }, signal());
+    const opts = { parse_mode: "HTML" as const, link_preview_options: { is_disabled: true } };
+    try {
+      await api.sendMessage(chatId, text, opts, signal());
+    } catch (e) {
+      // date_time entities (<tg-time>, TELEGRAM_DATE_TIME) refused: the same message without them
+      if (!text.includes("<tg-time") || !richRefused(e)) throw e;
+      log(`[notifications] date_time entity refused, sending without it: ${errorText(e)}`);
+      await api.sendMessage(chatId, stripTgTime(text), opts, signal());
+    }
   };
 }
 

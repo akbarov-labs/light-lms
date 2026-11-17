@@ -98,3 +98,26 @@ describe("telegramSender with rich messages", () => {
     }
   });
 });
+
+describe("telegramSender with date_time entities", () => {
+  const tgError = (error_code: number, description: string) => Object.assign(new Error(description), { error_code, description });
+  it("a refused <tg-time> (400) is sent again without the entity, inner text kept", async () => {
+    const texts: string[] = [];
+    const api = {
+      sendMessage: async (_c: string, text: string) => {
+        texts.push(text);
+        if (text.includes("<tg-time")) throw tgError(400, "Bad Request: can't parse entities: unsupported start tag \"tg-time\"");
+      },
+      sendRichMessage: async () => ({}),
+    };
+    await telegramSender(api as never, 1000, { rich: false, log: () => {} })("1", 'Dars: <tg-time unix="1" format="dt">17.11.2026 14:00</tg-time>', { centerId: "c" });
+    expect(texts).toEqual(['Dars: <tg-time unix="1" format="dt">17.11.2026 14:00</tg-time>', "Dars: 17.11.2026 14:00"]);
+  });
+  it("a 400 on a message without <tg-time> stays a permanent error (no second try), as before", async () => {
+    let n = 0;
+    const err = tgError(400, "Bad Request: message is too long");
+    const api = { sendMessage: async () => { n++; throw err; }, sendRichMessage: async () => ({}) };
+    await expect(telegramSender(api as never, 1000, { rich: false })("1", "plain", { centerId: "c" })).rejects.toBe(err);
+    expect(n).toBe(1);
+  });
+});

@@ -15,6 +15,8 @@ x-app-env: &app-env
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
   # Bot API rich messages (report cards, payment/debt notices, attendance summary); off by default
   TELEGRAM_RICH_MESSAGES: ${TELEGRAM_RICH_MESSAGES:-false}
+  # lesson times / payment dates shown in the reader's local time (Telegram date_time entities); off by default
+  TELEGRAM_DATE_TIME: ${TELEGRAM_DATE_TIME:-false}
   SMS_DRY_RUN: ${SMS_DRY_RUN:-false}
   SEED_DEMO: ${SEED_DEMO:-false}
   DEMO_MODE: ${DEMO_MODE:-false}

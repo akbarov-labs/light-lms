@@ -5,7 +5,7 @@
 import { formatDate, monthLabel, type ISODate } from "./dates";
 import { formatMoney } from "./money";
 import type { Locale } from "./i18n";
-import { esc } from "./messages";
+import { dueOn, esc } from "./messages";
 
 const m = (l: Locale, uz: string, ru: string) => (l === "ru" ? ru : uz);
 const money = (n: number, l: Locale) => formatMoney(n, l === "ru" ? "сум" : "so'm");
@@ -30,7 +30,7 @@ export const richMsg = {
   reminder: (l: Locale, p: { center: string; student: string; group: string; amount: number; date: ISODate; payUrl: string | null }) =>
     `<h3>🔔 ${esc(p.center)}</h3>` +
     `<p>${esc(p.student)} — ${esc(p.group)}</p>` +
-    `<p>${m(l, `${formatDate(p.date)} dan yangi oy uchun to'lov`, `Оплата за новый месяц с ${formatDate(p.date)}`)}: <b>${money(p.amount, l)}</b></p>` +
+    `<p>${m(l, `${dueOn(p.date)} dan yangi oy uchun to'lov`, `Оплата за новый месяц с ${dueOn(p.date)}`)}: <b>${money(p.amount, l)}</b></p>` +
     pay(l, p.payUrl),
   debt: (l: Locale, p: { center: string; debt: number; payUrl: string | null }) =>
     `<h3>⚠️ ${esc(p.center)}</h3>` +
