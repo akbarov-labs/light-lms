@@ -30,6 +30,7 @@ let lessonTomorrow = "";
 let otherLesson = "";
 let ali = "";
 let laylo = "";
+let richFails = false;
 
 function chat(id: number, type: "private" | "group" = "private") {
   return type === "private" ? { id, type, first_name: "T" } : { id: -id, type, title: "G" };
@@ -96,7 +97,8 @@ beforeAll(async () => {
   bot.botInfo = { id: 1, is_bot: true, first_name: "LMS", username: "lms_test_bot", can_join_groups: false, can_read_all_group_messages: false, supports_inline_queries: false, can_connect_to_business: false, has_main_web_app: false } as Bot["botInfo"];
   bot.api.config.use(async (_prev, method, payload) => {
     calls.push({ method, payload: payload as Record<string, unknown> });
-    const result = method === "sendMessage" ? { message_id: 1, date: 0, chat: { id: 1, type: "private" }, text: "" } : true;
+    if (method === "sendRichMessage" && richFails) return { ok: false, error_code: 400, description: "Bad Request: rich messages are not supported" } as never;
+    const result = method === "sendMessage" || method === "sendRichMessage" ? { message_id: 1, date: 0, chat: { id: 1, type: "private" }, text: "" } : true;
     return { ok: true, result } as never;
   });
 });
@@ -194,6 +196,26 @@ describe("parent menu", () => {
     await send(text(PARENT, B.centerBtn.uz));
     expect(lastReply().payload.text).toContain("Bot handler markazi");
     expect(lastReply().payload.text).toContain("Amir Temur 5");
+  });
+
+  it("attendance as a rich message when TELEGRAM_RICH_MESSAGES=true, the plain text when Telegram refuses it", async () => {
+    process.env.TELEGRAM_RICH_MESSAGES = "true";
+    try {
+      await send(text(PARENT, B.attendanceBtn.uz));
+      expect(calls.map((c) => c.method)).toEqual(["sendRichMessage"]);
+      const html = (calls[0].payload.rich_message as { html: string }).html;
+      expect(html).toContain(`<h3>✅ ${B.attendance.uz} (30)</h3>`);
+      expect(html).toContain("<h4>👤 Rahimov Ali");
+      richFails = true;
+      await send(text(PARENT, B.attendanceBtn.uz));
+      expect(calls.map((c) => c.method)).toEqual(["sendRichMessage", "sendMessage"]);
+      expect(lastReply().payload.text).toContain(B.attendance.uz);
+    } finally {
+      delete process.env.TELEGRAM_RICH_MESSAGES;
+      richFails = false;
+    }
+    await send(text(PARENT, B.attendanceBtn.uz));
+    expect(calls.map((c) => c.method)).toEqual(["sendMessage"]);
   });
 
   it("an unlinked chat pressing a family button is told to /start", async () => {

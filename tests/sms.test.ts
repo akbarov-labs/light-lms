@@ -5,6 +5,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { notifyFamily } from "@/lib/notify";
 import { msg } from "@/lib/messages";
+import { richMsg } from "@/lib/rich-messages";
 import { processNotifications, type Sender } from "@/worker/notifications";
 import { smsSender } from "@/worker/sms-sender";
 
@@ -34,6 +35,20 @@ beforeEach(async () => {
 });
 
 describe("notifyFamily + SMS", () => {
+  it("a rich form is stored on Telegram rows only; the SMS text is exactly what it was without it", async () => {
+    await setSms({ onlyWithoutTelegram: false });
+    const text = (l: "uz" | "ru") => msg.debt(l, { center: "SMS markaz", debt: 250_000, payUrl: null });
+    await db.$transaction((tx) => notifyFamily(tx, { centerId, familyId: tgFamily, event: "debt", text, dedupeKey: "plain" }));
+    await db.$transaction((tx) => notifyFamily(tx, { centerId, familyId: tgFamily, event: "debt", text, rich: (l) => richMsg.debt(l, { center: "SMS markaz", debt: 250_000, payUrl: null }), dedupeKey: "rich" }));
+    const rows = await db.notification.findMany({ where: { centerId }, orderBy: [{ channel: "asc" }, { dedupeKey: "asc" }] });
+    const sms = rows.filter((r) => r.channel === "SMS");
+    const tg = rows.filter((r) => r.channel === "TELEGRAM");
+    expect(sms.map((r) => r.richText)).toEqual([null, null]);
+    expect(sms[0].text).toBe(sms[1].text);
+    expect(tg.find((r) => r.dedupeKey?.startsWith("rich:"))?.richText).toContain("<h3>⚠️ SMS markaz</h3>");
+    expect(tg.find((r) => r.dedupeKey?.startsWith("plain:"))?.richText).toBeNull();
+    expect(new Set(tg.map((r) => r.text)).size).toBe(1);
+  });
   it("a family without Telegram gets one plain-text SMS, to the primary guardian; a re-run adds nothing", async () => {
     expect(await debt(plainFamily, "d1")).toBe(1);
     expect(await debt(plainFamily, "d1")).toBe(0);

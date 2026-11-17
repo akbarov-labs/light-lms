@@ -8,6 +8,7 @@ import { formList } from "@/lib/forms";
 import { todayISO } from "@/lib/dates";
 import { notifyFamily } from "@/lib/notify";
 import { msg } from "@/lib/messages";
+import { richMsg } from "@/lib/rich-messages";
 import { familyBalance } from "@/lib/services/wallet";
 import { payLinkForFamily } from "@/lib/payments/links";
 
@@ -22,7 +23,7 @@ export async function remindAction(_: ActionState, fd: FormData): Promise<Action
       if (balance >= 0) continue;
       const payUrl = await payLinkForFamily(id);
       n += await db.$transaction((tx) =>
-        notifyFamily(tx, { centerId: ctx.centerId, familyId: id, event: "debt", text: (l) => msg.debt(l, { center: ctx.center.name, debt: -balance, payUrl }), dedupeKey: `debt-manual:${id}:${todayISO()}` }),
+        notifyFamily(tx, { centerId: ctx.centerId, familyId: id, event: "debt", text: (l) => msg.debt(l, { center: ctx.center.name, debt: -balance, payUrl }), rich: (l) => richMsg.debt(l, { center: ctx.center.name, debt: -balance, payUrl }), dedupeKey: `debt-manual:${id}:${todayISO()}` }),
       );
     }
     return { message: ctx.t("debtors.reminded", { n }) };

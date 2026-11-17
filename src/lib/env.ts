@@ -20,6 +20,18 @@ export function telegramBotToken(): string | undefined {
   return str(process.env.TELEGRAM_BOT_TOKEN);
 }
 
+/** Bot API 10.1 rich messages (sendRichMessage) for report cards, payment/debt notices and the attendance
+ * summary. Off unless "true"; a refused rich send falls back to the plain HTML text. */
+export function telegramRichMessages(): boolean {
+  return process.env.TELEGRAM_RICH_MESSAGES === "true";
+}
+
+/** Bot API 9.5 "date_time" entities (<tg-time>) around lesson times and payment dates in queued Telegram
+ * messages, so a parent abroad sees them in local time. Off unless "true"; SMS text is unchanged either way. */
+export function telegramDateTime(): boolean {
+  return process.env.TELEGRAM_DATE_TIME === "true";
+}
+
 export function opsTelegramChatId(): string | undefined {
   return str(process.env.OPS_TELEGRAM_CHAT_ID);
 }

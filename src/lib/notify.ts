@@ -34,11 +34,15 @@ export async function staffChat(tx: Tx, userId: string): Promise<Chat | null> {
   return { chatId: u.telegramChatId, locale: u.locale === "ru" ? "ru" : "uz" };
 }
 
-/** Queue one message per chat. dedupeKey (per chat) makes re-runs of a job harmless. */
-export async function enqueue(tx: Tx, centerId: string, chats: Chat[], text: (l: Locale) => string, dedupeKey?: string): Promise<number> {
+/**
+ * Queue one message per chat. dedupeKey (per chat) makes re-runs of a job harmless. `rich` is the optional
+ * rich-message form (Bot API 10.1); the worker sends it only with TELEGRAM_RICH_MESSAGES=true and falls
+ * back to `text`, so `text` must always be the complete message.
+ */
+export async function enqueue(tx: Tx, centerId: string, chats: Chat[], text: (l: Locale) => string, dedupeKey?: string, rich?: (l: Locale) => string): Promise<number> {
   if (chats.length === 0) return 0;
   const res = await tx.notification.createMany({
-    data: chats.map((c) => ({ centerId, chatId: c.chatId, text: text(c.locale), dedupeKey: dedupeKey ? `${dedupeKey}:${c.chatId}` : null })),
+    data: chats.map((c) => ({ centerId, chatId: c.chatId, text: text(c.locale), richText: rich ? rich(c.locale) : null, dedupeKey: dedupeKey ? `${dedupeKey}:${c.chatId}` : null })),
     skipDuplicates: true,
   });
   return res.count;
@@ -83,13 +87,14 @@ export async function enqueueSms(tx: Tx, centerId: string, target: SmsTarget, te
 /**
  * A family message: Telegram to every linked chat of the family (or of `studentId` + guardians),
  * plus an SMS when the center turned SMS on for `event`. Returns the number of rows queued.
+ * The SMS is always built from `text` — `rich` only ever reaches Telegram.
  */
 export async function notifyFamily(
   tx: Tx,
-  p: { centerId: string; familyId: string; studentId?: string | null; event: SmsEvent; text: (l: Locale) => string; dedupeKey?: string },
+  p: { centerId: string; familyId: string; studentId?: string | null; event: SmsEvent; text: (l: Locale) => string; rich?: (l: Locale) => string; dedupeKey?: string },
 ): Promise<number> {
   const chats = await familyChats(tx, p.familyId, p.studentId);
-  let n = await enqueue(tx, p.centerId, chats, p.text, p.dedupeKey);
+  let n = await enqueue(tx, p.centerId, chats, p.text, p.dedupeKey, p.rich);
   // linked chats only count as "reads Telegram" when this installation has a bot to deliver them
   const target = await familySmsTarget(tx, p.centerId, p.familyId, p.event, p.studentId, chats.length > 0 && !!telegramBotToken());
   if (target) n += await enqueueSms(tx, p.centerId, target, p.text, p.dedupeKey);

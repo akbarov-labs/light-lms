@@ -6,6 +6,7 @@ import { fromISODate, todayISO, type ISODate } from "@/lib/dates";
 import { UserError } from "@/lib/user-error";
 import { notifyFamily } from "@/lib/notify";
 import { msg } from "@/lib/messages";
+import { richMsg } from "@/lib/rich-messages";
 import { readSettings } from "@/lib/settings";
 import { formatMoney } from "@/lib/money";
 import { familyBalance } from "./wallet";
@@ -73,12 +74,14 @@ export async function postPayment(tx: Tx, actor: Actor, p: PaymentInput) {
   if (readSettings(family.center.settings).notify.payment) {
     const balance = await familyBalance(family.id, tx);
     const student = family.students.find((s) => s.id === studentId) ?? family.students[0];
+    const notice = { center: family.center.name, student: student ? `${student.firstName} ${student.lastName}` : family.name, amount: p.amount, balance, date };
     await notifyFamily(tx, {
       centerId: actor.centerId,
       familyId: family.id,
       studentId,
       event: "payment",
-      text: (l) => msg.paymentReceived(l, { center: family.center.name, student: student ? `${student.firstName} ${student.lastName}` : family.name, amount: p.amount, balance, date }),
+      text: (l) => msg.paymentReceived(l, notice),
+      rich: (l) => richMsg.paymentReceived(l, notice),
       dedupeKey: `payment:${entry.id}`,
     });
   }
