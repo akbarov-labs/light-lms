@@ -35,11 +35,13 @@ export interface AgentChatState {
   awaitingPhone: boolean;
 }
 
-/** Something to send to the person, in order: the agent's text, a group card, a map pin. */
+/** Something to send to the person, in order: the agent's text, a group card, a map pin, a yes/no question. */
 export type Outbound =
   | { kind: "text"; text: string }
   | { kind: "card"; html: string; groupId: string; button: string }
-  | { kind: "venue"; latitude: number; longitude: number; title: string; address: string };
+  | { kind: "venue"; latitude: number; longitude: number; title: string; address: string }
+  /** "cancel this trial?" with two buttons: only the person's press cancels (service.ts confirmCancel) */
+  | { kind: "confirm"; html: string; enrollmentId: string; yes: string; no: string };
 
 export interface AgentCtx {
   centerId: string;
@@ -129,9 +131,10 @@ export const AGENT_TOOLS: AgentTool[] = [
   {
     name: "cancel_trial",
     description:
-      "Shu suhbatda yozilgan sinov darsini bekor qiladi (joy bo'shaydi, o'qituvchiga xabar boradi; qaytarib bo'lmaydi). " +
-      "Faqat mijoz OXIRGI xabarida bekor qilishni yoki ko'chirishni so'rasa yoki tasdiqlasa chaqir; eski so'rov bo'yicha avval so'ra. " +
-      "Ko'chirish = cancel_trial, keyin yangi lesson_date bilan book_trial. Bekor qilishni administratorga yuborma: o'zing qil.",
+      "Shu suhbatda yozilgan sinov darsini bekor qilish uchun mijozga «Ha, bekor qilish» / «Yo'q» tugmalarini yuboradi. " +
+      "Bron faqat mijoz tugmani bosganda bekor bo'ladi; natija \"[Mijoz «Ha, bekor qilish» tugmasini bosdi: ...]\" belgisi bilan keladi. " +
+      "Faqat mijoz OXIRGI xabarida bekor qilishni yoki ko'chirishni so'rasa chaqir. " +
+      "Ko'chirish: mijoz yangi kunni aytgan bo'lsa, darhol cancel_trial (tugma tasdiqning o'zi); bekor bo'lgani haqida belgi kelgach, yangi lesson_date bilan book_trial. Bekor qilishni administratorga yuborma.",
     input_schema: {
       type: "object",
       properties: {
@@ -498,17 +501,65 @@ async function bookTrial(ctx: AgentCtx, input: Record<string, unknown>) {
   };
 }
 
+/** An open trial of a student this chat booked (by group or by enrollment id), with what the person sees. */
+async function openTrial(ctx: AgentCtx, where: { groupId?: string; id?: string }) {
+  const students = chatStudents(ctx);
+  if (!students.length) return null;
+  const e = await db.enrollment.findFirst({
+    where: { ...where, studentId: { in: students }, status: "TRIAL", endDate: null, group: { centerId: ctx.centerId } },
+    include: { group: { select: { name: true, teacherId: true } }, student: { select: { firstName: true, lastName: true } } },
+  });
+  if (!e) return null;
+  const date = toISODate(e.startDate);
+  const lesson = await db.lesson.findFirst({ where: { groupId: e.groupId, date: e.startDate, status: { not: "CANCELLED" } }, select: { startTime: true } });
+  const today = todayISO(ctx.now);
+  // a trial whose lesson has begun may have happened (attendance not marked yet): never the bot's to delete
+  const started = date < today || (date === today && !!lesson && lesson.startTime <= nowTimeHHmm(ctx.now ?? new Date()));
+  return { e, date, time: lesson?.startTime ?? null, started, students };
+}
+
+const STARTED = "Bu sinov darsi bo'lib o'tgan yoki boshlangan: bot uni bekor qila olmaydi. ask_teacher bilan administratorga yubor.";
+
+/**
+ * Cancelling deletes a booking, so the model may only offer it: the person gets "cancel?" with two buttons
+ * and the press does it (cancelConfirmedTrial). A re-test showed why: asked only "what lessons do I have?",
+ * the model cancelled on a day-old request; a prompt rule lowers that risk, a button removes it.
+ */
 async function cancelTrial(ctx: AgentCtx, input: Record<string, unknown>) {
   const groupId = str(input, "group_id");
   const reason = str(input, "reason").slice(0, 300);
-  const students = chatStudents(ctx);
-  if (!students.length) throw new AgentToolError("Bu suhbatda yozilgan sinov darsi yo'q.");
-  // only a trial this conversation booked, still open
-  const e = await db.enrollment.findFirst({
-    where: { studentId: { in: students }, groupId, status: "TRIAL", endDate: null, group: { centerId: ctx.centerId } },
-    include: { group: { select: { name: true, teacherId: true } } },
+  const t = await openTrial(ctx, { groupId });
+  if (!t) throw new AgentToolError("Bu guruhda shu mijozning ochiq sinov darsi yo'q. group_id ni <mijoz_holati> yoki book_trial natijasidan ol.");
+  if (t.started) throw new AgentToolError(STARTED);
+  const l = ctx.locale ?? "uz";
+  const start = formatDate(t.date);
+  const weekday = (l === "ru" ? WEEKDAYS_RU : WEEKDAYS)[weekdayOf(t.date) - 1];
+  ctx.out?.push({
+    kind: "confirm",
+    enrollmentId: t.e.id,
+    html: [
+      l === "ru" ? "❓ <b>Отменить пробный урок?</b>" : "❓ <b>Sinov darsini bekor qilaymi?</b>",
+      `${esc(t.e.group.name)} · ${start}, ${weekday}${t.time ? `, ${t.time}` : ""}`,
+      esc(`${t.e.student.firstName} ${t.e.student.lastName}`),
+    ].join("\n"),
+    yes: l === "ru" ? "✅ Да, отменить" : "✅ Ha, bekor qilish",
+    no: l === "ru" ? "↩️ Нет, оставить" : "↩️ Yo'q, qolsin",
   });
-  if (!e) throw new AgentToolError("Bu guruhda shu mijozning ochiq sinov darsi yo'q. group_id ni book_trial natijasidan ol.");
+  const leadId = await ensureLead(ctx);
+  await db.leadNote.create({ data: { leadId, text: `🤖 Mijoz sinov darsini bekor qilishni so'radi: ${t.e.group.name} · ${start}\nSabab: ${reason}`, actor: "AGENT" } });
+  return {
+    ok: true,
+    confirmation_shown: true,
+    note: "Mijozga «Ha, bekor qilish» / «Yo'q» tugmalari yuborildi. Sinov darsi HALI BEKOR QILINMADI: mijoz tugmani bosgandagina bekor bo'ladi. Mijozga tugmani bosishini ayt; \"bekor qildim\" dema.",
+  };
+}
+
+/** The person pressed "yes, cancel": delete the never-held trial, tell the teacher. Throws AgentToolError when it cannot. */
+export async function cancelConfirmedTrial(ctx: AgentCtx, enrollmentId: string): Promise<{ group: string; date: string } | null> {
+  const t = await openTrial(ctx, { id: enrollmentId });
+  if (!t) return null; // already cancelled (a second press) or not this chat's
+  if (t.started) throw new AgentToolError(STARTED);
+  const { e, students } = t;
   try {
     await cancelTrialBooking({ ...AGENT, centerId: ctx.centerId }, e.id);
   } catch (err) {
@@ -516,9 +567,10 @@ async function cancelTrial(ctx: AgentCtx, input: Record<string, unknown>) {
     throw err;
   }
   const leadId = await ensureLead(ctx);
-  const start = formatDate(toISODate(e.startDate));
+  const start = formatDate(t.date);
+  const who = `${e.student.firstName} ${e.student.lastName}`;
   await db.$transaction(async (tx) => {
-    await tx.leadNote.create({ data: { leadId, text: `🤖 Sinov darsi bekor qilindi: ${e.group.name} · ${start}\nSabab: ${reason}`, actor: "AGENT" } });
+    await tx.leadNote.create({ data: { leadId, text: `🤖 Sinov darsi bekor qilindi (mijoz tugma bilan tasdiqladi): ${e.group.name} · ${start}`, actor: "AGENT" } });
     // no open trial left: the funnel must not show a booking that no longer exists
     const open = await tx.enrollment.count({ where: { studentId: { in: students }, status: "TRIAL", endDate: null } });
     if (!open) await tx.lead.updateMany({ where: { id: leadId, stage: "TRIAL_BOOKED" }, data: { stage: "CONTACTED" } });
@@ -527,13 +579,19 @@ async function cancelTrial(ctx: AgentCtx, input: Record<string, unknown>) {
     await enqueue(tx, ctx.centerId, chats, (l) =>
       [
         l === "ru" ? `🤖 <b>Пробный урок отменён</b> · ${esc(e.group.name)} · ${start}` : `🤖 <b>Sinov darsi bekor qilindi</b> · ${esc(e.group.name)} · ${start}`,
-        esc(reason),
+        esc(who),
         `${appUrl()}/leads/${leadId}`,
       ].join("\n"),
     );
   });
-  if (ctx.chat.trialGroupId === groupId) await saveChat(ctx, { trialGroupId: null });
-  return { ok: true, cancelled: e.group.name, lesson_date: start };
+  if (ctx.chat.trialGroupId === e.groupId) await saveChat(ctx, { trialGroupId: null });
+  return { group: e.group.name, date: start };
+}
+
+/** What a "cancel?" button is about, for the person's "no" (null: the trial is gone). */
+export async function trialOfButton(ctx: AgentCtx, enrollmentId: string): Promise<{ group: string; date: string } | null> {
+  const t = await openTrial(ctx, { id: enrollmentId });
+  return t ? { group: t.e.group.name, date: formatDate(t.date) } : null;
 }
 
 async function notifyTeacher(ctx: AgentCtx, input: Record<string, unknown>) {
@@ -574,13 +632,13 @@ async function askTeacher(ctx: AgentCtx, input: Record<string, unknown>) {
     await enqueue(tx, ctx.centerId, chats, (l) =>
       [
         l === "ru" ? "🤖❓ <b>Вопрос клиента</b> (AI-агент не может ответить сам)" : "🤖❓ <b>Mijoz savoli</b> (AI agent o'zi javob bera olmaydi)",
-        lead.phone
-          ? `${esc(lead.name)} · +${lead.phone}`
-          : `${esc(lead.name)} · ${l === "ru" ? "📵 без номера: ответьте со страницы лида, бот передаст" : "📵 raqamsiz: javobni lead sahifasidan yozing, bot yetkazadi"}`,
+        `${esc(lead.name)} · ${lead.phone ? `+${lead.phone}` : l === "ru" ? "📵 без номера" : "📵 raqamsiz"}`,
         "",
         esc(question),
         "",
-        `${appUrl()}/leads/${leadId}`,
+        // answered by a Telegram reply (service.ts answerFromTelegram), which reads the lead and chat from this link
+        l === "ru" ? "↩️ Чтобы ответить клиенту, ответьте (reply) на это сообщение: бот передаст." : "↩️ Mijozga javob berish uchun shu xabarga reply qiling: bot yetkazadi.",
+        `${appUrl()}/leads/${leadId}?chat=${ctx.chat.id}`,
       ].join("\n"),
     );
     await tx.leadNote.create({ data: { leadId, text: `🤖❓ ${question}`, actor: "AGENT" } });

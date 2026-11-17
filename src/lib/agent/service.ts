@@ -16,11 +16,13 @@ import { esc } from "@/lib/messages";
 import { enqueue } from "@/lib/notify";
 import { audit } from "@/lib/audit";
 import { latinToCyrillic } from "@/lib/translit";
+import { validLinks } from "@/lib/telegram-links";
+import { allowedBranches, effectivePerms, type RoleName } from "@/lib/perms";
 import { HISTORY_LIMITS, personTexts, stripThinking, trimHistory, type AgentMessage } from "./history";
-import { runTurn, type CreateMessage, type TurnUsage } from "./loop";
+import { AgentToolError, runTurn, type CreateMessage, type TurnUsage } from "./loop";
 import { buildStateBlock, buildSystemPrompt, conversationScript } from "./prompt";
-import { staffMarker } from "./markers";
-import { AGENT_TOOLS, chatState, ensureLead, executeTool, type AgentCtx, type Outbound } from "./tools";
+import { cancelDoneMarker, cancelFailedMarker, cancelKeptMarker, staffMarker } from "./markers";
+import { AGENT_TOOLS, cancelConfirmedTrial, chatState, ensureLead, executeTool, trialOfButton, type AgentCtx, type Outbound } from "./tools";
 
 export { MARK } from "./markers";
 
@@ -37,14 +39,26 @@ export const STORED_LIMITS = { maxMessages: 400, maxChars: 400_000 };
 const awayMarker = (days: number) =>
   `[Mijoz ${days} kundan keyin qayta yozdi. Oldingi narx, sana va bo'sh joy ma'lumotlari eskirgan bo'lishi mumkin: kerak bo'lsa vositalar bilan qayta tekshir.]`;
 
-const TEXT: Record<"busy" | "tooMany" | "paused" | "error" | "refused", Record<Locale, string>> = {
+const TEXT: Record<"busy" | "tooMany" | "paused" | "error" | "refused" | "badPhone" | "staleCancel", Record<Locale, string>> = {
   busy: { uz: "Bir daqiqa, oldingi xabaringizga javob yozyapman…", ru: "Минуту, отвечаю на предыдущее сообщение…" },
   tooMany: { uz: "Juda ko'p xabar keldi. Iltimos, bir necha daqiqadan keyin yozing.", ru: "Слишком много сообщений. Пожалуйста, напишите через несколько минут." },
   paused: { uz: "Hozir avtomatik javob bera olmayman. Markaz administratori siz bilan bog'lanadi.", ru: "Сейчас не могу ответить автоматически. Администратор центра свяжется с вами." },
   error: { uz: "Kechirasiz, texnik nosozlik bo'ldi. Bir ozdan keyin qayta yozing.", ru: "Извините, произошла техническая ошибка. Напишите чуть позже." },
   refused: { uz: "Kechirasiz, bu savolga javob bera olmayman. Markaz administratori siz bilan bog'lanadi.", ru: "Извините, на этот вопрос я ответить не могу. Администратор центра свяжется с вами." },
+  // live: "+99899009090" (a digit short) reached the model, which claimed typed numbers are not accepted
+  badPhone: {
+    uz: "Bu raqam to'liq emas yoki noto'g'ri. Uni +998 90 123 45 67 ko'rinishida yozing yoki pastdagi tugmani bosing.",
+    ru: "Номер неполный или неверный. Напишите его в виде +998 90 123 45 67 или нажмите кнопку ниже.",
+  },
+  staleCancel: { uz: "Bu sinov darsi allaqachon bekor qilingan.", ru: "Этот пробный урок уже отменён." },
 };
 export const agentText = (k: keyof typeof TEXT, l: Locale) => TEXT[k][l];
+
+/** A fixed text sent by code outside a turn, in the conversation's script (Cyrillic chats get Cyrillic). */
+export function agentNotice(chat: AgentChat, k: keyof typeof TEXT, l: Locale): string {
+  const script = conversationScript(personTexts((chat.messages ?? []) as unknown as AgentMessage[]));
+  return script === "cyrillic" ? latinToCyrillic(TEXT[k][l]) : TEXT[k][l];
+}
 
 let client: Anthropic | null = null;
 function defaultCreate(): CreateMessage {
@@ -229,6 +243,8 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
     if (r.stopped === "refusal") out.push({ kind: "text", text: agentText("refused", h.locale) });
     else if (!out.length) out.push({ kind: "text", text: agentText("error", h.locale) });
     if (script === "cyrillic") for (const o of out) toCyrillic(o);
+    // a yes/no question goes last, under the agent's "press the button below" (sort is stable)
+    out.sort((a, b) => Number(a.kind === "confirm") - Number(b.kind === "confirm"));
     const replies = out.flatMap((o) => (o.kind === "text" ? [o.text] : []));
     return { out, replies, askPhone: ctx.chat.awaitingPhone && !ctx.chat.phone, booked: !!ctx.chat.trialGroupId && ctx.chat.trialGroupId !== trialBefore };
   } catch (e) {
@@ -243,6 +259,7 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
 function toCyrillic(o: Outbound): void {
   if (o.kind === "text") o.text = latinToCyrillic(o.text);
   else if (o.kind === "card") Object.assign(o, { html: latinToCyrillic(o.html), button: latinToCyrillic(o.button) });
+  else if (o.kind === "confirm") Object.assign(o, { html: latinToCyrillic(o.html), yes: latinToCyrillic(o.yes), no: latinToCyrillic(o.no) });
   else Object.assign(o, { title: latinToCyrillic(o.title), address: latinToCyrillic(o.address) });
 }
 
@@ -264,6 +281,27 @@ async function saveHistory(id: string, messages: AgentMessage[], loaded: number,
   const added = Array.isArray(current?.messages) ? (current.messages as unknown as AgentMessage[]).slice(loaded) : [];
   const kept = trimHistory(stripThinking([...messages, ...added]), STORED_LIMITS);
   await db.agentChat.update({ where: { id }, data: { messages: JSON.parse(JSON.stringify(kept)), lastMessageAt: now } });
+}
+
+/**
+ * The person pressed a "cancel this trial?" button. "Yes" cancels here, by code; either way the agent then
+ * hears what happened as a marker (the caller runs the turn), so a reschedule goes on to the new booking.
+ * Returns null for a stale button (the trial is already gone): nothing to tell the agent.
+ */
+export async function confirmCancel(a: { chatRowId: string; enrollmentId: string; yes: boolean; personName: string; now?: Date }): Promise<string | null> {
+  const chat = await db.agentChat.findUniqueOrThrow({ where: { id: a.chatRowId } });
+  const ctx = ctxOf(chat, a.personName, a.now);
+  if (!a.yes) {
+    const t = await trialOfButton(ctx, a.enrollmentId);
+    return t ? cancelKeptMarker(t.group, t.date) : null;
+  }
+  try {
+    const done = await cancelConfirmedTrial(ctx, a.enrollmentId);
+    return done ? cancelDoneMarker(done.group, done.date) : null;
+  } catch (e) {
+    if (e instanceof AgentToolError) return cancelFailedMarker(e.message);
+    throw e;
+  }
 }
 
 export const STAFF_MESSAGE_MAX = 2000;
@@ -292,4 +330,45 @@ export async function sendStaffMessage(a: { centerId: string; chatRowId: string;
       await audit(tx, { centerId: a.centerId, userId: a.userId, entity: "Lead", entityId: chat.leadId, action: "agent.staffMessage", after: { chat: chat.id, length: text.length } });
     }
   });
+}
+
+/** First line of an ask_teacher notification, and the link in it (written by tools.ts askTeacher). */
+export const QUESTION_HEAD = "🤖❓";
+const LEAD_LINK = /\/leads\/([a-z0-9]{1,40})(?:\?chat=([a-z0-9]{1,40}))?/;
+
+/**
+ * A staff member answered a customer's question by replying to the bot's "🤖❓" notification in Telegram:
+ * the answer reaches the customer exactly like one written on the lead page (sendStaffMessage: queued for
+ * Telegram, a marker in the agent's history, a lead note, audit). The first live test: the owner replied
+ * in Telegram, as anyone would, and the answer went nowhere.
+ * Returns null when the replied message is not such a notification. The caller checks that the replied
+ * message is the bot's own, so the text and the link in it were written by us, not the sender.
+ * Who may answer: a staff member of the lead's center, linked to this chat, with the "leads" permission
+ * and access to the lead's branch — the same rule as the lead page.
+ */
+export async function answerFromTelegram(a: { staffChatId: string; repliedText: string; text: string; now?: Date }): Promise<"sent" | "forbidden" | "notFound" | null> {
+  if (!a.repliedText.startsWith(QUESTION_HEAD)) return null;
+  const m = a.repliedText.match(LEAD_LINK);
+  if (!m) return null;
+  const lead = await db.lead.findUnique({ where: { id: m[1] }, select: { id: true, centerId: true, branchId: true } });
+  if (!lead) return "notFound";
+  const links = await validLinks(a.staffChatId);
+  const staff = await db.user.findMany({
+    where: { id: { in: links.staffIds }, centerId: lead.centerId, archivedAt: null, center: { disabledAt: null } },
+    select: { id: true, name: true, role: true, perms: true, branches: { select: { branchId: true } } },
+  });
+  const me = staff.find((u) => {
+    const role = u.role as RoleName;
+    const branches = allowedBranches(role, u.branches.map((b) => b.branchId));
+    return effectivePerms(role, u.perms).has("leads") && (!lead.branchId || !branches || branches.includes(lead.branchId));
+  });
+  if (!me) return "forbidden";
+  const chat = await db.agentChat.findFirst({
+    where: { leadId: lead.id, centerId: lead.centerId, ...(m[2] ? { id: m[2] } : {}) },
+    orderBy: { lastMessageAt: "desc" },
+    select: { id: true },
+  });
+  if (!chat) return "notFound";
+  await sendStaffMessage({ centerId: lead.centerId, chatRowId: chat.id, userId: me.id, staffName: me.name, text: a.text, now: a.now });
+  return "sent";
 }

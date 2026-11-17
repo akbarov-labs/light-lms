@@ -352,6 +352,27 @@ describe("owner report", () => {
   });
 });
 
+describe("staff answer a customer's question by replying in Telegram", () => {
+  it("a reply to the bot's own question notice reaches the customer; a teacher, or the same text quoted from elsewhere, does not", async () => {
+    // a customer's agent chat and lead, as ask_teacher leaves them
+    const lead = await db.lead.create({ data: { centerId, name: "Mijoz", source: "Telegram AI" } });
+    const agentChat = await db.agentChat.create({ data: { centerId, chatId: "939800001", leadId: lead.id, lastMessageAt: new Date() } });
+    const notice = `🤖❓ Mijoz savoli (AI agent o'zi javob bera olmaydi)\nMijoz · 📵 raqamsiz\n\nShanba guruh bormi?\n\n↩️ Mijozga javob berish uchun shu xabarga reply qiling: bot yetkazadi.\nhttp://localhost:3010/leads/${lead.id}?chat=${agentChat.id}`;
+    const replyTo = (user: number, t: string, quoted: string, quotedFrom = 1) =>
+      message(user, { text: t, reply_to_message: { message_id: 5, date: 0, chat: chat(user), from: { id: quotedFrom, is_bot: quotedFrom === 1, first_name: "X" }, text: quoted } });
+    await send(replyTo(OWNER, "Ha, shanba 10:00 da bor", notice));
+    expect(lastReply().payload.text).toBe(B.answerSent.uz);
+    expect(await db.notification.findFirst({ where: { centerId, chatId: "939800001", text: "Ha, shanba 10:00 da bor" } })).not.toBeNull();
+    // a teacher has no "leads" permission
+    await send(replyTo(TEACHER, "men javob beraman", notice));
+    expect([B.forbidden.uz, B.forbidden.ru]).toContain(lastReply().payload.text); // the teacher's chat switched to Russian earlier
+    // the notice's text quoted from someone else's message is not the bot's: ordinary text, nothing forwarded
+    await send(replyTo(OWNER, "boshqa gap", notice, OWNER));
+    expect(lastReply().payload.text).not.toBe(B.answerSent.uz);
+    expect(await db.notification.count({ where: { centerId, chatId: "939800001" } })).toBe(1);
+  });
+});
+
 describe("password reset code", () => {
   it("a linked staff chat gets a code and a reset row", async () => {
     const before = await db.passwordReset.count({ where: { userId: teacherId } });

@@ -13,7 +13,10 @@ const center = {
 describe("buildSystemPrompt", () => {
   it("is filled from the center's data, so a renamed center needs no prompt edit", () => {
     const p = buildSystemPrompt({ ...center, name: "Yangi Nom" });
-    expect(p).toContain('"Yangi Nom" o\'quv markazining');
+    expect(p).toContain("Markaz nomi: Yangi Nom.");
+    // the name as it is plus "-ning": "Demo O'quv Markazi markazining" came from appending "markazining"
+    expect(p).toContain('"Yangi Nomning AI yordamchisi"');
+    expect(buildSystemPrompt({ ...center, name: "Demo O'quv Markazi" })).not.toContain("Markazi markazi");
     expect(p).toContain("Chilonzor: Bunyodkor 1");
     expect(p).toContain("Matematika DTM");
     expect(p).toContain("branch_id: b1, xaritada joylashuvi bor");

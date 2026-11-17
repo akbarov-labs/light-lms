@@ -11,11 +11,13 @@ import type { AgentChat } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { normalizePhone } from "@/lib/phone";
 import type { Locale } from "@/lib/i18n";
-import { MARK, activeAgentChat, agentCenterBySlug, agentText, handleAgentMessage, openAgentChat, recordPhone, setAgentUsername } from "@/lib/agent/service";
+import { MARK, activeAgentChat, agentCenterBySlug, agentNotice, agentText, confirmCancel, handleAgentMessage, openAgentChat, recordPhone, setAgentUsername } from "@/lib/agent/service";
 import { NOT_PERSON, pickedGroupMarker } from "@/lib/agent/markers";
 
 /** Callback data of a group card's "book a trial" button. */
 export const PICK = /^ag:g:([a-z0-9]{1,40})$/;
+/** Callback data of the "cancel this trial?" buttons: y/n and the enrollment. */
+export const CANCEL = /^ag:c:([yn]):([a-z0-9]{1,40})$/;
 import { linkChat } from "./data";
 
 const queues = new Map<string, { running: boolean; pending: string[] }>();
@@ -51,6 +53,9 @@ async function runFor(api: Api, chat: AgentChat, text: string, name: string, l: 
   for (const [i, o] of r.out.entries()) {
     if (o.kind === "card") {
       await api.sendMessage(chat.chatId, o.html.slice(0, 4000), { parse_mode: "HTML", reply_markup: new InlineKeyboard().text(o.button, `ag:g:${o.groupId}`) });
+    } else if (o.kind === "confirm") {
+      const kb = new InlineKeyboard().text(o.yes, `ag:c:y:${o.enrollmentId}`).text(o.no, `ag:c:n:${o.enrollmentId}`);
+      await api.sendMessage(chat.chatId, o.html.slice(0, 4000), { parse_mode: "HTML", reply_markup: kb });
     } else if (o.kind === "venue") {
       await api.sendVenue(chat.chatId, o.latitude, o.longitude, o.title.slice(0, 100), o.address.slice(0, 200));
     } else {
@@ -117,13 +122,23 @@ export async function agentOnContact(ctx: Context, phone: string | null, l: Loca
 
 const PHONE_LIKE = /^[+\d\s()-]{9,20}$/;
 
+/** A message that is only a phone number (at least 7 digits, nothing else): kept from the model. */
+export const looksLikePhone = (text: string) => PHONE_LIKE.test(text.trim()) && text.replace(/\D/g, "").length >= 7;
+
 /** Free text in a chat that is talking to an agent. A typed phone is caught here and kept from the model. */
 export async function agentOnText(ctx: Context, text: string, l: Locale): Promise<boolean> {
   if (!ctx.chat || ctx.chat.type !== "private") return false;
   const chat = await activeAgentChat(String(ctx.chat.id));
   if (!chat) return false;
-  const phone = chat.awaitingPhone && PHONE_LIKE.test(text.trim()) ? normalizePhone(text) : null;
-  if (phone) {
+  // a typed number while the agent waits for one, or before it asked (no phone yet): code takes it
+  if ((chat.awaitingPhone || !chat.phone) && looksLikePhone(text)) {
+    const phone = normalizePhone(text);
+    if (!phone) {
+      // a wrong number is answered here, with the button again: the model only guessed what went wrong
+      const kb = new Keyboard().requestContact(l === "ru" ? "📱 Отправить номер" : "📱 Raqamni yuborish").resized().oneTime();
+      await ctx.reply(agentNotice(chat, "badPhone", l), { reply_markup: kb });
+      return true;
+    }
     await recordPhone(chat, phone, "typed", personName(ctx));
     await ctx.reply("✅", { reply_markup: { remove_keyboard: true } });
     schedule(ctx, chat, MARK.phone, l);
@@ -143,4 +158,19 @@ export async function agentOnPick(ctx: Context, groupId: string, l: Locale): Pro
   }
   await ctx.answerCallbackQuery();
   schedule(ctx, chat, pickedGroupMarker(group.name, group.id), l);
+}
+
+/**
+ * "Yes, cancel" / "No" under the agent's question. The buttons go away at once (one answer per question);
+ * "yes" cancels by code (confirmCancel), then the agent hears the outcome and goes on — after a reschedule
+ * request, to the new booking.
+ */
+export async function agentOnCancel(ctx: Context, yes: boolean, enrollmentId: string, l: Locale): Promise<void> {
+  const chat = ctx.chat && ctx.chat.type === "private" ? await activeAgentChat(String(ctx.chat.id)) : null;
+  if (!chat) return void (await ctx.answerCallbackQuery({ text: l === "ru" ? "Этот вопрос устарел. Напишите нам." : "Bu savol eskirgan. Bizga yozing." }));
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageReplyMarkup().catch(() => {});
+  const marker = await confirmCancel({ chatRowId: chat.id, enrollmentId, yes, personName: personName(ctx) });
+  if (!marker) return void (await ctx.reply(agentNotice(chat, "staleCancel", l)));
+  schedule(ctx, chat, marker, l);
 }

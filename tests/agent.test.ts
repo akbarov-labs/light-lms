@@ -8,8 +8,10 @@ import { addDays, formatDate, fromISODate, monthKey, todayISO } from "@/lib/date
 import { dbAttemptStore } from "@/lib/auth/attempts-db";
 import { attemptKey, recordAttempt } from "@/lib/auth/ratelimit";
 import type { CreateMessage } from "@/lib/agent/loop";
-import { MARK, activeAgentChat, agentCenterBySlug, capTokens, handleAgentMessage, openAgentChat, recordPhone, sendStaffMessage } from "@/lib/agent/service";
-import { queueTurn } from "@/worker/bot/agent";
+import { MARK, activeAgentChat, agentCenterBySlug, agentNotice, answerFromTelegram, capTokens, confirmCancel, handleAgentMessage, openAgentChat, recordPhone, sendStaffMessage } from "@/lib/agent/service";
+import { looksLikePhone, queueTurn } from "@/worker/bot/agent";
+import { normalizePhone } from "@/lib/phone";
+import type { AgentChat } from "@/generated/prisma/client";
 import { ownerReport } from "@/worker/jobs";
 
 type Block = Anthropic.Beta.BetaContentBlock;
@@ -357,6 +359,42 @@ describe("lead agent: cards, location and leads without a phone", () => {
     expect(saved.indexOf("Manzil: Bunyodkor 1")).toBeGreaterThan(saved.indexOf("Ajoyib, yozib qo'yaman"));
   });
 
+  it("the owner answers a question by replying to its Telegram notification: it reaches the person like a lead-page message", async () => {
+    const chat = await chatFor();
+    const m = model(msg([call("ask_teacher", { question: "Shanba kechki guruh ochiladimi?" })], "tool_use"), msg([text("Ustozga yubordim")], "end_turn"));
+    await turn(chat.id, "shanba kechqurun guruh bormi", m.create);
+    const leadId = (await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).leadId!;
+    const n = await db.notification.findFirstOrThrow({ where: { centerId, chatId: OWNER_CHAT, text: { contains: "Shanba kechki guruh ochiladimi" } }, orderBy: { createdAt: "desc" } });
+    expect(n.text).toContain(`/leads/${leadId}?chat=${chat.id}`);
+    expect(n.text).toContain("shu xabarga reply qiling");
+    // Telegram hands the bot the replied message as plain text, without the HTML tags
+    const repliedText = n.text.replace(/<[^>]+>/g, "");
+    const answer = "Yetarli o'quvchi yig'ilsa, shanba kechki guruh ochamiz";
+    // a chat not linked to staff of this center may not answer
+    expect(await answerFromTelegram({ staffChatId: "939999999", repliedText, text: answer })).toBe("forbidden");
+    // the owner's linked chat (its own id: bot-handlers tests use the 92000000x chats on the same database)
+    const ownerTg = "939900001";
+    await db.telegramLink.create({ data: { chatId: ownerTg, kind: "STAFF", refId: ownerId, phone: "998901230002" } });
+    // a reply to any other bot message is not an answer
+    expect(await answerFromTelegram({ staffChatId: ownerTg, repliedText: "📊 Hisobot", text: answer })).toBeNull();
+    expect(await answerFromTelegram({ staffChatId: ownerTg, repliedText, text: answer })).toBe("sent");
+    expect(await db.notification.findFirst({ where: { centerId, chatId: chat.chatId, text: answer } })).not.toBeNull();
+    const saved = JSON.stringify((await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).messages);
+    expect(saved).toContain(`Markaz xodimi Ega mijozga Telegram orqali yozdi: «${answer}»`);
+    expect((await db.leadNote.findFirstOrThrow({ where: { leadId, text: { startsWith: "✉️" } } })).createdById).toBe(ownerId);
+  });
+
+  it("a message that is only a phone number is caught before the model, valid or not; fixed texts follow a Cyrillic chat", () => {
+    expect(looksLikePhone("+99899009090")).toBe(true); // live: a digit short, the model claimed typed numbers are refused
+    expect(normalizePhone("+99899009090")).toBeNull(); // so the bot answers it with badPhone
+    expect(looksLikePhone("90 123 45 67")).toBe(true);
+    expect(looksLikePhone("24.11.2026")).toBe(false);
+    expect(looksLikePhone("2 ta farzandim bor")).toBe(false);
+    const cyrillicChat = { messages: [{ role: "user", content: "Салом, курслар борми?" }] } as unknown as AgentChat;
+    expect(agentNotice(cyrillicChat, "badPhone", "uz")).toMatch(/^Бу рақам/);
+    expect(agentNotice({ messages: [] } as unknown as AgentChat, "badPhone", "uz")).toMatch(/^Bu raqam/);
+  });
+
   it("the owner's daily report counts today's Telegram AI leads and those without a number", async () => {
     const text = await ownerReport(ownerId, today);
     expect(text).toMatch(/Telegram AI: bugun \+\d+ mijoz, \d+ tasi raqam qoldirmagan/);
@@ -385,24 +423,55 @@ describe("lead agent: second live chat fixes", () => {
     expect(lastToolResult(m2.seen)).toEqual({ error: true, body: expect.stringContaining("dars yo'q") });
   });
 
-  it("cancel_trial removes a booking that never happened: off the roster, not counted as 'left', lead back to contacted, teacher told", async () => {
+  it("cancel_trial only asks, with two buttons; the person's 'yes' cancels: off the roster, not 'left', lead back to contacted, teacher told", async () => {
     const { chat } = await bookedChat("Bekor");
     const row = await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } });
     const enrollment = await db.enrollment.findFirstOrThrow({ where: { studentId: row.studentId!, groupId } });
     expect(await db.lead.findUniqueOrThrow({ where: { id: row.leadId! } })).toMatchObject({ stage: "TRIAL_BOOKED" });
-    const m = model(msg([call("cancel_trial", { group_id: groupId, reason: "boshqa markazga boradi" })], "tool_use"), msg([text("Bekor qildim")], "end_turn"));
-    await turn(chat.id, "bekor qiling", m.create);
-    expect(JSON.parse(lastToolResult(m.seen).body)).toMatchObject({ ok: true, cancelled: "Abituriyentlar" });
+    const m = model(msg([call("cancel_trial", { group_id: groupId, reason: "boshqa markazga boradi" })], "tool_use"), msg([text("Tasdiqlash uchun pastdagi tugmani bosing")], "end_turn"));
+    const r = await turn(chat.id, "bekor qiling", m.create);
+    expect(JSON.parse(lastToolResult(m.seen).body)).toMatchObject({ ok: true, confirmation_shown: true });
+    // nothing is cancelled by the model's call; the question comes last, under the agent's text
+    expect(await db.enrollment.findUnique({ where: { id: enrollment.id } })).not.toBeNull();
+    expect(r.out.map((o) => o.kind)).toEqual(["text", "confirm"]);
+    expect(r.out[1]).toMatchObject({ kind: "confirm", enrollmentId: enrollment.id, yes: "✅ Ha, bekor qilish", no: "↩️ Yo'q, qolsin" });
+    expect(r.out[1].kind === "confirm" && r.out[1].html).toContain("Abituriyentlar");
+
+    // "no" keeps the booking; the agent hears it
+    expect(await confirmCancel({ chatRowId: chat.id, enrollmentId: enrollment.id, yes: false, personName: "Bekor Test" })).toContain("bekor qilinmadi, o'z kuchida");
+    expect(await db.enrollment.findUnique({ where: { id: enrollment.id } })).not.toBeNull();
+
+    // "yes" cancels, by code
+    const done = await confirmCancel({ chatRowId: chat.id, enrollmentId: enrollment.id, yes: true, personName: "Bekor Test" });
+    expect(done).toMatch(/^\[Mijoz «Ha, bekor qilish» tugmasini bosdi: «Abituriyentlar» guruhidagi \d{2}\.\d{2}\.\d{4} sinov darsi bekor qilindi\]$/);
     expect(await db.enrollment.findUnique({ where: { id: enrollment.id } })).toBeNull();
     expect(await db.enrollment.count({ where: { status: "LEFT", studentId: row.studentId! } })).toBe(0);
     expect(await db.lead.findUniqueOrThrow({ where: { id: row.leadId! } })).toMatchObject({ stage: "CONTACTED" });
     const log = await db.auditLog.findFirstOrThrow({ where: { entityId: enrollment.id, action: "trial.cancel" } });
     expect(log.actor).toBe("AGENT");
     expect(await db.notification.findFirst({ where: { centerId, chatId: TEACHER_CHAT, text: { contains: "Sinov darsi bekor qilindi" } } })).not.toBeNull();
-    // a second cancel finds nothing to cancel
+    const notes = (await db.leadNote.findMany({ where: { leadId: row.leadId! } })).map((x) => x.text).join("\n");
+    expect(notes).toContain("Sabab: boshqa markazga boradi");
+    expect(notes).toContain("mijoz tugma bilan tasdiqladi");
+    // a second press of the old button has nothing to do, and the model cannot offer it again
+    expect(await confirmCancel({ chatRowId: chat.id, enrollmentId: enrollment.id, yes: true, personName: "Bekor Test" })).toBeNull();
     const m2 = model(msg([call("cancel_trial", { group_id: groupId, reason: "x" })], "tool_use"), msg([text("ok")], "end_turn"));
     await turn(chat.id, "bekor qiling", m2.create);
     expect(lastToolResult(m2.seen)).toEqual({ error: true, body: expect.stringContaining("ochiq sinov darsi yo'q") });
+  });
+
+  it("a trial whose day has passed is never the bot's to cancel (it may have happened), neither offered nor on a press", async () => {
+    const { chat } = await bookedChat("Otgan");
+    const row = await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } });
+    const enrollment = await db.enrollment.findFirstOrThrow({ where: { studentId: row.studentId!, groupId } });
+    // the old live case: a booking for yesterday, attendance not marked
+    await db.enrollment.update({ where: { id: enrollment.id }, data: { startDate: fromISODate(addDays(today, -1)) } });
+    const m = model(msg([call("cancel_trial", { group_id: groupId, reason: "x" })], "tool_use"), msg([text("ok")], "end_turn"));
+    const r = await turn(chat.id, "bekor qiling", m.create);
+    expect(lastToolResult(m.seen)).toEqual({ error: true, body: expect.stringContaining("bo'lib o'tgan") });
+    expect(r.out.some((o) => o.kind === "confirm")).toBe(false);
+    expect(await confirmCancel({ chatRowId: chat.id, enrollmentId: enrollment.id, yes: true, personName: "Otgan Test" })).toContain("bekor qilib bo'lmadi");
+    expect(await db.enrollment.findUnique({ where: { id: enrollment.id } })).not.toBeNull();
   });
 
   it("stores the whole conversation for staff while the model sees only the last part", async () => {
@@ -453,10 +522,13 @@ describe("lead agent: third live chat fixes", () => {
     await turn(chat.id, "ikkinchisi", book("Ikkinchi", extra.id).create);
     expect((await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).studentIds).toHaveLength(2);
     const m = model(msg([call("cancel_trial", { group_id: groupId, reason: "birinchisi bormaydi" })], "tool_use"), msg([text("ok")], "end_turn"));
-    await turn(chat.id, "birinchisini bekor qiling", m.create);
+    const r = await turn(chat.id, "birinchisini bekor qiling", m.create);
     expect(statePart(m.seen[0])).toContain("Birinchi Aka: «Abituriyentlar»");
     expect(statePart(m.seen[0])).toContain("Ikkinchi Aka: «Ikkinchi guruh»");
-    expect(JSON.parse(lastToolResult(m.seen).body)).toMatchObject({ ok: true, cancelled: "Abituriyentlar" }); // the earlier child, not chat.studentId
+    // the earlier child's booking, not chat.studentId's
+    const first = await db.enrollment.findFirstOrThrow({ where: { groupId, student: { firstName: "Birinchi", lastName: "Aka" } } });
+    expect(r.out.find((o) => o.kind === "confirm")).toMatchObject({ enrollmentId: first.id });
+    expect(await confirmCancel({ chatRowId: chat.id, enrollmentId: first.id, yes: true, personName: "Ota" })).toContain("«Abituriyentlar»");
   });
 });
 

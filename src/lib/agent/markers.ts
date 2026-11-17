@@ -16,6 +16,11 @@ export const NOT_PERSON = new Set([MARK.start, MARK.restart]);
 /** The person pressed "book a trial" under a group card. */
 export const pickedGroupMarker = (groupName: string, groupId: string) => `[Mijoz «${groupName}» guruhi kartasidagi "Sinov darsiga yozilish" tugmasini bosdi. group_id: ${groupId}]`;
 
+/** The person answered the "cancel this trial?" buttons (sent by cancel_trial). */
+export const cancelDoneMarker = (group: string, date: string) => `[Mijoz «Ha, bekor qilish» tugmasini bosdi: «${group}» guruhidagi ${date} sinov darsi bekor qilindi]`;
+export const cancelKeptMarker = (group: string, date: string) => `[Mijoz «Yo'q» tugmasini bosdi: «${group}» guruhidagi ${date} sinov darsi bekor qilinmadi, o'z kuchida]`;
+export const cancelFailedMarker = (reason: string) => `[Mijoz «Ha, bekor qilish» tugmasini bosdi, lekin bekor qilib bo'lmadi: ${reason}]`;
+
 const STAFF = /^\[Markaz xodimi (.{1,120}?) mijozga Telegram orqali yozdi: «([\s\S]*)»\]$/;
 
 /** A staff member wrote to the person through the bot (from the lead page). */

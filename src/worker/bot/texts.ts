@@ -50,6 +50,11 @@ export const B = {
   lastPayslip: { uz: "Oxirgi oylik", ru: "Последняя зарплата" },
   lang: { uz: "Til o'zgartirildi: O'zbekcha", ru: "Язык изменён: Русский" },
   forbidden: { uz: "Ruxsat yo'q.", ru: "Нет доступа." },
+  answerSent: {
+    uz: "✅ Javobingiz mijozga yuborildi. Mijoz yozsa, AI yordamchi suhbatni shundan davom ettiradi.",
+    ru: "✅ Ответ отправлен клиенту. Когда клиент ответит, AI-помощник продолжит разговор с учётом вашего ответа.",
+  },
+  answerNotFound: { uz: "Bu mijozning suhbati topilmadi. Lead sahifasidan yozing.", ru: "Разговор с этим клиентом не найден. Напишите со страницы лида." },
   days: {
     uz: ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"],
     ru: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
