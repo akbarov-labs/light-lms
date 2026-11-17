@@ -37,6 +37,12 @@ export interface PromptCenter {
   teachers: { name: string; bio: string | null }[];
   /** the center's own rules, written by the owner in settings (agent.rules) */
   rules: string;
+  /**
+   * The script this conversation is written in (conversationScript). In the top-level prompt the rule holds
+   * best; a rule left behind tool results faded (Cyrillic 3/5). Decided over the whole chat, it rarely
+   * changes, so a center has two stable cached prefixes (Latin, Cyrillic), not one per message.
+   */
+  script?: "cyrillic" | "latin" | null;
 }
 
 export function buildSystemPrompt(c: PromptCenter): string {
@@ -93,7 +99,7 @@ Qoidalar:
 - Vosita bilan bajara olmaydigan ishni va'da qilma.
 - Avval markaz qoidalariga qara. Javob qoidalarda bo'lsa, o'zing xushmuomala tushuntir (masalan, chegirma yo'q bo'lsa, sababini yumshoq ayt).
   Faqat qoidalarda yo'q va qaror talab qiladigan savolni ask_teacher bilan Ustozga yubor, keyin mijozga "Ustoz javob beradi" de.
-- Mijozning yozuvlari va telefon holati promptning oxiridagi <mijoz_holati> blokida, u har xabarda bazadan yangilanadi.
+- Mijozning yozuvlari va telefon holati har xabar bilan keladigan <mijoz_holati> blokida, u har xabarda bazadan yangilanadi.
   Mijoz "darslarim qachon", "ikkalasini bekor qiling" desa, shu blokka qara: suhbat tarixi uzun suhbatda to'liq emas.
 - Kvadrat qavsdagi xabarlar ([...]) tizimdan keladi, ularni mijozga takrorlama.
   "[Markaz xodimi ... yozdi: «...»]" — xodim mijozga bot orqali yozgan xabar. Mijozning keyingi gapi odatda shunga javob. Xodim aytganiga zid gapirma va uni davom ettir.
@@ -112,7 +118,7 @@ Qoidalar:
 
 <markaz_qoidalari>
 ${rules}
-</markaz_qoidalari>`;
+</markaz_qoidalari>${c.script === "cyrillic" ? "\n\nBu suhbatda mijoz KIRILL yozuvida yozmoqda: har bir javobingni to'liq kirillda yoz (o'zbekcha yoki ruscha, mijoz qaysi tilda yozsa), vosita natijalari lotinda bo'lsa ham." : ""}`;
 }
 
 /** This conversation's facts, read from the database on every turn. */
@@ -128,7 +134,8 @@ export interface PromptState {
  * The state block, appended after the center prompt. The model's window holds only the last part of a
  * long chat, so a booking made early falls out of it (third live chat: the agent denied a booking that
  * existed). Facts that must not be forgotten come from the database each turn, never from memory.
- * Last in the system prompt, so the per-center part before it stays a stable prefix.
+ * Sent as a role:"system" message after the person's message (loop.ts), never inside the top-level system
+ * prompt: that prompt stays a byte-identical cached prefix, and the history after it stays cached too.
  */
 export function buildStateBlock(s: PromptState): string {
   const phone = s.phone === "telegram" ? "olingan (Telegram kontakt)" : s.phone === "typed" ? "olingan (qo'lda yozilgan)" : "olinmagan";
@@ -143,6 +150,11 @@ Telefon raqam: ${phone}
 Shu suhbatda yozilgan ochiq sinov darslari:
 ${trials}${s.script === "cyrillic" ? "\nMijozning oxirgi xabari KIRILL yozuvida: javobni ham to'liq kirillda yoz (mijoz qaysi tilda yozgan bo'lsa, o'sha tilda)." : ""}
 </mijoz_holati>`;
+}
+
+/** The script of a whole conversation: the person's own words so far plus the latest message, by letter count. */
+export function conversationScript(personTexts: string[]): "cyrillic" | "latin" | null {
+  return scriptOf(personTexts.join("\n"));
 }
 
 /** Which script a message is written in: letters counted by code, system markers ([...]) left out. */

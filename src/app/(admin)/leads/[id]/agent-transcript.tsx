@@ -37,6 +37,7 @@ export interface TranscriptChat {
   phoneSource: string | null;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
   lastMessageAt: Date;
 }
 
@@ -48,7 +49,7 @@ export function AgentTranscript({ chat, t }: { chat: TranscriptChat; t: TFn }) {
         {formatDateTime(chat.lastMessageAt)}
         {chat.phoneSource && <> · {t(chat.phoneSource === "telegram" ? "agent.phoneTelegram" : "agent.phoneTyped")}</>}
         {" · "}
-        {t("agent.tokens", { input: chat.inputTokens, output: chat.outputTokens })}
+        {t("agent.tokens", { input: chat.inputTokens, cached: chat.cacheReadTokens, output: chat.outputTokens })}
       </p>
       <ul className="space-y-2 text-sm">
         {list.map((r, i) =>

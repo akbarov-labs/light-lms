@@ -574,7 +574,7 @@ export const uz = {
   "agent.client": "Mijoz",
   "agent.phoneTelegram": "Raqam Telegram kontakti orqali olingan (tasdiqlangan)",
   "agent.phoneTyped": "Raqam qo'lda yozilgan (tasdiqlanmagan)",
-  "agent.tokens": "Tokenlar: kirish {input} · chiqish {output}",
+  "agent.tokens": "Tokenlar: kirish {input} · keshdan {cached} · chiqish {output}",
   "error.trialHasHistory": "Bu sinov yozuvining tarixi bor (davomat yoki to'lov): uni administrator o'qishdan chiqarish orqali yopadi",
   "agent.staff": "Xodim",
   "agent.writeDirect": "Telegram'da o'zingiz yozish: @{username}",

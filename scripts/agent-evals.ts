@@ -9,7 +9,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { agentModel, anthropicApiKey } from "../src/lib/env";
 import { runTurn, type CreateMessage } from "../src/lib/agent/loop";
-import { buildStateBlock, buildSystemPrompt, scriptOf, type PromptState } from "../src/lib/agent/prompt";
+import { buildStateBlock, buildSystemPrompt, conversationScript, type PromptState } from "../src/lib/agent/prompt";
+import { personTexts } from "../src/lib/agent/history";
 import { AGENT_TOOLS } from "../src/lib/agent/tools";
 import { MARK, pickedGroupMarker } from "../src/lib/agent/markers";
 import type { AgentMessage } from "../src/lib/agent/history";
@@ -18,13 +19,14 @@ import { db } from "../src/lib/db";
 const RUNS = Number(process.env.RUNS ?? 3);
 /** ONLY=<text>: run just the cases whose name contains it */
 const ONLY = process.env.ONLY?.toLowerCase();
-const PRICE: Record<string, { in: number; out: number }> = {
-  "claude-haiku-5-5": { in: 0.1, out: 0.5 },
-  "claude-sonnet-5-5": { in: 2, out: 10 },
-  "claude-opus-5-5": { in: 4, out: 20 },
+// $ per million tokens; a cache write costs 1.25x input (5-minute TTL), a cache read `read`x input
+const PRICE: Record<string, { in: number; out: number; read: number }> = {
+  "claude-haiku-5-5": { in: 0.1, out: 0.5, read: 0.1 },
+  "claude-sonnet-5-5": { in: 2, out: 10, read: 0.05 },
+  "claude-opus-5-5": { in: 4, out: 20, read: 0.05 },
 };
 
-const SYSTEM = buildSystemPrompt({
+const CENTER = {
   name: "Aniq Hisob",
   phone: "998711234567",
   branches: [{ id: "br_chilonzor", name: "Chilonzor filiali", address: "Bunyodkor ko'chasi 12", hasLocation: true }],
@@ -34,7 +36,7 @@ const SYSTEM = buildSystemPrompt({
     { name: "Bobur Aliyev", bio: "Ingliz tili o'qituvchisi, IELTS 8.0, 6 yil tajriba." },
   ],
   rules: "Chegirma yo'q. To'lov oyma-oy, har oyning boshida naqd, karta yoki Payme orqali. Birinchi sinov darsi bepul. Guruhda eng ko'pi bilan 12 o'quvchi.",
-});
+};
 
 const GROUPS = [
   {
@@ -331,7 +333,9 @@ const CASES: Case[] = [
       const latin = (text.match(/[a-z]/gi) ?? []).length;
       const cyr = (text.match(/[\u0400-\u04FF]/g) ?? []).length;
       if (cyr === 0) return "answered in Latin";
-      if (latin > 0.1 * (latin + cyr)) return `mixed scripts (${latin} Latin vs ${cyr} Cyrillic letters)`;
+      // show which words were Latin: whole words, or Latin look-alike letters hidden inside Cyrillic words
+      const words = [...new Set(text.match(/\S*[a-z]\S*/gi) ?? [])].slice(0, 8).join(" ");
+      if (latin > 0.1 * (latin + cyr)) return `mixed scripts (${latin} Latin vs ${cyr} Cyrillic letters): ${words}`;
       return null;
     },
   },
@@ -376,7 +380,7 @@ async function main() {
   const model = agentModel();
   const client = new Anthropic({ apiKey: anthropicApiKey() });
   const create: CreateMessage = (p) => client.beta.messages.create(p);
-  const usage = { in: 0, out: 0 };
+  const usage = { in: 0, out: 0, read: 0, write: 0 };
   const cases = CASES.filter((x) => !ONLY || x.name.toLowerCase().includes(ONLY));
   console.log(`model ${model} · ${cases.length} cases × ${RUNS} runs\n`);
   let failed = 0;
@@ -384,17 +388,20 @@ async function main() {
     const results = await Promise.all(
       Array.from({ length: RUNS }, async () => {
         const calls: { name: string; input: Record<string, unknown> }[] = [];
+        // as the service does: the conversation's script over the person's words so far
+        const script = conversationScript([...personTexts(c.history), c.user]);
         try {
           const r = await runTurn({
             create,
             model,
-            // as the service does: the state block, with the script of the person's message detected by code
-            system: `${SYSTEM}\n\n${buildStateBlock({ ...(c.state ?? { phone: null, trials: [] }), script: scriptOf(c.user) })}`,
+            system: buildSystemPrompt({ ...CENTER, script }),
+            // as the service does: the state block after the person's message, its script detected by code
+            turnSystem: async () => buildStateBlock({ ...(c.state ?? { phone: null, trials: [] }), script }),
             tools: AGENT_TOOLS,
             history: c.history,
             userText: c.user,
             execute: (name, input) => execute(name, input, calls),
-            onUsage: async (x) => void ((usage.in += x.input), (usage.out += x.output)),
+            onUsage: async (x) => void ((usage.in += x.input), (usage.out += x.output), (usage.read += x.cacheRead), (usage.write += x.cacheWrite)),
           });
           return { problem: c.check({ replies: r.replies, calls }), replies: r.replies, tools: calls.map((x) => x.name) };
         } catch (e) {
@@ -408,7 +415,8 @@ async function main() {
     for (const r of results.filter((x) => x.problem)) console.log(`       ✗ ${r.problem}\n         tools: ${r.tools.join(", ") || "-"}\n         reply: ${r.replies.join(" | ").slice(0, 600)}`);
   }
   const p = PRICE[model];
-  console.log(`\ntokens: in ${usage.in} · out ${usage.out}${p ? ` · ≈ $${((usage.in * p.in + usage.out * p.out) / 1e6).toFixed(4)}` : ""}`);
+  const cost = p ? (usage.in * p.in + usage.out * p.out + usage.write * p.in * 1.25 + usage.read * p.in * p.read) / 1e6 : null;
+  console.log(`\ntokens: in ${usage.in} · cache write ${usage.write} · cache read ${usage.read} · out ${usage.out}${cost !== null ? ` · ≈ $${cost.toFixed(4)}` : ""}`);
   process.exitCode = failed ? 1 : 0;
 }
 

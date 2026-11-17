@@ -50,6 +50,13 @@ export function mergeUserTurns(messages: AgentMessage[]): AgentMessage[] {
   return out;
 }
 
+/** The person's own words in a history (text of person turns; tool results and assistant turns left out). */
+export function personTexts(messages: AgentMessage[]): string[] {
+  return messages.filter(isPersonTurn).flatMap((m) =>
+    typeof m.content === "string" ? [m.content] : (m.content ?? []).flatMap((b) => (b.type === "text" ? [b.text] : [])),
+  );
+}
+
 export const HISTORY_LIMITS = { maxMessages: 60, maxChars: 40_000 };
 
 /** Drop the oldest whole turns until the history fits; the newest turn is always kept. */

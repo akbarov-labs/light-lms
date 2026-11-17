@@ -731,30 +731,33 @@ model AuditLog {
 
 /// One AI lead agent conversation: a Telegram chat talking to one center's agent (src/lib/agent).
 model AgentChat {
-  id            String   @id @default(cuid())
-  centerId      String
-  center        Center   @relation(fields: [centerId], references: [id])
-  chatId        String
+  id               String   @id @default(cuid())
+  centerId         String
+  center           Center   @relation(fields: [centerId], references: [id])
+  chatId           String
   /// Telegram @username (without @), if the person has one: staff can write to them directly
-  username      String?
-  leadId        String?
-  lead          Lead?    @relation(fields: [leadId], references: [id])
+  username         String?
+  leadId           String?
+  lead             Lead?    @relation(fields: [leadId], references: [id])
   /// the student the agent created for this chat (reused if a trial booking is retried)
-  studentId     String?
+  studentId        String?
   /// every student this chat booked (a parent may book two children): the state block and cancel_trial read it
-  studentIds    String[] @default([])
-  trialGroupId  String?
+  studentIds       String[] @default([])
+  trialGroupId     String?
   /// contact phone (998…): stored here and on the lead, never sent to the model
-  phone         String?
+  phone            String?
   /// "telegram" = shared with the contact button (Telegram-verified), "typed" = written by hand
-  phoneSource   String?
-  awaitingPhone Boolean  @default(false)
+  phoneSource      String?
+  awaitingPhone    Boolean  @default(false)
   /// Messages API history (user/assistant content blocks), trimmed by src/lib/agent/history.ts
-  messages      Json     @default("[]")
-  inputTokens   Int      @default(0)
-  outputTokens  Int      @default(0)
-  lastMessageAt DateTime @default(now())
-  createdAt     DateTime @default(now())
+  messages         Json     @default("[]")
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  /// prompt caching: tokens read from / written to the cache (inputTokens is the uncached rest)
+  cacheReadTokens  Int      @default(0)
+  cacheWriteTokens Int      @default(0)
+  lastMessageAt    DateTime @default(now())
+  createdAt        DateTime @default(now())
 
   @@unique([centerId, chatId])
   @@index([chatId, lastMessageAt])
@@ -763,12 +766,15 @@ model AgentChat {
 
 /// AI agent token usage per center and calendar month (YYYY-MM): metering and the monthly cap.
 model AgentUsage {
-  centerId     String
-  center       Center @relation(fields: [centerId], references: [id])
-  month        String
-  inputTokens  Int    @default(0)
-  outputTokens Int    @default(0)
-  calls        Int    @default(0)
+  centerId         String
+  center           Center @relation(fields: [centerId], references: [id])
+  month            String
+  inputTokens      Int    @default(0)
+  outputTokens     Int    @default(0)
+  /// prompt caching: read ~0.1x, write ~1.25x the input price; inputTokens is the uncached rest
+  cacheReadTokens  Int    @default(0)
+  cacheWriteTokens Int    @default(0)
+  calls            Int    @default(0)
 
   @@id([centerId, month])
 }

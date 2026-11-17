@@ -15,9 +15,9 @@ import { attemptKey, checkAttempts, recordAttempt, RULES } from "@/lib/auth/rate
 import { esc } from "@/lib/messages";
 import { enqueue } from "@/lib/notify";
 import { audit } from "@/lib/audit";
-import { HISTORY_LIMITS, stripThinking, trimHistory, type AgentMessage } from "./history";
-import { runTurn, type CreateMessage } from "./loop";
-import { buildStateBlock, buildSystemPrompt, scriptOf } from "./prompt";
+import { HISTORY_LIMITS, personTexts, stripThinking, trimHistory, type AgentMessage } from "./history";
+import { runTurn, type CreateMessage, type TurnUsage } from "./loop";
+import { buildStateBlock, buildSystemPrompt, conversationScript } from "./prompt";
 import { staffMarker } from "./markers";
 import { AGENT_TOOLS, chatState, ensureLead, executeTool, type AgentCtx, type Outbound } from "./tools";
 
@@ -78,6 +78,14 @@ export async function openAgentChat(centerId: string, chatId: string, now = new 
 export async function activeAgentChat(chatId: string, now = new Date()): Promise<AgentChat | null> {
   const stale = new Date(now.getTime() - IDLE_RESET_DAYS * 86_400_000);
   return db.agentChat.findFirst({ where: { chatId, lastMessageAt: { gte: stale } }, orderBy: { lastMessageAt: "desc" } });
+}
+
+/**
+ * Tokens counted against the monthly cap, weighted by what they cost: a cache read costs ~0.1x an input
+ * token, so ten count as one; a cache write costs more than input and counts in full (conservative).
+ */
+export function capTokens(u: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number }): number {
+  return u.inputTokens + u.outputTokens + u.cacheWriteTokens + Math.ceil(u.cacheReadTokens / 10);
 }
 
 /** Keep the person's Telegram @username current (staff can then write to them directly). */
@@ -159,7 +167,7 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
 
   const month = monthKey(todayISO(now));
   const used = await db.agentUsage.findUnique({ where: { centerId_month: { centerId: chat.centerId, month } } });
-  if (used && used.inputTokens + used.outputTokens >= settings.monthlyTokenCap) return say("paused");
+  if (used && capTokens(used) >= settings.monthlyTokenCap) return say("paused");
 
   const out: Outbound[] = [];
   const ctx = ctxOf(chat, h.personName, now, h.locale, out);
@@ -173,6 +181,8 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
     select: { name: true, bio: true },
     orderBy: { name: "asc" },
   });
+  // the conversation's script, over all the person wrote: stable within a chat, so the cached prefix is too
+  const script = conversationScript([...personTexts(stored), h.text]);
   const system = buildSystemPrompt({
     name: chat.center.name,
     phone: chat.center.phone,
@@ -180,15 +190,20 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
     courses: chat.center.courses.map((c) => c.name),
     teachers,
     rules: settings.rules,
-  }) + `\n\n${buildStateBlock({ ...(await chatState(ctx)), script: scriptOf(h.text) })}`;
-  const meter = async (u: { input: number; output: number }) => {
+    script,
+  });
+  // per turn, after the cached prefix (loop.ts): the chat's bookings, phone status and the script it writes in
+  const turnSystem = async () => buildStateBlock({ ...(await chatState(ctx)), script });
+  const meter = async (u: TurnUsage) => {
+    const tokens = { inputTokens: u.input, outputTokens: u.output, cacheReadTokens: u.cacheRead, cacheWriteTokens: u.cacheWrite };
+    const add = Object.fromEntries(Object.entries(tokens).map(([k, v]) => [k, { increment: v }]));
     await db.$transaction([
       db.agentUsage.upsert({
         where: { centerId_month: { centerId: chat.centerId, month } },
-        create: { centerId: chat.centerId, month, inputTokens: u.input, outputTokens: u.output, calls: 1 },
-        update: { inputTokens: { increment: u.input }, outputTokens: { increment: u.output }, calls: { increment: 1 } },
+        create: { centerId: chat.centerId, month, ...tokens, calls: 1 },
+        update: { ...add, calls: { increment: 1 } },
       }),
-      db.agentChat.update({ where: { id: chat.id }, data: { inputTokens: { increment: u.input }, outputTokens: { increment: u.output } } }),
+      db.agentChat.update({ where: { id: chat.id }, data: add }),
     ]);
   };
 
@@ -201,6 +216,7 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
       tools: AGENT_TOOLS,
       history,
       userText: h.text,
+      turnSystem,
       execute: (name, input) => executeTool(ctx, name, input),
       onUsage: meter,
       onReply: (text) => out.push({ kind: "text", text }),

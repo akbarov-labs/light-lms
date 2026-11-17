@@ -575,7 +575,7 @@ export const ru: Record<DictKey, string> = {
   "agent.client": "Клиент",
   "agent.phoneTelegram": "Номер получен через контакт Telegram (подтверждён)",
   "agent.phoneTyped": "Номер введён вручную (не подтверждён)",
-  "agent.tokens": "Токены: вход {input} · выход {output}",
+  "agent.tokens": "Токены: вход {input} · из кеша {cached} · выход {output}",
   "error.trialHasHistory": "У этой пробной записи есть история (посещаемость или оплата): закройте её через выбытие",
   "agent.staff": "Сотрудник",
   "agent.writeDirect": "Написать самому в Telegram: @{username}",

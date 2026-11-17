@@ -28,7 +28,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       assignedTo: true,
       student: true,
       notes: { orderBy: { createdAt: "desc" } },
-      agentChats: { orderBy: { lastMessageAt: "desc" }, select: { id: true, username: true, messages: true, phoneSource: true, inputTokens: true, outputTokens: true, lastMessageAt: true } },
+      agentChats: { orderBy: { lastMessageAt: "desc" }, select: { id: true, username: true, messages: true, phoneSource: true, inputTokens: true, outputTokens: true, cacheReadTokens: true, lastMessageAt: true } },
       examResults: { include: { exam: { select: { id: true, title: true, date: true, maxScore: true } } }, orderBy: { createdAt: "desc" } },
     },
   });

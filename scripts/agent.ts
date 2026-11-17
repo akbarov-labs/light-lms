@@ -13,6 +13,7 @@ import { audit } from "../src/lib/audit";
 import { readSettings } from "../src/lib/settings";
 import { monthKey, todayISO } from "../src/lib/dates";
 import { anthropicApiKey } from "../src/lib/env";
+import { capTokens } from "../src/lib/agent/service";
 
 async function main() {
   const [cmd, slug, value] = process.argv.slice(2);
@@ -41,7 +42,8 @@ async function main() {
   }
   const usage = await db.agentUsage.findUnique({ where: { centerId_month: { centerId: center.id, month: monthKey(todayISO()) } } });
   console.log(`${center.name} (${slug}): agent ${agent.enabled ? "ON" : "off"}${anthropicApiKey() ? "" : " — ANTHROPIC_API_KEY is not set here, so it will not answer"}`);
-  console.log(`monthly cap: ${agent.monthlyTokenCap} tokens · this month: ${usage ? usage.inputTokens + usage.outputTokens : 0} tokens in ${usage?.calls ?? 0} calls`);
+  console.log(`monthly cap: ${agent.monthlyTokenCap} tokens · this month: ${usage ? capTokens(usage) : 0} counted (cache reads at 1/10) in ${usage?.calls ?? 0} calls`);
+  if (usage) console.log(`  input ${usage.inputTokens} · output ${usage.outputTokens} · cache read ${usage.cacheReadTokens} · cache write ${usage.cacheWriteTokens}`);
   console.log(`rules: ${agent.rules || "(none)"}`);
 }
 

@@ -8,7 +8,7 @@ import { addDays, formatDate, fromISODate, monthKey, todayISO } from "@/lib/date
 import { dbAttemptStore } from "@/lib/auth/attempts-db";
 import { attemptKey, recordAttempt } from "@/lib/auth/ratelimit";
 import type { CreateMessage } from "@/lib/agent/loop";
-import { MARK, activeAgentChat, agentCenterBySlug, handleAgentMessage, openAgentChat, recordPhone, sendStaffMessage } from "@/lib/agent/service";
+import { MARK, activeAgentChat, agentCenterBySlug, capTokens, handleAgentMessage, openAgentChat, recordPhone, sendStaffMessage } from "@/lib/agent/service";
 import { queueTurn } from "@/worker/bot/agent";
 import { ownerReport } from "@/worker/jobs";
 
@@ -31,9 +31,14 @@ function model(...answers: Anthropic.Beta.BetaMessage[]) {
   };
   return { create, seen, left: () => answers.length };
 }
+/** The center prompt (top-level system, a cached text block) and the turn's state block (a role:system message). */
+type Req = Anthropic.Beta.Messages.MessageCreateParamsNonStreaming;
+const centerPrompt = (p: Req) => (p.system as Anthropic.Beta.BetaTextBlockParam[])[0].text;
+const statePart = (p: Req) => p.messages.filter((x) => x.role === "system").map((x) => String(x.content)).join("\n");
 /** Result of the last tool call the model saw in its latest request. */
 function lastToolResult(seen: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming[]) {
-  const content = seen.at(-1)!.messages.at(-1)!.content as Anthropic.Beta.BetaToolResultBlockParam[];
+  // the last user message; a fresh state block (role:system) follows the tool results
+  const content = seen.at(-1)!.messages.filter((m) => m.role === "user").at(-1)!.content as Anthropic.Beta.BetaToolResultBlockParam[];
   const r = content.at(-1)!;
   return { error: r.is_error ?? false, body: typeof r.content === "string" ? r.content : JSON.stringify(r.content) };
 }
@@ -306,7 +311,7 @@ describe("lead agent: cards, location and leads without a phone", () => {
     const r = await turn(chat.id, "qayerdasiz?", m2.create);
     expect(r.out[0]).toEqual({ kind: "venue", latitude: 41.285, longitude: 69.204, title: "Chilonzor", address: "Bunyodkor 1" });
     // the system prompt now tells the model which branches have a map point
-    expect(m2.seen[0].system).toContain(`branch_id: ${branchId}, xaritada joylashuvi bor`);
+    expect(centerPrompt(m2.seen[0])).toContain(`branch_id: ${branchId}, xaritada joylashuvi bor`);
   });
 
   it("a phone that already belongs to an open lead moves the chat there; the phoneless lead is archived with its notes moved", async () => {
@@ -342,7 +347,8 @@ describe("lead agent: cards, location and leads without a phone", () => {
       return m.create(p);
     };
     await turn(chat.id, "ha, kelaman", create);
-    const lastUser = m.seen[0].messages.at(-1)!;
+    // the person's turn is the last user message; the state block (role:system) follows it
+    const lastUser = m.seen[0].messages.filter((x) => x.role === "user").at(-1)!;
     expect(lastUser.role).toBe("user");
     expect(JSON.stringify(lastUser.content)).toContain("Markaz xodimi Ega mijozga Telegram orqali yozdi");
     expect(JSON.stringify(lastUser.content)).toContain("ha, kelaman");
@@ -408,7 +414,7 @@ describe("lead agent: second live chat fixes", () => {
     await db.agentChat.update({ where: { id: chat.id }, data: { messages: long } });
     const m = model(msg([text("yangi javob")], "end_turn"));
     await turn(chat.id, "yangi savol", m.create);
-    expect(m.seen[0].messages.length).toBeLessThanOrEqual(60 + 1); // the window, plus the new message
+    expect(m.seen[0].messages.length).toBeLessThanOrEqual(60 + 2); // the window, the new message and the state block
     expect(JSON.stringify(m.seen[0].messages)).not.toContain("savol 0\"");
     const saved = (await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).messages as unknown[];
     expect(saved).toHaveLength(162);
@@ -430,8 +436,9 @@ describe("lead agent: third live chat fixes", () => {
     const m = model(msg([text("Sizda bitta sinov darsi bor")], "end_turn"));
     await turn(chat.id, "darslarim qachon?", m.create);
     expect(JSON.stringify(m.seen[0].messages)).not.toContain("book_trial"); // gone from the window…
-    expect(m.seen[0].system).toContain(`«Abituriyentlar» (group_id: ${groupId})`); // …but not from the state
-    expect(m.seen[0].system).toContain("Telefon raqam: olingan (Telegram kontakt)");
+    expect(statePart(m.seen[0])).toContain(`«Abituriyentlar» (group_id: ${groupId})`); // …but not from the state
+    expect(statePart(m.seen[0])).toContain("Telefon raqam: olingan (Telegram kontakt)");
+    expect(centerPrompt(m.seen[0])).not.toContain("Telefon raqam: olingan"); // the state is not in the cached prefix
   });
 
   it("a parent's two children: both trials are in the state and each can be cancelled", async () => {
@@ -447,8 +454,21 @@ describe("lead agent: third live chat fixes", () => {
     expect((await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).studentIds).toHaveLength(2);
     const m = model(msg([call("cancel_trial", { group_id: groupId, reason: "birinchisi bormaydi" })], "tool_use"), msg([text("ok")], "end_turn"));
     await turn(chat.id, "birinchisini bekor qiling", m.create);
-    expect(m.seen[0].system).toContain("Birinchi Aka: «Abituriyentlar»");
-    expect(m.seen[0].system).toContain("Ikkinchi Aka: «Ikkinchi guruh»");
+    expect(statePart(m.seen[0])).toContain("Birinchi Aka: «Abituriyentlar»");
+    expect(statePart(m.seen[0])).toContain("Ikkinchi Aka: «Ikkinchi guruh»");
     expect(JSON.parse(lastToolResult(m.seen).body)).toMatchObject({ ok: true, cancelled: "Abituriyentlar" }); // the earlier child, not chat.studentId
   });
 });
+
+describe("lead agent: prompt caching", () => {
+  it("meters cached tokens apart, keeps the state out of the saved history, and weighs cache reads at 1/10 against the cap", async () => {
+    const chat = await chatFor();
+    const cached = { ...msg([text("Salom")], "end_turn"), usage: { input_tokens: 30, output_tokens: 10, cache_read_input_tokens: 5000, cache_creation_input_tokens: 400 } } as unknown as Anthropic.Beta.BetaMessage;
+    await turn(chat.id, "salom", model(cached).create);
+    const row = await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } });
+    expect(row).toMatchObject({ inputTokens: 30, outputTokens: 10, cacheReadTokens: 5000, cacheWriteTokens: 400 });
+    expect(JSON.stringify(row.messages)).not.toContain("mijoz_holati");
+    expect(capTokens({ inputTokens: 30, outputTokens: 10, cacheReadTokens: 5000, cacheWriteTokens: 400 })).toBe(30 + 10 + 400 + 500);
+  });
+});
+

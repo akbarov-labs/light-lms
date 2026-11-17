@@ -77,4 +77,21 @@ describe("runTurn", () => {
     await runTurn({ ...base, model: "claude-sonnet-5-5", create: sonnet.create, userText: "x", execute: async () => ({}) });
     expect(sonnet.seen[0]).toMatchObject({ fallbacks: "default", betas: ["server-side-fallback-2026-07-01"] });
   });
+
+  it("caches the system prompt and the growing history, and sends the turn's state after the person's message without keeping it", async () => {
+    const m = script(
+      { ...msg([call("t1", "list_groups")], "tool_use"), usage: { input_tokens: 40, output_tokens: 5, cache_read_input_tokens: 900, cache_creation_input_tokens: 60 } } as unknown as Anthropic.Beta.BetaMessage,
+      msg([text("ok")], "end_turn"),
+    );
+    const usage: unknown[] = [];
+    const r = await runTurn({ ...base, create: m.create, userText: "salom", turnSystem: async () => "<mijoz_holati>x</mijoz_holati>", execute: async () => [], onUsage: async (u) => void usage.push(u) });
+    expect(m.seen[0].system).toEqual([{ type: "text", text: "sys", cache_control: { type: "ephemeral" } }]);
+    expect(m.seen[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(m.seen[0].messages.map((x) => x.role)).toEqual(["user", "system"]);
+    // it stays in place for the rest of the tool loop (removing it would be a history edit), and a fresh copy follows the tool results
+    expect(m.seen[1].messages.map((x) => x.role)).toEqual(["user", "system", "assistant", "user", "system"]);
+    expect(r.history.map((x) => x.role)).toEqual(["user", "assistant", "user", "assistant"]);
+    expect(usage[0]).toEqual({ input: 40, output: 5, cacheRead: 900, cacheWrite: 60 });
+    expect(usage[1]).toEqual({ input: 100, output: 10, cacheRead: 0, cacheWrite: 0 });
+  });
 });

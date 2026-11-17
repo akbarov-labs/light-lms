@@ -69,3 +69,11 @@ describe("scriptOf", () => {
     expect(buildStateBlock({ phone: null, trials: [], script: "latin" })).not.toContain("KIRILL");
   });
 });
+
+describe("conversation script in the system prompt", () => {
+  it("adds the Cyrillic rule only to Cyrillic conversations, so each kind keeps one stable prefix", () => {
+    expect(buildSystemPrompt({ ...center, script: "cyrillic" })).toContain("KIRILL yozuvida");
+    expect(buildSystemPrompt({ ...center, script: "latin" })).toBe(buildSystemPrompt(center));
+  });
+});
+
