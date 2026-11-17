@@ -472,3 +472,29 @@ describe("lead agent: prompt caching", () => {
   });
 });
 
+
+describe("lead agent: Cyrillic by code", () => {
+  it("a Cyrillic conversation gets Cyrillic texts, cards and buttons even when the model answers in Latin; the saved history matches", async () => {
+    const chat = await chatFor();
+    const m = model(
+      msg([text("Mana guruh kartasi:"), call("show_groups", { group_ids: [groupId] })], "tool_use"),
+      msg([text("Narxi oyiga 650 000 so'm, o'qituvchi Ustoz. Sinov darsi bepul.")], "end_turn"),
+    );
+    const r = await turn(chat.id, "Ассалому алайкум, нархи қанча?", m.create);
+    expect(r.replies).toEqual(["Мана гуруҳ картаси:", "Нархи ойига 650 000 сўм, ўқитувчи Устоз. Синов дарси бепул."]);
+    const card = r.out.find((o) => o.kind === "card");
+    if (card?.kind !== "card") throw new Error("no card");
+    expect(card.html).toContain("<b>Абитуриентлар</b>"); // tags kept, words in Cyrillic
+    expect(card.button).toBe("✍️ Синов дарсига ёзилиш");
+    const saved = JSON.stringify((await db.agentChat.findUniqueOrThrow({ where: { id: chat.id } })).messages);
+    expect(saved).toContain("Нархи ойига 650 000 сўм");
+    expect(saved).not.toContain("Narxi oyiga");
+    expect(saved).toContain(`"group_ids":["${groupId}"]`); // tool calls untouched
+  });
+
+  it("a Latin conversation is left as the model wrote it", async () => {
+    const chat = await chatFor();
+    const r = await turn(chat.id, "Salom, narxi qancha?", model(msg([text("Narxi oyiga 650 000 so'm.")], "end_turn")).create);
+    expect(r.replies).toEqual(["Narxi oyiga 650 000 so'm."]);
+  });
+});

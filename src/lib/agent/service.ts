@@ -15,6 +15,7 @@ import { attemptKey, checkAttempts, recordAttempt, RULES } from "@/lib/auth/rate
 import { esc } from "@/lib/messages";
 import { enqueue } from "@/lib/notify";
 import { audit } from "@/lib/audit";
+import { latinToCyrillic } from "@/lib/translit";
 import { HISTORY_LIMITS, personTexts, stripThinking, trimHistory, type AgentMessage } from "./history";
 import { runTurn, type CreateMessage, type TurnUsage } from "./loop";
 import { buildStateBlock, buildSystemPrompt, conversationScript } from "./prompt";
@@ -153,8 +154,14 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
   });
   // everyone who wrote is a lead, even when the agent is paused or over its limits
   if (h.fromPerson) await ensureLead(ctxOf(chat, h.personName, now)).then((id) => (chat.leadId = id));
+  // the whole conversation is stored for staff; the model sees only its last part (below)
+  const stored = (chat.messages ?? []) as unknown as AgentMessage[];
+  // the conversation's script, over all the person wrote: stable within a chat, so the cached prefix is too
+  const script = conversationScript([...personTexts(stored), h.text]);
+  // a Cyrillic conversation gets Cyrillic by code too: the model alone drifted to Latin after tool results
+  const cyr = (s: string) => (script === "cyrillic" ? latinToCyrillic(s) : s);
   const say = (k: keyof typeof TEXT): AgentReply => {
-    const text = agentText(k, h.locale);
+    const text = cyr(agentText(k, h.locale));
     return { out: [{ kind: "text", text }], replies: [text], askPhone: false, booked: false };
   };
   const settings = readSettings(chat.center.settings).agent;
@@ -171,8 +178,6 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
 
   const out: Outbound[] = [];
   const ctx = ctxOf(chat, h.personName, now, h.locale, out);
-  // the whole conversation is stored for staff; the model sees only its last part
-  const stored = (chat.messages ?? []) as unknown as AgentMessage[];
   const history = trimHistory(stored, HISTORY_LIMITS);
   const before = stored.slice(0, stored.length - history.length);
   // teachers of open groups, by name and public bio only: phone, salary and login never leave the database
@@ -181,8 +186,6 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
     select: { name: true, bio: true },
     orderBy: { name: "asc" },
   });
-  // the conversation's script, over all the person wrote: stable within a chat, so the cached prefix is too
-  const script = conversationScript([...personTexts(stored), h.text]);
   const system = buildSystemPrompt({
     name: chat.center.name,
     phone: chat.center.phone,
@@ -221,9 +224,11 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
       onUsage: meter,
       onReply: (text) => out.push({ kind: "text", text }),
     });
-    await saveHistory(chat.id, [...before, ...r.history], stored.length, now);
+    // the history keeps what the person saw: Latin replies left in it would pull the next turn back to Latin
+    await saveHistory(chat.id, [...before, ...(script === "cyrillic" ? cyrillicReplies(r.history) : r.history)], stored.length, now);
     if (r.stopped === "refusal") out.push({ kind: "text", text: agentText("refused", h.locale) });
     else if (!out.length) out.push({ kind: "text", text: agentText("error", h.locale) });
+    if (script === "cyrillic") for (const o of out) toCyrillic(o);
     const replies = out.flatMap((o) => (o.kind === "text" ? [o.text] : []));
     return { out, replies, askPhone: ctx.chat.awaitingPhone && !ctx.chat.phone, booked: !!ctx.chat.trialGroupId && ctx.chat.trialGroupId !== trialBefore };
   } catch (e) {
@@ -232,6 +237,22 @@ export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
     await saveHistory(chat.id, [...stored, { role: "user", content: h.text }], stored.length, now);
     return say("error");
   }
+}
+
+/** Everything sent to the person, in Cyrillic: texts, cards (tags and entities kept), buttons, map pins. */
+function toCyrillic(o: Outbound): void {
+  if (o.kind === "text") o.text = latinToCyrillic(o.text);
+  else if (o.kind === "card") Object.assign(o, { html: latinToCyrillic(o.html), button: latinToCyrillic(o.button) });
+  else Object.assign(o, { title: latinToCyrillic(o.title), address: latinToCyrillic(o.address) });
+}
+
+/** The agent's own text in Cyrillic; tool calls, tool results and the person's words are left alone. */
+function cyrillicReplies(messages: AgentMessage[]): AgentMessage[] {
+  return messages.map((m) =>
+    m.role !== "assistant" || typeof m.content === "string"
+      ? m
+      : { ...m, content: m.content.map((b) => (b.type === "text" ? { ...b, text: latinToCyrillic(b.text) } : b)) },
+  );
 }
 
 /**

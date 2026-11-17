@@ -325,7 +325,8 @@ const CASES: Case[] = [
     },
   },
   {
-    name: "answers Cyrillic Uzbek in Cyrillic, without mixing scripts (probe: Latin reply with a Cyrillic word)",
+    // the model alone: in production the service also transliterates a Cyrillic conversation by code (src/lib/translit.ts)
+    name: "answers Cyrillic Uzbek in Cyrillic, without mixing scripts (model alone; probe: Latin reply with a Cyrillic word)",
     history: opened,
     user: "Ассалому алайкум. Ўғлим 11-синфда, DTMга математикадан тайёрланиши керак. Нархи қанча, ўқитувчи ким?",
     check: ({ replies }) => {
