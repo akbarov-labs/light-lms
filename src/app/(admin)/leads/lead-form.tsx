@@ -19,7 +19,7 @@ export async function LeadForm({ ctx, lead }: { ctx: Ctx; lead?: Lead }) {
       {lead && <input type="hidden" name="id" value={lead.id} />}
       <FormGrid>
         <Field label={t("common.fullName")}><Input name="name" defaultValue={lead?.name} required /></Field>
-        <Field label={t("common.phone")}><Input name="phone" type="tel" defaultValue={lead ? formatPhone(lead.phone) : ""} required /></Field>
+        <Field label={t("common.phone")}><Input name="phone" type="tel" defaultValue={lead?.phone ? formatPhone(lead.phone) : ""} required={!lead || !!lead.phone} /></Field>
         <Field label={t("common.source")}><Input name="source" defaultValue={lead?.source ?? ""} list="lead-sources" /><datalist id="lead-sources">{["Instagram", "Telegram", "Facebook", "Tanish", "Qo'ng'iroq", "Banner", "Sayt formasi"].map((s) => <option key={s} value={s} />)}</datalist></Field>
         <Field label={t("leads.interestedCourse")}>
           <Select name="courseId" defaultValue={lead?.courseId ?? ""}>

@@ -61,6 +61,20 @@ export const centerSettingsSchema = z.object({
     })
     .prefault({})
     .catch(() => smsDefaults()),
+  /**
+   * AI lead agent (phase 1). Off by default: conversations go to an external API (Anthropic), and
+   * real centers' personal data must stay in Uzbekistan (DEPLOY.md §0) until that is settled.
+   */
+  agent: z
+    .object({
+      enabled: z.boolean().default(false),
+      /** The center's own rules in plain language (discounts, installments, refunds...), added to the agent's prompt. */
+      rules: z.string().max(4000).default(""),
+      /** Input + output tokens per calendar month; above it the agent stops answering until next month. */
+      monthlyTokenCap: z.number().int().min(0).max(100_000_000).default(5_000_000),
+    })
+    .prefault({})
+    .catch(() => ({ enabled: false, rules: "", monthlyTokenCap: 5_000_000 })),
 });
 
 export type CenterSettings = z.infer<typeof centerSettingsSchema>;

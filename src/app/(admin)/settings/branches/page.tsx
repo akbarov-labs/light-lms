@@ -3,6 +3,7 @@ import { requireStaff } from "@/lib/ctx";
 import { db } from "@/lib/db";
 import { Badge, Card, EmptyState } from "@/components/ui";
 import { Field, FormGrid, Input } from "@/components/fields";
+import { mapLink } from "@/lib/geo";
 import { ActionForm, Modal, ModalForm, SubmitButton } from "@/components/client";
 import { saveBranchAction, saveRoomAction, toggleBranchArchiveAction, toggleRoomArchiveAction } from "../actions";
 
@@ -23,6 +24,7 @@ export default async function BranchesPage() {
               <Field label={t("common.name")}><Input name="name" required /></Field>
               <Field label={t("common.address")}><Input name="address" /></Field>
               <Field label={t("common.phone")}><Input name="phone" /></Field>
+              <Field label={t("settings.location")} hint={t("settings.locationHint")}><Input name="location" placeholder="41.311081, 69.240562" /></Field>
               <SubmitButton>{t("common.create")}</SubmitButton>
             </ModalForm>
         </Modal>
@@ -41,6 +43,9 @@ export default async function BranchesPage() {
                     <Field label={t("common.name")}><Input name="name" defaultValue={b.name} required /></Field>
                     <Field label={t("common.address")}><Input name="address" defaultValue={b.address ?? ""} /></Field>
                     <Field label={t("common.phone")}><Input name="phone" defaultValue={b.phone ?? ""} /></Field>
+                    <Field label={t("settings.location")} hint={t("settings.locationHint")}>
+                      <Input name="location" placeholder="41.311081, 69.240562" defaultValue={b.latitude !== null && b.longitude !== null ? `${b.latitude}, ${b.longitude}` : ""} />
+                    </Field>
                     <SubmitButton>{t("common.save")}</SubmitButton>
                   </ModalForm>
               </Modal>
@@ -51,7 +56,12 @@ export default async function BranchesPage() {
             </>
           }
         >
-          <div className="mb-3 text-sm text-zinc-500">{[b.address, b.phone].filter(Boolean).join(" · ") || "—"}</div>
+          <div className="mb-3 text-sm text-zinc-500">
+            {[b.address, b.phone].filter(Boolean).join(" · ") || "—"}
+            {b.latitude !== null && b.longitude !== null && (
+              <> · <a href={mapLink({ lat: b.latitude, lng: b.longitude })} target="_blank" rel="noreferrer" className="text-zinc-900 underline decoration-zinc-300 hover:decoration-zinc-900">📍 {t("settings.openMap")}</a></>
+            )}
+          </div>
           <div className="mb-2 text-xs font-semibold uppercase text-zinc-500">{t("settings.rooms")}</div>
           <div className="flex flex-wrap gap-2">
             {b.rooms.map((r) => (

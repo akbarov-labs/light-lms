@@ -97,7 +97,7 @@ const exporters: Record<string, Exporter> = {
     if (!ctx.can("leads")) return null;
     const ids = ctx.activeBranchId ? [ctx.activeBranchId] : ctx.branchIds;
     const leads = await db.lead.findMany({
-      where: { centerId: ctx.centerId, archivedAt: sp.archived ? { not: null } : null, ...(ids ? { OR: [{ branchId: { in: ids } }, { branchId: null }] } : {}), ...(sp.source ? { source: sp.source } : {}), ...(sp.assigned ? { assignedToId: sp.assigned } : {}) },
+      where: { centerId: ctx.centerId, archivedAt: sp.archived ? { not: null } : null, ...(ids ? { OR: [{ branchId: { in: ids } }, { branchId: null }] } : {}), ...(sp.source ? { source: sp.source } : {}), ...(sp.assigned ? { assignedToId: sp.assigned } : {}), ...(sp.nophone ? { phone: null } : {}) },
       include: { course: true, assignedTo: true, branch: true },
       orderBy: { createdAt: "desc" },
     });
@@ -128,7 +128,7 @@ const exporters: Record<string, Exporter> = {
     const users = new Map((await db.user.findMany({ where: { centerId: ctx.centerId }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
     return {
       header: ["time", "user", "entity", "entityId", "action", "before", "after"],
-      rows: logs.map((l) => [formatDateTime(l.createdAt), l.userId ? users.get(l.userId) : "system", l.entity, l.entityId, l.action, l.before ? JSON.stringify(l.before) : "", l.after ? JSON.stringify(l.after) : ""]),
+      rows: logs.map((l) => [formatDateTime(l.createdAt), l.userId ? users.get(l.userId) : l.actor.toLowerCase(), l.entity, l.entityId, l.action, l.before ? JSON.stringify(l.before) : "", l.after ? JSON.stringify(l.after) : ""]),
     };
   },
   /** Reports page tables in full: billed and attendance per group for the chosen period. */

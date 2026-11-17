@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { addDays, formatDate, formatDateTime, fromISODate, toISODate, todayISO, monthLabel } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
+import { actorName } from "@/lib/actor";
 import { attendanceTone, enrollmentTone, fullName } from "@/lib/format";
 import { familyAllocation, familyLedger } from "@/lib/services/wallet";
 import { Badge, Card, EmptyState, KV, LinkButton, PageHeader, Table, Td, Th, Tr, cx } from "@/components/ui";
@@ -258,7 +259,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               {events.map((ev) => (
                 <li key={ev.id} className="flex justify-between gap-3 px-4 py-2">
                   <span className="text-zinc-700">{(() => { const k = `hist.${ev.action}` as DictKey; const label = t(k); return label === k ? `${ev.entity} · ${ev.action}` : label; })()}</span>
-                  <span className="whitespace-nowrap text-xs text-zinc-500">{formatDateTime(ev.createdAt)} · {ev.userId ? users.get(ev.userId) : t("audit.system")}</span>
+                  <span className="whitespace-nowrap text-xs text-zinc-500">{formatDateTime(ev.createdAt)} · {actorName(t, ev.actor, ev.userId ? users.get(ev.userId) : null)}</span>
                 </li>
               ))}
             </ul>

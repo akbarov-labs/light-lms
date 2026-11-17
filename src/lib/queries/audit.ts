@@ -1,7 +1,7 @@
 // Audit journal queries. The journal hides the high-volume `billing.sync` rows unless asked; the
 // page query is shaped for the partial index AuditLog(centerId, createdAt) WHERE action <> 'billing.sync'
 // (audit P5): the predicate is a literal (a bound parameter can't prove a partial index applies).
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma, type ActorKind } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import type { Ctx } from "@/lib/ctx-core";
 import { isISODate } from "@/lib/dates";
@@ -18,6 +18,13 @@ export interface AuditFilters {
   sync?: string;
 }
 
+/** The "who" filter: a staff user id, "agent" (the AI agent), or "system" (jobs and the public form). */
+function actorFilter(who: string): Prisma.AuditLogWhereInput {
+  if (who === "agent") return { actor: "AGENT" };
+  if (who === "system") return { userId: null, actor: { in: ["SYSTEM", "PUBLIC"] } };
+  return { userId: who };
+}
+
 /** Prisma filter (CSV export). Day boundaries are center-timezone days. */
 export function auditWhere(ctx: Ctx, f: AuditFilters): Prisma.AuditLogWhereInput {
   const action = strParam(f.action);
@@ -27,7 +34,7 @@ export function auditWhere(ctx: Ctx, f: AuditFilters): Prisma.AuditLogWhereInput
     centerId: ctx.centerId,
     ...(strParam(f.entity) ? { entity: strParam(f.entity) } : {}),
     ...(strParam(f.entityId) ? { entityId: strParam(f.entityId) } : {}),
-    ...(strParam(f.userId) ? { userId: f.userId === "system" ? null : strParam(f.userId) } : {}),
+    ...(strParam(f.userId) ? actorFilter(strParam(f.userId)!) : {}),
     // an explicit action filter searches every action (billing.sync included), as before
     ...(action ? { action: { contains: action } } : f.sync ? {} : { action: { not: "billing.sync" } }),
     ...(from || to ? { createdAt: { ...(from ? { gte: zonedDayStart(from) } : {}), ...(to ? { lt: zonedRange(to, to).lt } : {}) } } : {}),
@@ -47,7 +54,9 @@ function auditWhereSql(ctx: Ctx, f: AuditFilters): Prisma.Sql {
   if (!f.sync && !action) parts.push(Prisma.sql`a.action <> 'billing.sync'`);
   if (entity) parts.push(Prisma.sql`a.entity = ${entity}`);
   if (entityId) parts.push(Prisma.sql`a."entityId" = ${entityId}`);
-  if (userId) parts.push(userId === "system" ? Prisma.sql`a."userId" IS NULL` : Prisma.sql`a."userId" = ${userId}`);
+  if (userId === "agent") parts.push(Prisma.sql`a.actor = 'AGENT'`);
+  else if (userId === "system") parts.push(Prisma.sql`a."userId" IS NULL AND a.actor IN ('SYSTEM', 'PUBLIC')`);
+  else if (userId) parts.push(Prisma.sql`a."userId" = ${userId}`);
   if (action) parts.push(Prisma.sql`strpos(a.action, ${action}) > 0`);
   if (isISODate(f.from)) parts.push(Prisma.sql`a."createdAt" >= ${ts(zonedDayStart(f.from))}`);
   if (isISODate(f.to)) parts.push(Prisma.sql`a."createdAt" < ${ts(zonedRange(f.to, f.to).lt)}`);
@@ -57,6 +66,7 @@ function auditWhereSql(ctx: Ctx, f: AuditFilters): Prisma.Sql {
 export interface AuditRow {
   id: string;
   userId: string | null;
+  actor: ActorKind;
   entity: string;
   entityId: string;
   action: string;
@@ -78,7 +88,7 @@ export async function listAudit(ctx: Ctx, f: AuditFilters, page: number, size = 
   const cap = skip + size + AUDIT_COUNT_AHEAD;
   const [rows, counted] = await Promise.all([
     db.$queryRaw<AuditRow[]>`
-      SELECT a.id, a."userId", a.entity, a."entityId", a.action, a.before, a.after, a."createdAt"
+      SELECT a.id, a."userId", a.actor, a.entity, a."entityId", a.action, a.before, a.after, a."createdAt"
       FROM "AuditLog" a WHERE ${where}
       ORDER BY a."createdAt" DESC, a.id DESC
       LIMIT ${size} OFFSET ${skip}`,

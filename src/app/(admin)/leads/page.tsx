@@ -30,6 +30,8 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
     ...(ids ? { OR: [{ branchId: { in: ids } }, { branchId: null }] } : {}),
     ...(source ? { source } : {}),
     ...(assigned ? { assignedToId: assigned } : {}),
+    // Telegram AI leads that left without a number: derived from the data, not a stage of its own
+    ...(sp.nophone ? { phone: null } : {}),
     ...(q ? { AND: [{ OR: [{ name: { contains: q, mode: "insensitive" } }, { phone: { contains: q.replace(/\D/g, "") || q } }] }] } : {}),
   };
   // every column shows its true count; cards come LEADS_PER_COLUMN at a time ("show more"), never silently cut
@@ -76,6 +78,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           <option value="">{t("leads.assigned")}: {t("common.all")}</option>
           {admins.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </Select>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="nophone" value="1" defaultChecked={!!sp.nophone} className="h-4 w-4" /> {t("leads.noPhoneFilter")}</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="archived" value="1" defaultChecked={!!sp.archived} className="h-4 w-4" /> {t("leads.showArchived")}</label>
         <button className="h-9 rounded-lg bg-zinc-900 px-3.5 text-sm font-medium text-white hover:bg-zinc-800">{t("common.filter")}</button>
       </form>
@@ -95,7 +98,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                   return (
                     <Link key={l.id} href={`/leads/${l.id}`} className="block rounded-lg border border-zinc-200 bg-white p-2.5 text-sm shadow-xs hover:border-accent">
                       <div className="font-medium text-zinc-900">{l.name}</div>
-                      <div className="text-xs text-zinc-500">{formatPhone(l.phone)}</div>
+                      <div className="text-xs text-zinc-500">{l.phone ? formatPhone(l.phone) : <span className="font-medium text-amber-700">{t("leads.noPhone")}</span>}</div>
                       {l.course && <div className="mt-1 text-xs text-zinc-600">{l.course.name}</div>}
                       <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                         {l.source && <span className="text-zinc-500">{l.source}</span>}

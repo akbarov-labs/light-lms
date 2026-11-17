@@ -13,6 +13,8 @@ import { UserError } from "@/lib/user-error";
 import { ownerReport } from "../jobs";
 import { createResetCodeForChat } from "@/lib/auth/password";
 import { B, buttonKey } from "./texts";
+import { CANCEL, PICK, agentOnCancel, agentOnContact, agentOnPick, agentOnRestart, agentOnStart, agentOnText } from "./agent";
+import { answerFromTelegram } from "@/lib/agent/service";
 import { appUrl, telegramRichMessages } from "@/lib/env";
 import { richRefused } from "../notifications";
 import {
@@ -83,12 +85,16 @@ export function createBot(token: string): Bot {
 
   bot.command("start", async (ctx) => {
     const l = await localeOf(ctx);
+    // t.me/<bot>?start=<center-slug>: the center's AI lead agent (when that center switched it on)
+    if (ctx.match && (await agentOnStart(ctx, ctx.match, l))) return;
     const chatId = String(ctx.chat.id);
     const roles = await chatRoles(chatId);
     if (roles.family || roles.teacher || roles.owner) {
       await ctx.reply(B.linked[l], { reply_markup: await menu(chatId, l) });
       return;
     }
+    // a stranger already talking to a center's agent: plain /start goes on with that conversation
+    if (await agentOnRestart(ctx, l)) return;
     await ctx.reply(B.welcome[l], { reply_markup: new Keyboard().requestContact(B.shareContact[l]).resized().oneTime() });
   });
 
@@ -116,6 +122,7 @@ export function createBot(token: string): Bot {
       return;
     }
     const phone = normalizePhone(contact.phone_number);
+    if (await agentOnContact(ctx, phone, l)) return;
     const chatId = String(ctx.chat.id);
     const linked = phone ? await linkChat(chatId, phone, l) : { guardians: 0, students: 0, staff: [] };
     if (!linked.guardians && !linked.students && linked.staff.length === 0) {
@@ -133,6 +140,12 @@ export function createBot(token: string): Bot {
   bot.on("message:text", async (ctx) => {
     const chatId = String(ctx.chat.id);
     const l = await localeOf(ctx);
+    // staff answering a customer's question: a reply to the bot's own "🤖❓" notification goes to the customer
+    const replied = ctx.message.reply_to_message;
+    if (ctx.chat.type === "private" && replied?.from?.id === ctx.me.id && replied.text) {
+      const r = await answerFromTelegram({ staffChatId: chatId, repliedText: replied.text, text: ctx.message.text });
+      if (r) return void (await ctx.reply(B[r === "sent" ? "answerSent" : r === "forbidden" ? "forbidden" : "answerNotFound"][l]));
+    }
     const key = buttonKey(ctx.message.text);
     const html = { parse_mode: "HTML" as const, link_preview_options: { is_disabled: true } };
     switch (key) {
@@ -204,9 +217,15 @@ export function createBot(token: string): Bot {
         return;
       }
       default:
+        if (await agentOnText(ctx, ctx.message.text, l)) return;
         await ctx.reply(B.notLinked[l], { reply_markup: await menu(chatId, l) });
     }
   });
+
+  // a group card's "book a trial" button (AI lead agent); registered first, the generic handler below is attendance
+  bot.callbackQuery(PICK, async (ctx) => agentOnPick(ctx, ctx.match[1], await localeOf(ctx)));
+  // the agent's "cancel this trial?" buttons: the booking is cancelled only here, by the person's press
+  bot.callbackQuery(CANCEL, async (ctx) => agentOnCancel(ctx, ctx.match[1] === "y", ctx.match[2], await localeOf(ctx)));
 
   bot.on("callback_query:data", async (ctx) => {
     const chatId = String(ctx.chat?.id ?? "");

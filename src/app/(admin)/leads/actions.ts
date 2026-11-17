@@ -7,7 +7,8 @@ import { runAction, type ActionState } from "@/lib/action";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { assertBranch, assertLeadRefs, type Ctx } from "@/lib/ctx";
-import { formObject, zId, zOptDate, zOptId, zOptStr, zPhone, zStr, zTags } from "@/lib/forms";
+import { formObject, zId, zOptDate, zOptId, zOptPhone, zOptStr, zStr, zTags } from "@/lib/forms";
+import { sendStaffMessage, STAFF_MESSAGE_MAX } from "@/lib/agent/service";
 import { UserError } from "@/lib/user-error";
 import { fromISODate } from "@/lib/dates";
 
@@ -23,7 +24,8 @@ async function loadLead(ctx: Ctx, id: string) {
 const leadSchema = z.object({
   id: zOptId,
   name: zStr,
-  phone: zPhone,
+  // optional only for a Telegram AI lead that has none yet: a phone can be added, never removed
+  phone: zOptPhone,
   source: zOptStr,
   courseId: zOptId,
   branchId: zOptId,
@@ -37,10 +39,11 @@ export async function saveLeadAction(_: ActionState, fd: FormData): Promise<Acti
   return runAction("leads", async (ctx) => {
     const f = leadSchema.parse(formObject(fd));
     const existing = f.id ? await loadLead(ctx, f.id) : null;
+    if (!f.phone && (!existing || existing.phone)) throw new UserError("leads.phoneRequired");
     await assertLeadRefs(ctx, f, existing);
     const data = {
       name: f.name,
-      phone: f.phone,
+      phone: f.phone ?? null,
       source: f.source ?? null,
       courseId: f.courseId ?? null,
       branchId: f.branchId ?? ctx.activeBranchId ?? ctx.branchIds?.[0] ?? null,
@@ -102,5 +105,19 @@ export async function toggleLeadArchiveAction(_: ActionState, fd: FormData): Pro
     });
     revalidatePath("/leads");
     revalidatePath(`/leads/${lead.id}`);
+  });
+}
+
+/** Write to a Telegram AI lead through the bot (the agent then continues knowing what was said). */
+export async function sendLeadTelegramAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction("leads", async (ctx) => {
+    const f = z.object({ id: zId, chatId: zId, text: z.string().trim().min(1).max(STAFF_MESSAGE_MAX) }).parse(formObject(fd));
+    const lead = await loadLead(ctx, f.id);
+    const chat = await db.agentChat.findFirst({ where: { id: f.chatId, centerId: ctx.centerId, leadId: lead.id }, select: { id: true } });
+    if (!chat) throw new UserError("error.notFound");
+    const me = await db.user.findUniqueOrThrow({ where: { id: ctx.userId }, select: { name: true } });
+    await sendStaffMessage({ centerId: ctx.centerId, chatRowId: chat.id, userId: ctx.userId, staffName: me.name, text: f.text });
+    revalidatePath(`/leads/${lead.id}`);
+    revalidatePath("/leads");
   });
 }

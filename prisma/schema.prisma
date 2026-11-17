@@ -129,6 +129,14 @@ enum NotificationStatus {
   FAILED
 }
 
+/// Who made a change: a signed-in staff user, the public lead form, the AI agent, or a background job.
+enum ActorKind {
+  USER
+  PUBLIC
+  AGENT
+  SYSTEM
+}
+
 model Center {
   id              String    @id @default(cuid())
   name            String
@@ -187,6 +195,8 @@ model Center {
   reportCards   ReportCard[]
   exams         Exam[]
   certificates  Certificate[]
+  agentChats    AgentChat[]
+  agentUsage    AgentUsage[]
 }
 
 model Branch {
@@ -196,6 +206,9 @@ model Branch {
   name       String
   address    String?
   phone      String?
+  /// map point (WGS84) for the AI agent's "send location"; set from coordinates or a map link in settings
+  latitude   Float?
+  longitude  Float?
   archivedAt DateTime?
   createdAt  DateTime  @default(now())
 
@@ -236,6 +249,8 @@ model User {
   perms              String[]
   telegramChatId     String?
   locale             String?
+  /// public text about a teacher (experience, results) — the only profile field the AI agent may show customers
+  bio                String?
   archivedAt         DateTime?
   createdAt          DateTime  @default(now())
   /// sessions issued before this moment are rejected (password changed or reset)
@@ -658,7 +673,8 @@ model Lead {
   branchId      String?
   branch        Branch?   @relation(fields: [branchId], references: [id])
   name          String
-  phone         String
+  /// null only for a Telegram AI lead that has not shared a number yet (follow-up goes through the bot)
+  phone         String?
   source        String?
   courseId      String?
   course        Course?   @relation(fields: [courseId], references: [id])
@@ -677,6 +693,7 @@ model Lead {
 
   notes       LeadNote[]
   examResults ExamResult[]
+  agentChats  AgentChat[]
 
   @@index([centerId, createdAt])
   @@index([centerId, stage])
@@ -684,30 +701,82 @@ model Lead {
 }
 
 model LeadNote {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   leadId      String
-  lead        Lead     @relation(fields: [leadId], references: [id])
+  lead        Lead      @relation(fields: [leadId], references: [id])
   text        String
   createdById String?
-  createdAt   DateTime @default(now())
+  actor       ActorKind @default(USER)
+  createdAt   DateTime  @default(now())
 
   @@index([leadId])
 }
 
 model AuditLog {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   centerId  String
-  center    Center   @relation(fields: [centerId], references: [id])
+  center    Center    @relation(fields: [centerId], references: [id])
   userId    String?
+  actor     ActorKind @default(SYSTEM)
   entity    String
   entityId  String
   action    String
   before    Json?
   after     Json?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([centerId, createdAt])
   @@index([entity, entityId])
+}
+
+/// One AI lead agent conversation: a Telegram chat talking to one center's agent (src/lib/agent).
+model AgentChat {
+  id               String   @id @default(cuid())
+  centerId         String
+  center           Center   @relation(fields: [centerId], references: [id])
+  chatId           String
+  /// Telegram @username (without @), if the person has one: staff can write to them directly
+  username         String?
+  leadId           String?
+  lead             Lead?    @relation(fields: [leadId], references: [id])
+  /// the student the agent created for this chat (reused if a trial booking is retried)
+  studentId        String?
+  /// every student this chat booked (a parent may book two children): the state block and cancel_trial read it
+  studentIds       String[] @default([])
+  trialGroupId     String?
+  /// contact phone (998…): stored here and on the lead, never sent to the model
+  phone            String?
+  /// "telegram" = shared with the contact button (Telegram-verified), "typed" = written by hand
+  phoneSource      String?
+  awaitingPhone    Boolean  @default(false)
+  /// Messages API history (user/assistant content blocks), trimmed by src/lib/agent/history.ts
+  messages         Json     @default("[]")
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  /// prompt caching: tokens read from / written to the cache (inputTokens is the uncached rest)
+  cacheReadTokens  Int      @default(0)
+  cacheWriteTokens Int      @default(0)
+  lastMessageAt    DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  @@unique([centerId, chatId])
+  @@index([chatId, lastMessageAt])
+  @@index([leadId])
+}
+
+/// AI agent token usage per center and calendar month (YYYY-MM): metering and the monthly cap.
+model AgentUsage {
+  centerId         String
+  center           Center @relation(fields: [centerId], references: [id])
+  month            String
+  inputTokens      Int    @default(0)
+  outputTokens     Int    @default(0)
+  /// prompt caching: read ~0.1x, write ~1.25x the input price; inputTokens is the uncached rest
+  cacheReadTokens  Int    @default(0)
+  cacheWriteTokens Int    @default(0)
+  calls            Int    @default(0)
+
+  @@id([centerId, month])
 }
 
 model PaymeTransaction {
