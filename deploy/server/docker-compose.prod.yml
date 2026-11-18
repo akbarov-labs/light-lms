@@ -105,6 +105,10 @@ services:
       # By container name, not {{upstreams 3000}}: that renders as a bare
       # :3000 while the container restarts (kitoblarim.uz 502s, 2026-11-16).
       caddy.reverse_proxy: "sabaq-web-1:3000"
+      # the old address keeps working: a permanent redirect to the new one, path and query kept.
+      # Add www.sabaq.uz here once it has a DNS record (Caddy keeps retrying certificates for names without one).
+      caddy_1: sabaq.akbarovlabs.uz
+      caddy_1.redir: "https://${DOMAIN}{uri} permanent"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
       interval: 15s
