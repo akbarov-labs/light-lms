@@ -1,6 +1,6 @@
 name: Promote to production
 
-# The public demo (sabaq.akbarovlabs.uz) deploys only when someone runs this by hand:
+# The public site and demo (sabaq.uz) deploys only when someone runs this by hand:
 # Actions → "Promote to production" → Run workflow. This repository is private, and on GitHub's free plan
 # private repositories have no "Required reviewers", so this button is the approval step. deploy.yml puts
 # every build on staging; this takes the images staging already runs.

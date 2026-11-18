@@ -9,6 +9,7 @@ import { PLANS } from "@/lib/plans";
 import { formatPhone } from "@/lib/phone";
 import { cx } from "@/components/ui";
 import { LogoMark, Wordmark } from "@/components/logo";
+import { contactTelegram } from "@/lib/contact-telegram";
 import { LanguageMenu } from "@/components/language-menu";
 import { COPY, type Copy } from "./copy";
 import { PayDemo } from "./pay-demo";
@@ -182,7 +183,7 @@ export default async function WelcomePage() {
   const lang = await locale();
   const c = COPY[lang];
   const demo = demoHref();
-  const tg = BRAND.contact.telegram;
+  const tg = await contactTelegram();
   const planOrder = ["FREE", "START", "GROWTH", "PRO"] as const;
 
   return (
