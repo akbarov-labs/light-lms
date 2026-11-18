@@ -1,14 +1,15 @@
 // Landing page copy (uz / ru). Kept apart from the app dictionary: marketing text changes on its own schedule.
 // Claims stay within what the product does today; examples are labelled as demo data on the page.
+// Positioning (DECISIONS 2026-11-18): the teacher's AI assistant — "you teach, we do the rest"; no "CRM"/"LMS".
 
 const uz = {
-  metaTitle: "O'quv markazlari uchun CRM",
-  metaDesc: "Lidlar, guruhlar, davomat, to'lovlar, qarzdorlar va o'qituvchi oyligi — bitta tizimda. 50 tagacha o'quvchi bilan bepul.",
+  metaTitle: "O'qituvchining AI yordamchisi",
+  metaDesc: "Siz dars bering — qolganini Sabaq qiladi: davomat, to'lovlar, qarz eslatmalari, o'qituvchi oyligi va yangi mijozlarga javob. 50 tagacha o'quvchi bilan bepul.",
   nav: { features: "Imkoniyatlar", pricing: "Narxlar", faq: "Savollar", login: "Kirish", start: "Bepul boshlash" },
   hero: {
-    title: "O'quv markazingiz puli — daftarsiz va xatosiz.",
-    lead: "Lid, sinov darsi, guruh, davomat, oylik to'lov, qarzdorlar va o'qituvchi oyligi bitta tizimda. Kim qancha qarzligi har doim aniq — darslardan hisoblanadi, qo'lda tuzatish shart emas.",
-    start: "Markazni bepul yaratish",
+    title: "Siz dars bering — qolganini biz qilamiz.",
+    lead: "Sabaq — o'qituvchining AI yordamchisi. Davomatdan to'lov va qarz o'zi hisoblanadi, ota-onalarga eslatma o'zi ketadi, oylik o'zi chiqadi, yangi mijozlarga Telegram'da AI javob beradi. Daftar va Excel kerak emas.",
+    start: "Bepul boshlash",
     demo: "Demoni ko'rish",
     note: "50 tagacha faol o'quvchi — doim bepul. Karta kerak emas.",
   },
@@ -35,16 +36,16 @@ const uz = {
     hint: "Summani o'zgartirib ko'ring",
   },
   day: {
-    title: "Peshtaxtadagi bir kun — bitta oynada",
-    lead: "Administrator kun bo'yi bajaradigan ishlar uchun qurilgan: qo'ng'iroq, sinov darsi, to'lov, chek, qarz eslatmasi.",
+    title: "Darsdan tashqari hamma ish — bizda",
+    lead: "O'qituvchi va administrator kun bo'yi qiladigan ishlarni Sabaq oladi: yangi mijozga javob, sinov darsi, davomat, to'lov, chek, qarz eslatmasi, oylik.",
     leads: {
-      title: "Liddan guruhgacha",
-      body: "Instagram, sayt formasi yoki qo'ng'iroqdan kelgan lid — yangi, bog'lanildi, sinovga yozildi, sinovda bo'ldi, o'qishga kirdi. Sinov darsi bepul, faollashtirilganda hisob avtomatik boshlanadi.",
+      title: "Yangi mijozga AI javob beradi",
+      body: "Telegram'da markazga yozganlarga AI yordamchi javob beradi: savollariga javob qaytaradi, mos guruhni ko'rsatadi, bepul sinov darsiga yozadi. Bilmagan savolini sizga yuboradi. Instagram, sayt yoki qo'ng'iroqdan kelgan lidlar ham shu ro'yxatda.",
       cols: ["Yangi", "Sinovga yozildi", "O'qishga kirdi"],
     },
     attendance: {
-      title: "Davomat telefondan",
-      body: "O'qituvchi dars tugashi bilan telefonidan belgilaydi. Davomat saqlangan dars \"o'tildi\" hisoblanadi — to'lov ham, oylik ham shundan kelib chiqadi.",
+      title: "Davomat — darsdan keyin bir daqiqa",
+      body: "O'qituvchi dars tugashi bilan telefonidan belgilaydi. Qolganini Sabaq qiladi: dars \"o'tildi\" hisoblanadi, to'lov ham, oylik ham shundan kelib chiqadi.",
       lesson: "Bugun, 09:00 · General English A1",
       present: "Keldi",
       absent: "Kelmadi",
@@ -52,7 +53,7 @@ const uz = {
       save: "Saqlash",
     },
     debts: {
-      title: "Qarzdorlar o'zi eslatiladi",
+      title: "Qarz eslatmasini Sabaq yuboradi",
       body: "Qarz paydo bo'lgan kundan 3, 7, 14 va 30 kun o'tib Telegram orqali eslatma ketadi — ichida Payme, Click yoki Uzum orqali to'lash havolasi bilan. Ota-ona bosadi, to'laydi, tizimda o'zi belgilanadi.",
       botName: "Markaz boti",
       message: "Assalomu alaykum! Hamidov Bekzod (IELTS 7.0) bo'yicha qarz: 400 000 so'm. To'lash uchun tugmani bosing.",
@@ -100,7 +101,7 @@ const uz = {
     choose: "Boshlash",
     contact: "Bog'lanish",
     plans: { FREE: "Bepul", START: "Start", GROWTH: "O'sish", PRO: "Pro", NETWORK: "Tarmoq" },
-    all: "Har bir tarifda hamma imkoniyatlar: CRM, guruhlar, davomat, to'lovlar, qarzdorlar, oylik, hisobotlar, Telegram bot va ilova, Payme / Click / Uzum, SMS, hisobot kartalari, imtihon va sertifikatlar.",
+    all: "Har bir tarifda hamma imkoniyatlar: AI yordamchi, guruhlar, davomat, to'lovlar, qarzdorlar, oylik, hisobotlar, Telegram bot va ilova, Payme / Click / Uzum, SMS, hisobot kartalari, imtihon va sertifikatlar.",
     notes: ["Yillik to'lovda — 2 oy bepul.", "Excel yoki boshqa tizimdan ko'chirishda bepul yordam beramiz."],
     founding: {
       badge: "Asoschi markazlar",
@@ -112,12 +113,13 @@ const uz = {
   faq: {
     title: "Ko'p beriladigan savollar",
     items: [
+      ["AI yordamchi o'qituvchi o'rniga dars beradimi?", "Yo'q, dars — sizniki. Sabaq qolganini oladi: davomatdan to'lov va qarzni hisoblaydi, ota-onalarga eslatadi, oylikni chiqaradi, Telegram'da yangi mijozlarga javob beradi. Javobini bilmagan savolni sizga yuboradi; siz javob yozsangiz, u mijozga boradi."],
       ["Kompyuterga biror narsa o'rnatish kerakmi?", "Yo'q. Tizim brauzerda ishlaydi — kompyuterda ham, telefonda ham. O'qituvchilar davomatni telefondan belgilaydi, ota-onalar Telegram bot orqali foydalanadi."],
       ["Ota-onalar onlayn to'lay oladimi?", "Ha. Payme, Click yoki Uzum Bank kassangizni sozlamalarga ulasangiz, har bir eslatmada to'lov havolasi bo'ladi va to'lov tizimda o'zi belgilanadi. Ota-ona Telegram ilovasidan ham to'lay oladi."],
       ["Ma'lumotlarimiz qayerda saqlanadi?", "Serverlar O'zbekiston hududida joylashadi. Har kecha zaxira nusxa olinadi. Ma'lumotlaringiz faqat sizning markazingizga ko'rinadi."],
       ["Bir nechta filialim bor — bo'ladimi?", "Ha. Filiallar soni cheklanmaydi. Menejer faqat o'z filialini ko'radi, ega hammasini bitta panelda ko'radi."],
       ["Bepul tarifda nima cheklangan?", "Faqat faol o'quvchilar soni — 50 tagacha (sinov darsidagilar hisoblanmaydi). Imkoniyatlar bir xil. O'quvchilar ko'paysa, tarifni sozlamalardan o'zgartirasiz."],
-      ["Hozir boshqa CRM ishlatamiz, ko'chish qiyinmi?", "O'quvchilar ro'yxatini Excel/CSV qilib yuklaysiz, qarz va balanslar bilan birga. Kerak bo'lsa, ko'chirishni o'zimiz bepul qilib beramiz."],
+      ["Hozir boshqa tizim yoki Excel ishlatamiz, ko'chish qiyinmi?", "O'quvchilar ro'yxatini Excel/CSV qilib yuklaysiz, qarz va balanslar bilan birga. Kerak bo'lsa, ko'chirishni o'zimiz bepul qilib beramiz."],
     ],
   },
   cta: { title: "Bugun boshlang — 5 daqiqada sozlanadi", body: "Markaz nomi, ismingiz, telefon va parol. Qolganini tizim o'zi so'raydi." },
@@ -127,13 +129,13 @@ const uz = {
 type Copy = typeof uz;
 
 const ru: Copy = {
-  metaTitle: "CRM для учебных центров",
-  metaDesc: "Лиды, группы, посещаемость, оплаты, должники и зарплата преподавателей — в одной системе. Бесплатно до 50 учеников.",
+  metaTitle: "AI-помощник преподавателя",
+  metaDesc: "Вы преподаёте — остальное делает Sabaq: посещаемость, оплаты, напоминания о долгах, зарплата преподавателей и ответы новым клиентам. Бесплатно до 50 учеников.",
   nav: { features: "Возможности", pricing: "Цены", faq: "Вопросы", login: "Войти", start: "Начать бесплатно" },
   hero: {
-    title: "Деньги учебного центра — без тетрадей и ошибок.",
-    lead: "Лиды, пробный урок, группы, посещаемость, ежемесячная оплата, должники и зарплата преподавателей в одной системе. Кто сколько должен — всегда точно: считается из уроков, ничего не нужно править вручную.",
-    start: "Создать центр бесплатно",
+    title: "Вы преподаёте — остальное берём на себя.",
+    lead: "Sabaq — AI-помощник преподавателя. Оплата и долги считаются из посещаемости, напоминания родителям уходят сами, зарплата считается сама, новым клиентам в Telegram отвечает AI. Без тетрадей и Excel.",
+    start: "Начать бесплатно",
     demo: "Посмотреть демо",
     note: "До 50 активных учеников — всегда бесплатно. Карта не нужна.",
   },
@@ -160,16 +162,16 @@ const ru: Copy = {
     hint: "Попробуйте изменить сумму",
   },
   day: {
-    title: "Один день на ресепшене — в одном окне",
-    lead: "Сделано под ежедневную работу администратора: звонок, пробный урок, оплата, чек, напоминание о долге.",
+    title: "Вся работа, кроме уроков, — на нас",
+    lead: "Sabaq берёт на себя то, чем преподаватель и администратор заняты весь день: ответ новому клиенту, пробный урок, посещаемость, оплата, чек, напоминание о долге, зарплата.",
     leads: {
-      title: "От лида до группы",
-      body: "Лид из Instagram, формы на сайте или звонка — новый, связались, записан на пробный, был на пробном, зачислен. Пробный урок бесплатный, при активации счёт начинается автоматически.",
+      title: "Новым клиентам отвечает AI",
+      body: "Тем, кто пишет центру в Telegram, отвечает AI-помощник: отвечает на вопросы, показывает подходящую группу, записывает на бесплатный пробный урок. Вопрос без ответа пересылает вам. Лиды из Instagram, с сайта или со звонка — в том же списке.",
       cols: ["Новый", "Записан на пробный", "Зачислен"],
     },
     attendance: {
-      title: "Посещаемость с телефона",
-      body: "Преподаватель отмечает сразу после урока с телефона. Урок с сохранённой посещаемостью считается проведённым — от этого считаются и оплата, и зарплата.",
+      title: "Посещаемость — минута после урока",
+      body: "Преподаватель отмечает сразу после урока с телефона. Остальное делает Sabaq: урок считается проведённым, от него считаются и оплата, и зарплата.",
       lesson: "Сегодня, 09:00 · General English A1",
       present: "Был",
       absent: "Не был",
@@ -177,7 +179,7 @@ const ru: Copy = {
       save: "Сохранить",
     },
     debts: {
-      title: "Должникам напоминает система",
+      title: "Напоминания о долге отправляет Sabaq",
       body: "Через 3, 7, 14 и 30 дней после появления долга уходит напоминание в Telegram — со ссылкой на оплату через Payme, Click или Uzum. Родитель нажимает, платит, в системе отмечается само.",
       botName: "Бот центра",
       message: "Здравствуйте! Долг по Хамидов Бекзод (IELTS 7.0): 400 000 сум. Нажмите кнопку, чтобы оплатить.",
@@ -225,7 +227,7 @@ const ru: Copy = {
     choose: "Начать",
     contact: "Связаться",
     plans: { FREE: "Бесплатный", START: "Старт", GROWTH: "Рост", PRO: "Про", NETWORK: "Сеть" },
-    all: "В каждом тарифе все возможности: CRM, группы, посещаемость, оплаты, должники, зарплата, отчёты, Telegram-бот и приложение, Payme / Click / Uzum, SMS, табели, экзамены и сертификаты.",
+    all: "В каждом тарифе все возможности: AI-помощник, группы, посещаемость, оплаты, должники, зарплата, отчёты, Telegram-бот и приложение, Payme / Click / Uzum, SMS, табели, экзамены и сертификаты.",
     notes: ["При оплате за год — 2 месяца бесплатно.", "Бесплатно поможем перенести данные из Excel или другой системы."],
     founding: {
       badge: "Центры-основатели",
@@ -237,12 +239,13 @@ const ru: Copy = {
   faq: {
     title: "Частые вопросы",
     items: [
+      ["AI-помощник будет вести уроки вместо преподавателя?", "Нет, уроки — ваши. Sabaq берёт остальное: считает оплату и долги из посещаемости, напоминает родителям, считает зарплату, отвечает новым клиентам в Telegram. Вопрос, на который не знает ответа, пересылает вам; ваш ответ уходит клиенту."],
       ["Нужно что-то устанавливать?", "Нет. Система работает в браузере — на компьютере и на телефоне. Преподаватели отмечают посещаемость с телефона, родители пользуются Telegram-ботом."],
       ["Родители могут платить онлайн?", "Да. Подключите в настройках свою кассу Payme, Click или Uzum Bank — в каждом напоминании будет ссылка на оплату, и оплата отметится в системе сама. Родитель может оплатить и из приложения в Telegram."],
       ["Где хранятся наши данные?", "Серверы расположены на территории Узбекистана. Каждую ночь делается резервная копия. Ваши данные видны только вашему центру."],
       ["У меня несколько филиалов — подойдёт?", "Да. Число филиалов не ограничено. Менеджер видит только свой филиал, владелец — всё на одной панели."],
       ["Что ограничено в бесплатном тарифе?", "Только число активных учеников — до 50 (ученики на пробном уроке не считаются). Возможности те же. Когда учеников станет больше, смените тариф в настройках."],
-      ["Сейчас у нас другая CRM — сложно переехать?", "Загрузите список учеников в Excel/CSV вместе с долгами и балансами. При необходимости перенесём данные сами, бесплатно."],
+      ["Сейчас у нас другая система или Excel — сложно переехать?", "Загрузите список учеников в Excel/CSV вместе с долгами и балансами. При необходимости перенесём данные сами, бесплатно."],
     ],
   },
   cta: { title: "Начните сегодня — настройка за 5 минут", body: "Название центра, ваше имя, телефон и пароль. Остальное система спросит сама." },

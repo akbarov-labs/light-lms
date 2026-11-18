@@ -7,7 +7,7 @@ export const BRAND = {
   /** Product name shown in titles, the landing page, receipts' footer and legal texts. */
   name: "Sabaq",
   /** Short line under the name in the landing header and footer. */
-  tagline: { uz: "O'quv markazlari uchun CRM", ru: "CRM для учебных центров" },
+  tagline: { uz: "O'qituvchining AI yordamchisi", ru: "AI-помощник преподавателя" },
   contact: {
     /** e.g. "998901234567" — shown formatted, used for tel: links. */
     phone: "",

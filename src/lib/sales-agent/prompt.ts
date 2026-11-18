@@ -37,7 +37,6 @@ export function productFacts(): string {
   return [
     "Imkoniyatlar:",
     ...features,
-    "- Telegram AI yordamchi: markazga yozgan yangi mijozlarga AI javob beradi, mos guruhlarni ko'rsatadi va bepul sinov darsiga yozadi; javob bera olmagan savolini xodimga yuboradi.",
     ...trust,
     `- ${c.move.title}: ${c.move.body}`,
     "",

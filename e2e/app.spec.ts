@@ -39,7 +39,7 @@ test.describe("visitor", () => {
   test("landing: the payment demo shows what stays owed and prints a receipt", async ({ page }) => {
     await page.context().clearCookies();
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("daftarsiz");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("dars bering");
     await a11y(page, "landing");
     await page.getByRole("button", { name: "500 000", exact: true }).click();
     await expect(page.getByText("Qarz qoladi: 400 000 so'm")).toBeVisible();
