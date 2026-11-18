@@ -15,6 +15,7 @@ import { createResetCodeForChat } from "@/lib/auth/password";
 import { B, buttonKey } from "./texts";
 import { CANCEL, PICK, agentOnCancel, agentOnContact, agentOnPick, agentOnRestart, agentOnStart, agentOnText } from "./agent";
 import { answerFromTelegram } from "@/lib/agent/service";
+import { salesOnContact, salesOnStart, salesOnTeamReply, salesOnText } from "./sales";
 import { appUrl, telegramRichMessages } from "@/lib/env";
 import { richRefused } from "../notifications";
 import {
@@ -95,6 +96,8 @@ export function createBot(token: string): Bot {
     }
     // a stranger already talking to a center's agent: plain /start goes on with that conversation
     if (await agentOnRestart(ctx, l)) return;
+    // anyone else (most likely a teacher or center owner who found Sabaq): Sabaq's own AI assistant (SALES_AGENT)
+    if (await salesOnStart(ctx, l)) return;
     await ctx.reply(B.welcome[l], { reply_markup: new Keyboard().requestContact(B.shareContact[l]).resized().oneTime() });
   });
 
@@ -126,6 +129,7 @@ export function createBot(token: string): Bot {
     const chatId = String(ctx.chat.id);
     const linked = phone ? await linkChat(chatId, phone, l) : { guardians: 0, students: 0, staff: [] };
     if (!linked.guardians && !linked.students && linked.staff.length === 0) {
+      if (await salesOnContact(ctx, phone, l)) return;
       await ctx.reply(B.notFound[l], { reply_markup: { remove_keyboard: true } });
       return;
     }
@@ -142,6 +146,8 @@ export function createBot(token: string): Bot {
     const l = await localeOf(ctx);
     // staff answering a customer's question: a reply to the bot's own "🤖❓" notification goes to the customer
     const replied = ctx.message.reply_to_message;
+    // the Sabaq team answering a sales lead's question (a reply to a "🤖 Sabaq" notification)
+    if (await salesOnTeamReply(ctx, ctx.message.text)) return;
     if (ctx.chat.type === "private" && replied?.from?.id === ctx.me.id && replied.text) {
       const r = await answerFromTelegram({ staffChatId: chatId, repliedText: replied.text, text: ctx.message.text });
       if (r) return void (await ctx.reply(B[r === "sent" ? "answerSent" : r === "forbidden" ? "forbidden" : "answerNotFound"][l]));
@@ -218,6 +224,10 @@ export function createBot(token: string): Bot {
       }
       default:
         if (await agentOnText(ctx, ctx.message.text, l)) return;
+        {
+          const roles = await chatRoles(chatId);
+          if (!roles.family && !roles.teacher && !roles.owner && (await salesOnText(ctx, ctx.message.text, l))) return;
+        }
         await ctx.reply(B.notLinked[l], { reply_markup: await menu(chatId, l) });
     }
   });

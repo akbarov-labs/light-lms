@@ -30,6 +30,24 @@ export function agentModel(): string {
   return str(process.env.AGENT_MODEL) ?? "claude-haiku-5-5";
 }
 
+/** Sabaq's own sales agent on the shared bot: strangers who write without a center link get answers about
+ * Sabaq. Off unless "true"; also needs ANTHROPIC_API_KEY. */
+export function salesAgentEnabled(): boolean {
+  return process.env.SALES_AGENT === "true" && !!anthropicApiKey();
+}
+
+/** Telegram chat that gets the sales agent's leads and questions (a reply there goes back to the person).
+ * Defaults to OPS_TELEGRAM_CHAT_ID. */
+export function salesTeamChatId(): string | undefined {
+  return str(process.env.SALES_TELEGRAM_CHAT_ID) ?? str(process.env.OPS_TELEGRAM_CHAT_ID);
+}
+
+/** Monthly token cap of the sales agent (weighted like a center's cap). Default 5 000 000 (~$5–10 on Haiku). */
+export function salesMonthlyTokenCap(): number {
+  const n = Number(process.env.SALES_MONTHLY_TOKEN_CAP);
+  return Number.isFinite(n) && n > 0 ? n : 5_000_000;
+}
+
 /** Bot API 10.1 rich messages (sendRichMessage) for report cards, payment/debt notices and the attendance
  * summary. Off unless "true"; a refused rich send falls back to the plain HTML text. */
 export function telegramRichMessages(): boolean {

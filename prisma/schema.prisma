@@ -779,6 +779,39 @@ model AgentUsage {
   @@id([centerId, month])
 }
 
+/// Sabaq's own sales agent (SALES_AGENT=true): a stranger who writes to the shared bot without a center link
+/// talks to Sabaq itself, not to a center. Not tied to any center; the nightly demo reset keeps these tables.
+model SalesChat {
+  id               String   @id @default(cuid())
+  chatId           String   @unique
+  /// Telegram name and @username (without @) of the person, for the team's notifications
+  name             String?
+  username         String?
+  /// contact phone (998…): never sent to the model
+  phone            String?
+  awaitingPhone    Boolean  @default(false)
+  /// Messages API history (user/assistant content blocks), trimmed by src/lib/agent/history.ts
+  messages         Json     @default("[]")
+  /// the bot's messages to the team about this chat: a reply to one of them goes back to the person
+  teamMessageIds   Int[]    @default([])
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  cacheReadTokens  Int      @default(0)
+  cacheWriteTokens Int      @default(0)
+  lastMessageAt    DateTime @default(now())
+  createdAt        DateTime @default(now())
+}
+
+/// Sales agent token usage per calendar month (YYYY-MM): the monthly cap (SALES_MONTHLY_TOKEN_CAP).
+model SalesUsage {
+  month            String @id
+  inputTokens      Int    @default(0)
+  outputTokens     Int    @default(0)
+  cacheReadTokens  Int    @default(0)
+  cacheWriteTokens Int    @default(0)
+  calls            Int    @default(0)
+}
+
 model PaymeTransaction {
   id            String       @id @default(cuid())
   centerId      String

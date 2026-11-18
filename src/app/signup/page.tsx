@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { BRAND, demoMode, signupClosed, signupHref } from "@/config/brand";
 import { LogoMark } from "@/components/logo";
+import { contactTelegram } from "@/lib/contact-telegram";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { isLocale, LANG_COOKIE, makeT, type Locale } from "@/lib/i18n";
@@ -61,8 +62,9 @@ export default async function SignupPage() {
 }
 
 /** A demo server with no main site: the contacts instead of the form (see signupClosed). */
-function SignupClosed({ t, locale }: { t: ReturnType<typeof makeT>; locale: Locale }) {
-  const { phone, telegram, email } = BRAND.contact;
+async function SignupClosed({ t, locale }: { t: ReturnType<typeof makeT>; locale: Locale }) {
+  const { phone, email } = BRAND.contact;
+  const telegram = await contactTelegram();
   const button = "inline-flex h-10 w-full items-center justify-center rounded-lg text-sm font-medium";
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
