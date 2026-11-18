@@ -170,13 +170,14 @@ Har bir konteyner logi 10 MB × 5 fayl bilan cheklangan (disk to'lib qolmaydi).
 - Qo'shimcha (ixtiyoriy): bepul tashqi tekshiruv (masalan, UptimeRobot) `https://<domen>/api/health` manzilini har 5 daqiqada tekshirsin — server butunlay o'chsa ham bilasiz.
 - Worker'ning o'z tekshiruvi bor: har 30 soniyada "yurak urishi" fayli yangilanadi; 2 daqiqadan eski bo'lsa `docker compose ps` da worker `unhealthy` ko'rinadi. Worker ishlar ustma-ust tushmaydi (ikkinchi nusxa yoki qo'lda ishga tushirilgan ish o'tkazib yuboriladi).
 
-## 11c. Bizning demo: sabaq.akbarovlabs.uz
+## 11c. Bizning sayt va demo: sabaq.uz
 
-Sabaq demosi akbarov-labs umumiy serverida (Contabo, chet elda) turadi — faqat namunaviy ma'lumot, har kecha tozalanadi. **Haqiqiy markazlar bu serverga qo'yilmaydi** (§0): ular uchun O'zbekistondagi VPS va shu hujjatdagi oddiy o'rnatish.
+sabaq.uz (avval sabaq.akbarovlabs.uz) — Sabaq sayti va demosi, akbarov-labs umumiy serverida (Contabo, chet elda) turadi — faqat namunaviy ma'lumot, har kecha tozalanadi. **Haqiqiy markazlar bu serverga qo'yilmaydi** (§0): ular uchun O'zbekistondagi VPS va shu hujjatdagi oddiy o'rnatish.
 
 - Fayllar: `deploy/server/docker-compose.prod.yml` (demo, `/opt/apps/sabaq`) va `docker-compose.staging.yml` (`/opt/apps/sabaq-staging`, parol bilan, `sabaq.staging.sarvarlogs.uz`). Ikkalasi serverda root'niki; CI faqat image tegini aytadi.
 - `main`'ga har push → tekshiruv (lint, typecheck, testlar) → 3 ta image (`ghcr.io/akbarov-labs/light-lms/{web,worker,tools}`) → staging. Demoga: Actions → **Promote to production** → Run workflow.
-- Demo serverda `MAIN_SITE_URL` bo'sh: `/signup` forma o'rniga `brand.ts` dagi aloqa ma'lumotlarini ko'rsatadi, ro'yxatdan o'tish yopiq.
+- Demo serverda `MAIN_SITE_URL` bo'sh: `/signup` forma o'rniga aloqani ko'rsatadi, ro'yxatdan o'tish yopiq. `SALES_AGENT=true` bilan saytdagi "Bog'lanish" havolalari botga boradi: yangi mijozlarga Sabaqning AI yordamchisi javob beradi, lid va savollar `SALES_TELEGRAM_CHAT_ID` (yoki `OPS_TELEGRAM_CHAT_ID`) chatiga keladi; o'sha xabarga reply qilsangiz, javob mijozga boradi.
+- sabaq.uz ga ko'chish (bir marta, serverda): 1) DNS: `sabaq.uz` va `www.sabaq.uz` A yozuvi → 169.58.243.86. 2) `/opt/apps/sabaq/.env`: `DOMAIN=sabaq.uz`, `APP_URL=https://sabaq.uz`, `SALES_AGENT=true` (kerak bo'lsa `SALES_TELEGRAM_CHAT_ID`). 3) edge-caddy (Reads repo, `docs/add-app.md`): `sabaq.uz` sayti, `www.sabaq.uz` va `sabaq.akbarovlabs.uz` → `https://sabaq.uz` ga 301. 4) Actions → **Promote to production**. Bot Mini App manzilini `APP_URL` dan oladi.
 - Serverga birinchi marta qo'shish — Reads reposidagi `docs/add-app.md`: `deploy/prepare-app sabaq ~/dev/sites/light-lms/deploy/server`, so'ng serverda `sudo add-app --images "web worker tools" --up-flags "--remove-orphans" sabaq ghcr.io/akbarov-labs/light-lms <.env bor papka>`.
 
 ## 12. Muammolar
@@ -318,11 +319,12 @@ docker image prune -f
 - Optional: a free external check (e.g. UptimeRobot) on `https://<domain>/api/health` every 5 minutes tells you when the whole server is down.
 - The worker has its own health signal: a heartbeat file touched every 30 s; older than 2 minutes → `docker compose ps` shows the worker `unhealthy`. Jobs never overlap (a second replica or a manual run while the job is running is skipped).
 
-## 15. Our demo: sabaq.akbarovlabs.uz
+## 15. Our site and demo: sabaq.uz
 
-Sabaq's public demo runs on the shared akbarov-labs server (Contabo, abroad): sample data only, wiped every night. **Real centers never go on that server** (§0): they get a VPS in Uzbekistan with the plain setup above.
+sabaq.uz (formerly sabaq.akbarovlabs.uz) is Sabaq's site and public demo, on the shared akbarov-labs server (Contabo, abroad): sample data only, wiped every night. **Real centers never go on that server** (§0): they get a VPS in Uzbekistan with the plain setup above.
 
 - Files: `deploy/server/docker-compose.prod.yml` (the demo, `/opt/apps/sabaq`) and `docker-compose.staging.yml` (`/opt/apps/sabaq-staging`, password protected, `sabaq.staging.sarvarlogs.uz`). Both are root-owned on the server; CI only names the image tag.
 - Every push to `main` → checks (lint, typecheck, unit tests) → three images (`ghcr.io/akbarov-labs/light-lms/{web,worker,tools}`) → staging. To the demo: Actions → **Promote to production** → Run workflow.
-- The demo has no `MAIN_SITE_URL`, so `/signup` shows the contacts from `brand.ts` instead of the form and signing up is closed.
+- The demo has no `MAIN_SITE_URL`, so `/signup` shows the contacts instead of the form and signing up is closed. With `SALES_AGENT=true` the site's contact links go to the bot: Sabaq's AI assistant answers new customers, leads and questions arrive in `SALES_TELEGRAM_CHAT_ID` (or `OPS_TELEGRAM_CHAT_ID`), and a reply to such a message goes back to the customer.
+- Moving to sabaq.uz (once, on the server): 1) DNS: A records for `sabaq.uz` and `www.sabaq.uz` → 169.58.243.86. 2) `/opt/apps/sabaq/.env`: `DOMAIN=sabaq.uz`, `APP_URL=https://sabaq.uz`, `SALES_AGENT=true` (and `SALES_TELEGRAM_CHAT_ID` if not the ops chat). 3) edge-caddy (Reads repo, `docs/add-app.md`): a `sabaq.uz` site, with `www.sabaq.uz` and `sabaq.akbarovlabs.uz` 301 to `https://sabaq.uz`. 4) Actions → **Promote to production**. The bot takes its Mini App URL from `APP_URL`.
 - Adding it to the server the first time follows `docs/add-app.md` in the Reads repo: `deploy/prepare-app sabaq ~/dev/sites/light-lms/deploy/server`, then on the server `sudo add-app --images "web worker tools" --up-flags "--remove-orphans" sabaq ghcr.io/akbarov-labs/light-lms <folder with the .env>`.

@@ -15,6 +15,9 @@ x-app-env: &app-env
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   AGENT_MODEL: ${AGENT_MODEL:-}
+  SALES_AGENT: ${SALES_AGENT:-}
+  SALES_TELEGRAM_CHAT_ID: ${SALES_TELEGRAM_CHAT_ID:-}
+  SALES_MONTHLY_TOKEN_CAP: ${SALES_MONTHLY_TOKEN_CAP:-}
   # Bot API rich messages (report cards, payment/debt notices, attendance summary); off by default
   TELEGRAM_RICH_MESSAGES: ${TELEGRAM_RICH_MESSAGES:-false}
   # lesson times / payment dates shown in the reader's local time (Telegram date_time entities); off by default
