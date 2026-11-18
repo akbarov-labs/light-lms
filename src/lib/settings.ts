@@ -62,8 +62,8 @@ export const centerSettingsSchema = z.object({
     .prefault({})
     .catch(() => smsDefaults()),
   /**
-   * AI lead agent (phase 1). Off by default: conversations go to an external API (Anthropic), and
-   * real centers' personal data must stay in Uzbekistan (DEPLOY.md §0) until that is settled.
+   * AI lead agent (phase 1). Off by default: conversations go to an external paid API (Anthropic, USA; the
+   * USA is on the equivalent-protection list since 2026, DEPLOY.md §0), so each center opts in.
    */
   agent: z
     .object({

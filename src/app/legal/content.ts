@@ -109,7 +109,7 @@ const uz: Docs = {
       {
         h: "4. Saqlash joyi va muddati",
         p: [
-          "Ma'lumotlar O'zbekiston Respublikasi hududida joylashgan serverlarda saqlanadi. Har kecha zaxira nusxa olinadi, zaxiralar 14 kun saqlanadi.",
+          "Ma'lumotlar Germaniyadagi data-markazda joylashgan serverlarda saqlanadi. Germaniya shaxsga doir ma'lumotlarning teng himoyasini ta'minlaydigan davlatlar ro'yxatiga kiritilgan («Shaxsga doir ma'lumotlar to'g'risida»gi Qonunning 27¹-moddasi). Har kecha zaxira nusxa olinadi, zaxiralar 14 kun saqlanadi.",
           "Ma'lumotlar Buyurtmachi bilan shartnoma amal qilgan davrda va tugaganidan keyin 30 kun saqlanadi, so'ng o'chiriladi (qonun boshqacha talab qilgan hollar bundan mustasno). To'lov yozuvlari hech qachon tahrirlanmaydi — xato to'lov bekor qilish yozuvi bilan to'g'rilanadi.",
         ],
       },
@@ -250,7 +250,7 @@ const ru: Docs = {
       {
         h: "4. Место и срок хранения",
         p: [
-          "Данные хранятся на серверах, расположенных на территории Республики Узбекистан. Каждую ночь делается резервная копия, копии хранятся 14 дней.",
+          "Данные хранятся на серверах в дата-центре в Германии. Германия включена в перечень государств, обеспечивающих равноценную защиту персональных данных (статья 27¹ Закона «О персональных данных»). Каждую ночь делается резервная копия, копии хранятся 14 дней.",
           "Данные хранятся в течение действия договора с Заказчиком и 30 дней после его прекращения, затем удаляются (если закон не требует иного). Записи об оплатах никогда не редактируются — ошибочная оплата исправляется записью отмены.",
         ],
       },
