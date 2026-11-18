@@ -17,12 +17,15 @@ import { CANCEL, PICK, agentOnCancel, agentOnCenterStart, agentOnContact, agentO
 import { withBotScope, type BotScope } from "@/lib/managed-bots/scope";
 import { CODE_PREFIX, markBotBlocked, markBotChat, onManagedBotUpdate, openBotRequest, suggestedUsername, type UpdateResult } from "@/lib/managed-bots/service";
 import { answerFromTelegram } from "@/lib/agent/service";
+import { HOMEWORK_CB, homeworkMenu, homeworkOnCallback, homeworkOnText } from "./homework";
+import { salesOnContact, salesOnStart, salesOnTeamReply, salesOnText } from "./sales";
 import { appUrl, telegramRichMessages } from "@/lib/env";
 import { richRefused } from "../notifications";
 import {
   attendanceReply,
   balanceText,
   centerText,
+  chatHomeworkOn,
   chatLocale,
   chatRoles,
   linkChat,
@@ -77,6 +80,7 @@ async function menu(chatId: string, l: Locale): Promise<Keyboard> {
   const roles = await chatRoles(chatId);
   const kb = new Keyboard();
   if (roles.family) kb.text(B.balanceBtn[l]).text(B.scheduleBtn[l]).row().text(B.attendanceBtn[l]).text(B.paymentsBtn[l]).text(B.centerBtn[l]).row();
+  if (roles.family && (await chatHomeworkOn(chatId))) kb.text(B.homeworkBtn[l]).row();
   if (roles.teacher) kb.text(B.todayBtn[l]).text(B.salaryBtn[l]).text(B.weekBtn[l]).row();
   if (roles.owner) kb.text(B.reportBtn[l]).row();
   return kb.resized();
@@ -172,6 +176,9 @@ export function createBot(token: string, opts: BotOptions = {}): Bot {
     if (scope && (await agentOnCenterStart(ctx, scope.centerId, l))) return;
     // a stranger already talking to a center's agent: plain /start goes on with that conversation
     if (!scope && (await agentOnRestart(ctx, l))) return;
+    // anyone else (most likely a teacher or center owner who found Sabaq): Sabaq's own AI assistant (SALES_AGENT).
+    // Never in a center's own bot: that bot speaks for the center, not for Sabaq.
+    if (!scope && (await salesOnStart(ctx, l))) return;
     await ctx.reply(B.welcome[l], { reply_markup: new Keyboard().requestContact(B.shareContact[l]).resized().oneTime() });
   });
 
@@ -206,6 +213,7 @@ export function createBot(token: string, opts: BotOptions = {}): Bot {
     const roles = scope ? await chatRoles(chatId) : null;
     const found = roles ? roles.family || !!roles.teacher || !!roles.owner : linked.guardians || linked.students || linked.staff.length > 0;
     if (!found) {
+      if (!scope && (await salesOnContact(ctx, phone, l))) return;
       await ctx.reply(B.notFound[l], { reply_markup: { remove_keyboard: true } });
       return;
     }
@@ -222,6 +230,8 @@ export function createBot(token: string, opts: BotOptions = {}): Bot {
     const l = await localeOf(ctx);
     // staff answering a customer's question: a reply to the bot's own "🤖❓" notification goes to the customer
     const replied = ctx.message.reply_to_message;
+    // the Sabaq team answering a sales lead's question (a reply to a "🤖 Sabaq" notification)
+    if (!scope && (await salesOnTeamReply(ctx, ctx.message.text))) return;
     if (ctx.chat.type === "private" && replied?.from?.id === ctx.me.id && replied.text) {
       const r = await answerFromTelegram({ staffChatId: chatId, repliedText: replied.text, text: ctx.message.text });
       if (r) return void (await ctx.reply(B[r === "sent" ? "answerSent" : r === "forbidden" ? "forbidden" : "answerNotFound"][l]));
@@ -260,6 +270,9 @@ export function createBot(token: string, opts: BotOptions = {}): Bot {
       case "centerBtn":
         await ctx.reply(await centerText(chatId, l), html);
         return;
+      case "homeworkBtn":
+        await homeworkMenu(ctx, chatId, l);
+        return;
       case "todayBtn": {
         const teacher = await teacherFor(chatId);
         if (!teacher) return void (await ctx.reply(B.forbidden[l]));
@@ -297,7 +310,13 @@ export function createBot(token: string, opts: BotOptions = {}): Bot {
         return;
       }
       default:
+        // a typed answer to the homework question this chat is on
+        if (await homeworkOnText(ctx, ctx.message.text, l)) return;
         if (await agentOnText(ctx, ctx.message.text, l)) return;
+        {
+          const roles = await chatRoles(chatId);
+          if (!scope && !roles.family && !roles.teacher && !roles.owner && (await salesOnText(ctx, ctx.message.text, l))) return;
+        }
         await ctx.reply(B.notLinked[l], { reply_markup: await menu(chatId, l) });
     }
   });
@@ -306,6 +325,8 @@ export function createBot(token: string, opts: BotOptions = {}): Bot {
   bot.callbackQuery(PICK, async (ctx) => agentOnPick(ctx, ctx.match[1], await localeOf(ctx)));
   // the agent's "cancel this trial?" buttons: the booking is cancelled only here, by the person's press
   bot.callbackQuery(CANCEL, async (ctx) => agentOnCancel(ctx, ctx.match[1] === "y", ctx.match[2], await localeOf(ctx)));
+  // homework answers (pilot): open / letter / go to question / summary
+  bot.callbackQuery(HOMEWORK_CB, async (ctx) => homeworkOnCallback(ctx, ctx.match, await localeOf(ctx)));
 
   bot.on("callback_query:data", async (ctx) => {
     const chatId = String(ctx.chat?.id ?? "");

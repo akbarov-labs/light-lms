@@ -11,7 +11,7 @@ export interface Chat {
   locale: Locale;
 }
 
-async function chatLocales(tx: Tx, chatIds: string[]): Promise<Map<string, Locale>> {
+export async function chatLocales(tx: Tx, chatIds: string[]): Promise<Map<string, Locale>> {
   if (chatIds.length === 0) return new Map();
   const links = await tx.telegramLink.findMany({ where: { chatId: { in: chatIds } }, select: { chatId: true, locale: true } });
   return new Map(links.map((l) => [l.chatId, l.locale === "ru" ? "ru" : "uz"]));
@@ -39,10 +39,18 @@ export async function staffChat(tx: Tx, userId: string): Promise<Chat | null> {
  * rich-message form (Bot API 10.1); the worker sends it only with TELEGRAM_RICH_MESSAGES=true and falls
  * back to `text`, so `text` must always be the complete message.
  */
-export async function enqueue(tx: Tx, centerId: string, chats: Chat[], text: (l: Locale) => string, dedupeKey?: string, rich?: (l: Locale) => string): Promise<number> {
+export async function enqueue(tx: Tx, centerId: string, chats: Chat[], text: (l: Locale) => string, dedupeKey?: string, rich?: (l: Locale) => string, notBefore?: Date): Promise<number> {
   if (chats.length === 0) return 0;
   const res = await tx.notification.createMany({
-    data: chats.map((c) => ({ centerId, chatId: c.chatId, text: text(c.locale), richText: rich ? rich(c.locale) : null, dedupeKey: dedupeKey ? `${dedupeKey}:${c.chatId}` : null })),
+    data: chats.map((c) => ({
+      centerId,
+      chatId: c.chatId,
+      text: text(c.locale),
+      richText: rich ? rich(c.locale) : null,
+      dedupeKey: dedupeKey ? `${dedupeKey}:${c.chatId}` : null,
+      // a message prepared ahead of its moment (homework typed before the lesson ends) waits for it
+      ...(notBefore ? { nextAttemptAt: notBefore } : {}),
+    })),
     skipDuplicates: true,
   });
   return res.count;

@@ -200,6 +200,7 @@ model Center {
   agentChats    AgentChat[]
   agentUsage    AgentUsage[]
   bot           CenterBot?
+  homeworks     Homework[]
 }
 
 model Branch {
@@ -344,6 +345,7 @@ model Group {
   enrollments Enrollment[]
   reportCards ReportCard[]
   exams       Exam[]
+  homeworks   Homework[]
 
   @@unique([centerId, code])
   @@index([centerId, createdAt])
@@ -388,6 +390,7 @@ model Lesson {
 
   attendance Attendance[]
   ledger     LedgerEntry[]
+  homework   Homework?
 
   @@unique([groupId, date, startTime])
   @@index([groupId, date])
@@ -483,6 +486,8 @@ model Student {
   gender         String?
   source         String?
   tags           String[]
+  /// school class 1–11 (null = unknown / not a schoolchild); homework goes to the student or the parents by it (settings.homework.directFromGrade)
+  schoolGrade    Int?
   notes          String?
   telegramChatId String?
   status         StudentStatus @default(ACTIVE)
@@ -495,6 +500,7 @@ model Student {
   reportCards  ReportCard[]
   examResults  ExamResult[]
   certificates Certificate[]
+  homeworks    HomeworkSubmission[]
 
   @@index([centerId, createdAt])
   @@index([familyId])
@@ -780,6 +786,39 @@ model AgentUsage {
   calls            Int    @default(0)
 
   @@id([centerId, month])
+}
+
+/// Sabaq's own sales agent (SALES_AGENT=true): a stranger who writes to the shared bot without a center link
+/// talks to Sabaq itself, not to a center. Not tied to any center; the nightly demo reset keeps these tables.
+model SalesChat {
+  id               String   @id @default(cuid())
+  chatId           String   @unique
+  /// Telegram name and @username (without @) of the person, for the team's notifications
+  name             String?
+  username         String?
+  /// contact phone (998…): never sent to the model
+  phone            String?
+  awaitingPhone    Boolean  @default(false)
+  /// Messages API history (user/assistant content blocks), trimmed by src/lib/agent/history.ts
+  messages         Json     @default("[]")
+  /// the bot's messages to the team about this chat: a reply to one of them goes back to the person
+  teamMessageIds   Int[]    @default([])
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  cacheReadTokens  Int      @default(0)
+  cacheWriteTokens Int      @default(0)
+  lastMessageAt    DateTime @default(now())
+  createdAt        DateTime @default(now())
+}
+
+/// Sales agent token usage per calendar month (YYYY-MM): the monthly cap (SALES_MONTHLY_TOKEN_CAP).
+model SalesUsage {
+  month            String @id
+  inputTokens      Int    @default(0)
+  outputTokens     Int    @default(0)
+  cacheReadTokens  Int    @default(0)
+  cacheWriteTokens Int    @default(0)
+  calls            Int    @default(0)
 }
 
 model PaymeTransaction {
@@ -1119,4 +1158,49 @@ model BotCreateRequest {
   createdAt DateTime  @default(now())
 
   @@index([chatId])
+}
+
+/// Homework set at a lesson (pilot, used only while settings.homework.enabled): the teacher's answer key.
+/// Students answer in the Telegram bot and code grades every answer (src/lib/homework/grade.ts), never a model.
+/// Open from the lesson's end until the group's next lesson starts — computed on read, so a moved lesson moves it.
+model Homework {
+  id          String   @id @default(cuid())
+  centerId    String
+  center      Center   @relation(fields: [centerId], references: [id])
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id])
+  lessonId    String   @unique
+  lesson      Lesson   @relation(fields: [lessonId], references: [id])
+  /// answer key in question order: "B", "-4", "2.5", "3/4"; several accepted answers joined by "|" ("2|-2")
+  answers     String[]
+  /// the task in the teacher's words, shown to students ("darslik 45-bet, 1–20")
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  submissions HomeworkSubmission[]
+
+  @@index([groupId])
+  @@index([centerId, createdAt])
+}
+
+/// One student's answers to a homework, saved one by one as they are given (a student or a parent answers
+/// in the bot) and changeable until the deadline. No grade is stored: it is computed from the current key,
+/// so a corrected key re-grades everyone.
+model HomeworkSubmission {
+  id         String   @id @default(cuid())
+  homeworkId String
+  homework   Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id])
+  /// in question order; "" = not answered
+  answers    String[]
+  /// the Telegram chat that answered last (the student's or a parent's)
+  chatId     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([homeworkId, studentId])
+  @@index([studentId])
 }

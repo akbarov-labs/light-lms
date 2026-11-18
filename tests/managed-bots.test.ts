@@ -19,11 +19,12 @@ import { UserError } from "@/lib/user-error";
 const MANAGER = "1:manager";
 const BOT_ID = 880000001;
 const BOT_TOKEN = `${BOT_ID}:center-token`;
-const OWNER = 940000001; // owner of center A, linked in the shared bot
-const PARENT = 940000002; // children at A and at B
-const STRANGER = 940000003;
-const OWNER_B = 940000004;
-const PHONE = { owner: "998937770101", parent: "998937770202", ownerB: "998937770303" };
+// own ranges: other test files share the database (homework.test.ts uses 9400000xx / 99893777xxxx)
+const OWNER = 951000101; // owner of center A, linked in the shared bot
+const PARENT = 951000102; // children at A and at B
+const STRANGER = 951000103;
+const OWNER_B = 951000104;
+const PHONE = { owner: "998937780101", parent: "998937780202", ownerB: "998937780303" };
 
 let a = "";
 let b = "";
@@ -173,8 +174,8 @@ describe("the center bot", () => {
 
   it("a contact share with a number known only at another center is 'not found' here", async () => {
     const hash = await bcrypt.hash("x", 4);
-    await db.user.create({ data: { centerId: b, phone: "998937770404", name: "B teacher", passwordHash: hash, role: "TEACHER", isTeacher: true, perms: [] } });
-    await send(centerBot!, msg(STRANGER, { contact: { phone_number: "998937770404", first_name: "T", user_id: STRANGER } }));
+    await db.user.create({ data: { centerId: b, phone: "998937780404", name: "B teacher", passwordHash: hash, role: "TEACHER", isTeacher: true, perms: [] } });
+    await send(centerBot!, msg(STRANGER, { contact: { phone_number: "998937780404", first_name: "T", user_id: STRANGER } }));
     expect(lastText()).toBe(B.notFound.uz);
   });
 

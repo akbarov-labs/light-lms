@@ -1,5 +1,6 @@
 // Public demo server only (DEMO_MODE=true): every night the whole database goes back to a fresh demo center,
 // dated to today, so visitors always land in a realistic, clean month. Never runs anywhere else.
+// Sabaq's own sales conversations (SalesChat, SalesUsage) are not demo data and are kept.
 import { db } from "@/lib/db";
 import { demoMode } from "@/config/brand";
 import type { JobResult } from "./jobs";
@@ -11,7 +12,8 @@ export async function resetDemo(): Promise<JobResult> {
   const old = await db.center.count({ where: { slug: { not: "demo" }, createdAt: { lt: new Date(Date.now() - 2 * 86_400_000) } } });
   if (old > 0) throw new Error(`refusing to reset: ${old} non-demo center(s) older than 2 days — is DEMO_MODE set on a real server?`);
   const tables = await db.$queryRaw<{ tablename: string }[]>`
-    SELECT tablename FROM pg_tables WHERE schemaname = current_schema() AND tablename <> '_prisma_migrations'`;
+    SELECT tablename FROM pg_tables WHERE schemaname = current_schema()
+      AND tablename NOT IN ('_prisma_migrations', 'SalesChat', 'SalesUsage')`;
   if (tables.length) {
     const list = tables.map((t) => `"${t.tablename.replaceAll('"', '""')}"`).join(", ");
     await db.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);

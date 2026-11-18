@@ -8,6 +8,8 @@ import { BRAND, demoHref } from "@/config/brand";
 import { PLANS } from "@/lib/plans";
 import { formatPhone } from "@/lib/phone";
 import { cx } from "@/components/ui";
+import { LogoMark, Wordmark } from "@/components/logo";
+import { contactTelegram } from "@/lib/contact-telegram";
 import { LanguageMenu } from "@/components/language-menu";
 import { COPY, type Copy } from "./copy";
 import { PayDemo } from "./pay-demo";
@@ -26,12 +28,8 @@ const money = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 const primary = "inline-flex h-11 items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-5 text-sm font-medium text-white transition-colors hover:bg-zinc-800";
 const secondary = "inline-flex h-11 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-5 text-sm font-medium text-zinc-800 transition-colors hover:border-zinc-300 hover:bg-zinc-50";
 
-function Mark({ className }: { className?: string }) {
-  return (
-    <span className={cx("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-sm font-semibold text-white", className)} aria-hidden>
-      {BRAND.name.slice(0, 1).toUpperCase()}
-    </span>
-  );
+function Mark({ className = "h-8 w-8" }: { className?: string }) {
+  return <LogoMark className={cx("shrink-0", className)} />;
 }
 
 /** A feature told by the UI doing it: text on one side, the real interface fragment on the other. */
@@ -185,7 +183,7 @@ export default async function WelcomePage() {
   const lang = await locale();
   const c = COPY[lang];
   const demo = demoHref();
-  const tg = BRAND.contact.telegram;
+  const tg = await contactTelegram();
   const planOrder = ["FREE", "START", "GROWTH", "PRO"] as const;
 
   return (
@@ -195,7 +193,7 @@ export default async function WelcomePage() {
         <div className="mx-auto flex h-16 max-w-[1200px] items-center gap-4 px-4 sm:gap-6 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
             <Mark />
-            <span className="hidden whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em] min-[420px]:inline">{BRAND.name}</span>
+            <Wordmark name={BRAND.name} className="hidden whitespace-nowrap text-[17px] font-semibold tracking-[-0.02em] min-[420px]:inline" />
           </Link>
           <nav className="hidden items-center gap-1 text-sm text-zinc-600 md:flex" aria-label={c.nav.features}>
             <a href="#features" className="rounded-md px-2.5 py-1.5 hover:text-zinc-950">{c.nav.features}</a>
@@ -357,8 +355,8 @@ export default async function WelcomePage() {
         <div className="mx-auto grid max-w-[1200px] gap-8 px-4 py-12 text-sm sm:px-6 md:grid-cols-[1.4fr_1fr_1fr]">
           <div>
             <div className="flex items-center gap-2.5">
-              <Mark className="h-7 w-7 text-xs" />
-              <span className="font-semibold">{BRAND.name}</span>
+              <Mark className="h-7 w-7" />
+              <Wordmark name={BRAND.name} className="font-semibold" />
             </div>
             <p className="mt-2 text-zinc-500">{BRAND.tagline[lang]}</p>
             {BRAND.legal.entity && <p className="mt-4 text-xs leading-relaxed text-zinc-500">{BRAND.legal.entity}{BRAND.legal.tin && ` · STIR ${BRAND.legal.tin}`}{BRAND.legal.address && <><br />{BRAND.legal.address}</>}</p>}

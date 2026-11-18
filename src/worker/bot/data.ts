@@ -14,6 +14,7 @@ import { payLinkForFamily } from "@/lib/payments/links";
 import { attendanceMark, fullName } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import { isTeacherRow } from "@/lib/queries/staff";
+import { readSettings } from "@/lib/settings";
 import { B } from "./texts";
 
 export interface Linked {
@@ -89,6 +90,22 @@ export async function chatStudents(chatId: string) {
     },
     orderBy: { firstName: "asc" },
   });
+}
+
+/** The same students as chatStudents, without the enrollments: for homework, where it runs on every tap. */
+export async function chatStudentsLite(chatId: string) {
+  const links = await validLinks(chatId);
+  const guardians = await db.guardian.findMany({ where: { id: { in: links.guardianIds } }, select: { familyId: true } });
+  return db.student.findMany({
+    where: { status: "ACTIVE", center: { disabledAt: null }, OR: [{ familyId: { in: guardians.map((g) => g.familyId) } }, { id: { in: links.studentIds } }] },
+    select: { id: true, firstName: true, lastName: true, center: { select: { settings: true } } },
+    orderBy: { firstName: "asc" },
+  });
+}
+
+/** Show the homework button: a linked student's center has homework switched on. */
+export async function chatHomeworkOn(chatId: string): Promise<boolean> {
+  return (await chatStudentsLite(chatId)).some((s) => readSettings(s.center.settings).homework.enabled);
 }
 
 const money = (n: number, l: Locale) => formatMoney(n, l === "ru" ? "сум" : "so'm");

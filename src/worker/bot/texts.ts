@@ -1,4 +1,6 @@
 // Bot texts (uz / ru). Button labels are matched in both languages.
+import { HOMEWORK_BTN } from "@/lib/homework/texts";
+
 export const B = {
   welcome: {
     uz: "Assalomu alaykum! O'quv markazingiz botiga xush kelibsiz.\nDavom etish uchun telefon raqamingizni yuboring 👇",
@@ -29,6 +31,27 @@ export const B = {
   salaryBtn: { uz: "💵 Oylik", ru: "💵 Зарплата" },
   weekBtn: { uz: "📅 Hafta jadvali", ru: "📅 Расписание недели" },
   reportBtn: { uz: "📊 Hisobot", ru: "📊 Отчёт" },
+  homeworkBtn: HOMEWORK_BTN,
+  hwNone: { uz: "Hozir ochiq uy vazifasi yo'q. Yangi vazifa berilganda xabar keladi.", ru: "Сейчас открытых домашних заданий нет. Когда зададут новое, придёт сообщение." },
+  hwListTitle: { uz: "Ochiq uy vazifalari", ru: "Открытые домашние задания" },
+  hwAnswered: { uz: "Javob berilgan: {a}/{n}", ru: "Отвечено: {a}/{n}" },
+  hwDue: { uz: "Muddat: {due}", ru: "Срок: {due}" },
+  hwDueNext: { uz: "keyingi darsgacha", ru: "до следующего урока" },
+  hwQuestion: { uz: "{i}-savol ({i}/{n})", ru: "Вопрос {i} из {n}" },
+  hwTypeNumber: { uz: "Javobni son bilan yozing: masalan -4, 2.5 yoki 3/4.", ru: "Напишите ответ числом: например -4, 2.5 или 3/4." },
+  hwTapLetter: { uz: "To'g'ri javob harfini bosing.", ru: "Нажмите букву правильного ответа." },
+  hwCurrent: { uz: "Hozirgi javob: {a}", ru: "Текущий ответ: {a}" },
+  hwPrev: { uz: "◀ Oldingi", ru: "◀ Назад" },
+  hwSkip: { uz: "O'tkazish ▶", ru: "Пропустить ▶" },
+  hwAll: { uz: "📋 Barcha javoblar", ru: "📋 Все ответы" },
+  hwSummary: { uz: "Javoblaringiz ({a}/{n})", ru: "Ваши ответы ({a}/{n})" },
+  hwSummaryHint: {
+    uz: "✅ Hammasi saqlangan. {due} gacha o'zgartirish mumkin: savol raqamini bosing.\nNatijani o'qituvchi keyingi darsda ko'rsatadi.",
+    ru: "✅ Всё сохранено. Изменить можно до {due}: нажмите номер вопроса.\nРезультаты учитель покажет на следующем уроке.",
+  },
+  hwBadNumber: { uz: "Bu savolga son yozing: masalan -4, 2.5 yoki 3/4.", ru: "На этот вопрос напишите число: например -4, 2.5 или 3/4." },
+  hwBadLetter: { uz: "Bu savolda harflardan birini bosing yoki yozing: {letters}.", ru: "В этом вопросе нажмите или напишите одну из букв: {letters}." },
+  hwClosed: { uz: "⏰ Javob berish muddati tugagan.", ru: "⏰ Срок ответов истёк." },
   balance: { uz: "Oila balansi", ru: "Баланс семьи" },
   charged: { uz: "hisoblangan", ru: "начислено" },
   paid: { uz: "to'langan", ru: "оплачено" },
@@ -93,7 +116,7 @@ export type BotLocale = "uz" | "ru";
 
 /** Which button was pressed, whatever the language. */
 export function buttonKey(text: string): keyof typeof B | null {
-  const keys = ["balanceBtn", "scheduleBtn", "attendanceBtn", "paymentsBtn", "centerBtn", "todayBtn", "salaryBtn", "weekBtn", "reportBtn"] as const;
+  const keys = ["balanceBtn", "scheduleBtn", "attendanceBtn", "paymentsBtn", "centerBtn", "todayBtn", "salaryBtn", "weekBtn", "reportBtn", "homeworkBtn"] as const;
   for (const k of keys) if (B[k].uz === text || B[k].ru === text) return k;
   return null;
 }

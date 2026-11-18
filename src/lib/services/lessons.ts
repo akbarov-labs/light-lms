@@ -6,6 +6,17 @@ import { findClash, lessonClash, type WeeklySlot } from "@/lib/schedule";
 import { readSettings } from "@/lib/settings";
 import { UserError } from "@/lib/user-error";
 import type { TFn } from "@/lib/i18n";
+import type { Ctx } from "@/lib/ctx-core";
+
+/** Staff with groups.edit may touch any lesson in their branches; a teacher only their own. */
+export async function lessonFor(ctx: Ctx, lessonId: string, teacherAllowed: boolean) {
+  const lesson = await db.lesson.findUnique({ where: { id: lessonId }, include: { group: { select: { centerId: true, branchId: true, teacherId: true } } } });
+  if (!lesson || lesson.group.centerId !== ctx.centerId) throw new UserError("error.notFound");
+  const isOwnTeacher = ctx.isTeacher && (lesson.teacherId === ctx.userId || lesson.group.teacherId === ctx.userId);
+  if (ctx.can("groups.edit") && (!ctx.branchIds || ctx.branchIds.includes(lesson.group.branchId))) return { lesson, asTeacher: false };
+  if (teacherAllowed && isOwnTeacher) return { lesson, asTeacher: true };
+  throw new UserError("error.forbidden");
+}
 
 /** Create missing lessons for a group from its start up to `lessonsAheadDays` ahead. Idempotent. */
 export async function generateLessons(groupId: string, opts: { tx?: Tx; today?: ISODate } = {}): Promise<number> {
