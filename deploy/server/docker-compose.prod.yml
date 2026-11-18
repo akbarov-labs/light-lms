@@ -1,9 +1,13 @@
-# Sabaq's public demo on the shared akbarov-labs server (169.58.243.86), behind the standalone edge-caddy:
-#   /opt/apps/sabaq   DOMAIN=sabaq.uz (was sabaq.akbarovlabs.uz)   DEMO_MODE=true   SEED_DEMO=true   SALES_AGENT=true
-# Sample data only, wiped and re-seeded every night at 04:00, so no backups here. Real centers do not go on
-# this server: their personal data must stay in Uzbekistan (DEPLOY.md §0), so they get a VPS there with the
-# self-hosted setup (../../docker-compose.prod.yml, which has its own Caddy and nightly backups).
-# Root-owned on the server next to its .env; CI only names the image tag (deploy-app, Reads repo).
+# Sabaq on the shared akbarov-labs server (169.58.243.86, Contabo), behind the standalone edge-caddy, /opt/apps/sabaq.
+# Two stacks in one compose project, deployed together by Actions → "Promote to production":
+#   live  db, migrate, web, worker, backup   DOMAIN (sabaq.uz, www redirects): real centers, signup open,
+#         @sabaquz_bot with Sabaq's AI assistant. Never demo mode (set below, not from .env). Nightly backups.
+#   demo  demo-db, demo-migrate, demo-web, demo-worker   DEMO_DOMAIN (demo.sabaq.uz): sample data, wiped and
+#         re-seeded every night at 04:00, its own bot (DEMO_TELEGRAM_BOT_TOKEN), signup goes to DOMAIN.
+#         sabaq.akbarovlabs.uz redirects here.
+# ⚠️ Real centers' personal data on a server abroad: DEPLOY.md §0 and §11e. The move to Uzbekistan is §11d.
+# Root-owned on the server next to its .env; CI only names the image tag (deploy-app, Reads repo). After a
+# change here, copy it to the server by hand (DEPLOY.md §11c, "Changing the server's compose file").
 
 x-logging: &logging
   driver: json-file
@@ -28,13 +32,32 @@ x-app-env: &app-env
   # lesson times / payment dates shown in the reader's local time (Telegram date_time entities); off by default
   TELEGRAM_DATE_TIME: ${TELEGRAM_DATE_TIME:-false}
   SMS_DRY_RUN: ${SMS_DRY_RUN:-false}
-  SEED_DEMO: ${SEED_DEMO:-false}
-  DEMO_MODE: ${DEMO_MODE:-false}
-  DEMO_URL: ${DEMO_URL:-}
-  MAIN_SITE_URL: ${MAIN_SITE_URL:-}
+  # the live stack is never the demo, whatever .env says
+  SEED_DEMO: "false"
+  DEMO_MODE: "false"
+  DEMO_URL: https://${DEMO_DOMAIN:?set DEMO_DOMAIN in .env, e.g. demo.sabaq.uz}/demo
+  MAIN_SITE_URL: ""
   OPS_TELEGRAM_CHAT_ID: ${OPS_TELEGRAM_CHAT_ID:-}
   TZ: Asia/Tashkent
   DB_POOL_TIMEOUT_MS: ${DB_POOL_TIMEOUT_MS:-15000}
+
+x-demo-env: &demo-env
+  <<: *app-env
+  DATABASE_URL: postgresql://lms:${DEMO_POSTGRES_PASSWORD:?set DEMO_POSTGRES_PASSWORD in .env}@lms-demo-db:5432/lms?schema=public
+  AUTH_SECRET: ${DEMO_AUTH_SECRET:?set DEMO_AUTH_SECRET in .env (openssl rand -base64 32)}
+  APP_URL: https://${DEMO_DOMAIN:?set DEMO_DOMAIN in .env}
+  # its own bot: one token can only run in one place, and @sabaquz_bot belongs to the live stack
+  TELEGRAM_BOT_TOKEN: ${DEMO_TELEGRAM_BOT_TOKEN:-}
+  # the demo centers' AI agent: its own key, empty = off (it costs money on a public demo)
+  ANTHROPIC_API_KEY: ${DEMO_ANTHROPIC_API_KEY:-}
+  SALES_AGENT: ""
+  SALES_TELEGRAM_CHAT_ID: ""
+  SMS_DRY_RUN: "true"
+  SEED_DEMO: "true"
+  DEMO_MODE: "true"
+  DEMO_URL: ""
+  # /signup on the demo sends people to the live site
+  MAIN_SITE_URL: https://${DOMAIN:?set DOMAIN in .env}
 
 x-worker-healthcheck: &worker-healthcheck
   test: ["CMD", "node", "-e", "process.exit(Date.now() - require('fs').statSync('/tmp/worker-heartbeat').mtimeMs < 120000 ? 0 : 1)"]
@@ -43,6 +66,17 @@ x-worker-healthcheck: &worker-healthcheck
   retries: 3
   start_period: 60s
 
+x-db: &db
+  image: postgres:16.14-alpine
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U lms -d lms"]
+    interval: 5s
+    timeout: 3s
+    retries: 20
+  shm_size: 256mb
+  restart: unless-stopped
+  logging: *logging
+
 networks:
   default: {}
   # Created once on the server (`docker network create edge`), shared with edge-caddy and every other project.
@@ -50,27 +84,21 @@ networks:
     external: true
 
 services:
+  # ---------------------------------------------------------------- live: real centers
   db:
-    image: postgres:16.14-alpine
+    <<: *db
     environment:
       POSTGRES_USER: lms
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: lms
       TZ: UTC
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # not `pgdata`: that volume holds the old demo's data and is not used any more (DEPLOY.md §11e)
+      - live_pgdata:/var/lib/postgresql/data
     networks:
       default:
         aliases: [lms-db]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lms -d lms"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    shm_size: 256mb
     mem_limit: 512m
-    restart: unless-stopped
-    logging: *logging
 
   migrate:
     image: ${IMAGE:-ghcr.io/akbarov-labs/light-lms}/tools:${IMAGE_TAG:-latest}
@@ -105,9 +133,8 @@ services:
       # By container name, not {{upstreams 3000}}: that renders as a bare
       # :3000 while the container restarts (kitoblarim.uz 502s, 2026-11-16).
       caddy.reverse_proxy: "sabaq-web-1:3000"
-      # the old address keeps working: a permanent redirect to the new one, path and query kept.
-      # Add www.sabaq.uz here once it has a DNS record (Caddy keeps retrying certificates for names without one).
-      caddy_1: sabaq.akbarovlabs.uz
+      # www (needs its DNS record) → the bare domain, path and query kept
+      caddy_1: www.${DOMAIN}
       caddy_1.redir: "https://${DOMAIN}{uri} permanent"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
@@ -123,6 +150,10 @@ services:
     environment:
       <<: *app-env
       DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-10}
+      # alerts (OPS_TELEGRAM_CHAT_ID) when last night's dump is missing
+      BACKUP_CHECK_DIR: /backups
+    volumes:
+      - ./backups:/backups:ro
     init: true
     stop_grace_period: 20s
     healthcheck: *worker-healthcheck
@@ -133,5 +164,124 @@ services:
     restart: unless-stopped
     logging: *logging
 
+  # Nightly pg_dump of the live database to /opt/apps/sabaq/backups (same steps as deploy/backup.sh, inlined
+  # because only this file is on the server). Dumps belong to BACKUP_UID so they can be copied off the server
+  # without sudo (DEPLOY.md §11e). Run one now: docker compose -f docker-compose.prod.yml exec backup backup
+  backup:
+    image: postgres:16.14-alpine
+    environment:
+      PGHOST: lms-db
+      PGUSER: lms
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGDATABASE: lms
+      TZ: Asia/Tashkent
+      BACKUP_CRON: ${BACKUP_CRON:-30 2 * * *}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_UID: ${BACKUP_UID:-1000}
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat > /usr/local/bin/backup <<'SH'
+        #!/bin/sh
+        set -eu
+        STAMP=$$(date +%Y%m%d-%H%M%S)
+        FILE=/backups/lms-$$STAMP.dump
+        TMP=/backups/.lms-$$STAMP.dump.partial
+        trap 'rm -f "$$TMP"' EXIT
+        pg_dump --format=custom --compress=6 --no-owner --no-privileges --file="$$TMP"
+        pg_restore --list "$$TMP" > /dev/null
+        mv "$$TMP" "$$FILE"
+        chmod 600 "$$FILE"
+        chown "$$BACKUP_UID" "$$FILE"
+        find /backups -maxdepth 1 -name 'lms-*.dump' -type f -mtime +"$$((BACKUP_KEEP_DAYS - 1))" -print -delete | sed 's/^/[backup] removed /'
+        echo "[backup] $$(date '+%F %T') ok $$(basename "$$FILE") $$(du -h "$$FILE" | cut -f1), kept $$(ls /backups/lms-*.dump | wc -l) file(s)"
+        SH
+        chmod 755 /usr/local/bin/backup
+        # readable listing for the worker's backup check; the dumps themselves are 600
+        chown "$$BACKUP_UID" /backups && chmod 755 /backups
+        echo "$$BACKUP_CRON /usr/local/bin/backup > /proc/1/fd/1 2>&1" > /etc/crontabs/root
+        echo "[backup] schedule: $$BACKUP_CRON ($$TZ), keep $$BACKUP_KEEP_DAYS days"
+        exec crond -f -l 8
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 256m
+    restart: unless-stopped
+    logging: *logging
+
+  # ---------------------------------------------------------------- demo: sample data, wiped nightly
+  demo-db:
+    <<: *db
+    environment:
+      POSTGRES_USER: lms
+      POSTGRES_PASSWORD: ${DEMO_POSTGRES_PASSWORD:?set DEMO_POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: lms
+      TZ: UTC
+    volumes:
+      - demo_pgdata:/var/lib/postgresql/data
+    networks:
+      default:
+        aliases: [lms-demo-db]
+    mem_limit: 384m
+
+  demo-migrate:
+    image: ${IMAGE:-ghcr.io/akbarov-labs/light-lms}/tools:${IMAGE_TAG:-latest}
+    environment: *demo-env
+    command: ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed-if-empty.ts"]
+    depends_on:
+      demo-db:
+        condition: service_healthy
+    mem_limit: 768m
+    restart: "no"
+    logging: *logging
+
+  demo-web:
+    image: ${IMAGE:-ghcr.io/akbarov-labs/light-lms}/web:${IMAGE_TAG:-latest}
+    environment:
+      <<: *demo-env
+      TRUST_PROXY: "true"
+      DB_POOL_MAX: "10"
+    init: true
+    depends_on:
+      demo-migrate:
+        condition: service_completed_successfully
+    networks:
+      default: {}
+      edge: {}
+    labels:
+      caddy: ${DEMO_DOMAIN:?set DEMO_DOMAIN in .env}
+      caddy.encode: zstd gzip
+      caddy.request_body.max_size: 10MB
+      caddy.reverse_proxy: "sabaq-demo-web-1:3000"
+      # the demo's first address keeps working
+      caddy_1: sabaq.akbarovlabs.uz
+      caddy_1.redir: "https://${DEMO_DOMAIN}{uri} permanent"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+    restart: unless-stopped
+    logging: *logging
+
+  demo-worker:
+    image: ${IMAGE:-ghcr.io/akbarov-labs/light-lms}/worker:${IMAGE_TAG:-latest}
+    environment:
+      <<: *demo-env
+      DB_POOL_MAX: "5"
+    init: true
+    stop_grace_period: 20s
+    healthcheck: *worker-healthcheck
+    depends_on:
+      demo-migrate:
+        condition: service_completed_successfully
+    mem_limit: 384m
+    restart: unless-stopped
+    logging: *logging
+
 volumes:
-  pgdata:
+  live_pgdata:
+  demo_pgdata:
