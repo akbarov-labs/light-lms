@@ -5,7 +5,7 @@
 #   demo  demo-db, demo-migrate, demo-web, demo-worker   DEMO_DOMAIN (demo.sabaq.uz): sample data, wiped and
 #         re-seeded every night at 04:00, its own bot (DEMO_TELEGRAM_BOT_TOKEN), signup goes to DOMAIN.
 #         sabaq.akbarovlabs.uz redirects here.
-# ⚠️ Real centers' personal data on a server abroad: DEPLOY.md §0 and §11e. The move to Uzbekistan is §11d.
+# Real centers' data in Germany: allowed since 27.03.2026 (DEPLOY.md §0, §11e). An optional move to Uzbekistan: §11d.
 # Root-owned on the server next to its .env; CI only names the image tag (deploy-app, Reads repo). After a
 # change here, copy it to the server by hand (DEPLOY.md §11c, "Changing the server's compose file").
 

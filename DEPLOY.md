@@ -6,15 +6,20 @@ Bitta oddiy Ubuntu VPS'da hammasi Docker ichida ishlaydi: **Caddy** (avtomatik H
 
 ---
 
-## 0. Muhim: shaxsga doir ma'lumotlar O'zbekistonda saqlanishi kerak
+## 0. Shaxsga doir ma'lumotlar: qayerda saqlash mumkin
 
 Tizimda o'quvchilar, ota-onalar va xodimlarning ismi, telefoni, tug'ilgan sanasi, to'lovlari saqlanadi — bu **shaxsga doir ma'lumotlar**.
-"Shaxsga doir ma'lumotlar to'g'risida"gi Qonun (O'RQ-547, 27¹-modda, 2021-yildan) O'zbekiston fuqarolarining shaxsga doir ma'lumotlarini **O'zbekiston hududidagi serverlarda** to'plash, saqlash va qayta ishlashni talab qiladi. Ma'lumotlar bazasini davlat reyestrida ro'yxatdan o'tkazish talabi ham bor.
+
+**2026-yil 27-martdan** (O'RQ-1125, 26.03.2026, "Shaxsga doir ma'lumotlar to'g'risida"gi Qonunning yangi 27¹-moddasi):
+- O'zbekistonda saqlanishi **shart** bo'lganlari faqat: biometrik va genetik ma'lumotlar, hamda O'zbekistondagi telekom operatorlari abonentlarining ma'lumotlari. Sabaq bularning hech birini saqlamaydi (o'quvchi rasmi yuzni tanish uchun ishlatilmaydi).
+- Qolganini chet elda saqlash va qayta ishlash mumkin, agar **quyidagilardan biri** bajarilsa: davlat teng himoya ta'minlaydi deb tan olingan (Vazirlar Mahkamasi ro'yxati, 29.07.2026, 49 ta davlat: Germaniya, AQSh, Buyuk Britaniya, Niderlandiya, Singapur, Yaponiya va boshqalar); yoki operator vakolatli organ tasdiqlagan standart shartnoma shartlari / majburiy korporativ qoidalarni qabul qilgan; yoki xalqaro standartlarga rioya qiladi.
+- Davlat reyestrida ro'yxatdan o'tkazish endi faqat O'zbekistonda saqlanishi shart bo'lgan bazalar uchun.
 
 Shuning uchun:
-- VPS'ni **O'zbekistondagi data-markazda** joylashgan provayderdan oling (chet eldagi Hetzner/DigitalOcean va h.k. emas).
-- Zaxira nusxalarni ham O'zbekistondagi boshqa serverga yoki markazning o'z kompyuteriga ko'chiring.
-- Sotishdan oldin yurist bilan tekshiring (bu yuridik maslahat emas).
+- Server ro'yxatdagi davlatda bo'lishi kifoya: Contabo (Germaniya) ham, O'zbekistondagi VPS ham to'g'ri. Serveringiz qaysi davlatda ekanini provayder panelida tekshiring.
+- Boshqa majburiyatlar qoladi: ma'lumot egasining roziligi, xavfsizlik choralari, chegaradan o'tkazishda sizib chiqish bo'lsa vakolatli organga 24 soat ichida xabar (72 soatda hisobot).
+- Zaxira nusxalarni ham ro'yxatdagi davlatdagi joyda saqlang (masalan, o'z kompyuteringiz O'zbekistonda).
+- Sotishdan oldin yurist bilan tekshiring (bu yuridik maslahat emas). Manba: lex.uz/docs/-8099215 va lex.uz/docs/-8369688.
 
 ## 1. Nima kerak
 
@@ -172,18 +177,18 @@ Har bir konteyner logi 10 MB × 5 fayl bilan cheklangan (disk to'lib qolmaydi).
 
 ## 11c. Bizning sayt va demo: sabaq.uz
 
-sabaq.uz (avval sabaq.akbarovlabs.uz) — Sabaq sayti va demosi, akbarov-labs umumiy serverida (Contabo, chet elda) turadi — faqat namunaviy ma'lumot, har kecha tozalanadi. **Haqiqiy markazlar bu serverga qo'yilmaydi** (§0): ular uchun O'zbekistondagi VPS va shu hujjatdagi oddiy o'rnatish.
+sabaq.uz — Sabaq sayti va haqiqiy markazlar, demo — demo.sabaq.uz (avval sabaq.akbarovlabs.uz); ikkalasi akbarov-labs umumiy serverida (Contabo, Germaniya; 2026-yil martdan qonun ruxsat beradi, §0). Ikki stek haqida — §11e.
 
 - Fayllar: `deploy/server/docker-compose.prod.yml` (demo, `/opt/apps/sabaq`) va `docker-compose.staging.yml` (`/opt/apps/sabaq-staging`, parol bilan, `sabaq.staging.sarvarlogs.uz`). Ikkalasi serverda root'niki; CI faqat image tegini aytadi.
 - `main`'ga har push → tekshiruv (lint, typecheck, testlar) → 3 ta image (`ghcr.io/akbarov-labs/light-lms/{web,worker,tools}`) → staging. Demoga: Actions → **Promote to production** → Run workflow.
-- Demo serverda `MAIN_SITE_URL` bo'sh: `/signup` forma o'rniga aloqani ko'rsatadi, ro'yxatdan o'tish yopiq. `SALES_AGENT=true` bilan saytdagi "Bog'lanish" havolalari botga boradi: yangi mijozlarga Sabaqning AI yordamchisi javob beradi, lid va savollar `SALES_TELEGRAM_CHAT_ID` (yoki `OPS_TELEGRAM_CHAT_ID`) chatiga keladi; o'sha xabarga reply qilsangiz, javob mijozga boradi.
+- Demoda `MAIN_SITE_URL=https://sabaq.uz`: `/signup` sabaq.uz ga yuboradi. sabaq.uz da `SALES_AGENT=true` bilan saytdagi "Bog'lanish" havolalari botga boradi: yangi mijozlarga Sabaqning AI yordamchisi javob beradi, lid va savollar `SALES_TELEGRAM_CHAT_ID` (yoki `OPS_TELEGRAM_CHAT_ID`) chatiga keladi; o'sha xabarga reply qilsangiz, javob mijozga boradi.
 - sabaq.uz ga ko'chish (bir marta, serverda): 1) DNS: `sabaq.uz` va `www.sabaq.uz` A yozuvi → 169.58.243.86. 2) `/opt/apps/sabaq/.env`: `DOMAIN=sabaq.uz`, `APP_URL=https://sabaq.uz`, `SALES_AGENT=true`, hamda yordamchi ishlashi uchun `TELEGRAM_BOT_TOKEN`, `ANTHROPIC_API_KEY` va `OPS_TELEGRAM_CHAT_ID` (yoki `SALES_TELEGRAM_CHAT_ID`). 3) Serverdagi compose nusxasini yangilang (quyidagi "Serverdagi compose faylini o'zgartirish" bandi): unda `SALES_*` o'zgaruvchilari va `sabaq.akbarovlabs.uz` → `https://sabaq.uz` 301 yorlig'i bor; edge-caddy domenni yorliqdan o'qiydi, sertifikatni o'zi oladi. 4) Actions → **Promote to production**. `www.sabaq.uz` uchun avval DNS yozuvi, so'ng uni `caddy_1` qatoriga qo'shing. Bot Mini App manzilini `APP_URL` dan oladi.
 - Serverga birinchi marta qo'shish — Reads reposidagi `docs/add-app.md`: `deploy/prepare-app sabaq ~/dev/sites/light-lms/deploy/server`, so'ng serverda `sudo add-app --images "web worker tools" --up-flags "--remove-orphans" sabaq ghcr.io/akbarov-labs/light-lms <.env bor papka>`.
 - Serverdagi compose faylini o'zgartirish (yangi o'zgaruvchi yoki Caddy yorlig'i): deploy `/opt/apps/sabaq/docker-compose.prod.yml` dagi root nusxasidan foydalanadi, CI uni yangilamaydi. `prepare-app` + `add-app` faqat birinchi qo'shish uchun: `add-app` bor faylni hech qachon almashtirmaydi. Mac'da: `git show origin/main:deploy/server/docker-compose.prod.yml | ssh sarvar@169.58.243.86 'cat > /tmp/sabaq-compose.prod.yml'`; serverda: `sudo cp /opt/apps/sabaq/docker-compose.prod.yml{,.bak}`, `sudo install -m 644 -o root -g root /tmp/sabaq-compose.prod.yml /opt/apps/sabaq/docker-compose.prod.yml`, tekshirish `sudo grep <o'zgaruvchi> /opt/apps/sabaq/docker-compose.prod.yml`; so'ng **Promote to production**. Staging uchun xuddi shu, `/opt/apps/sabaq-staging/docker-compose.staging.yml`.
 
-## 11d. Haqiqiy markazlar serveri: sabaq.uz O'zbekistonda
+## 11d. Ixtiyoriy: sabaq.uz ni O'zbekistondagi serverga ko'chirish
 
-Hozir sabaq.uz — demo (Contabo, har kecha tozalanadi), unda haqiqiy markaz ochib bo'lmaydi. Reja: sayt va haqiqiy markazlar O'zbekistondagi VPS'ga, demo esa `demo.sabaq.uz` ga o'tadi.
+2026-yil martdan qonun Germaniyadagi serverga ruxsat beradi (§0), shuning uchun haqiqiy markazlar hozir Contabo'da (§11e). O'zbekistondagi server keyinchalik foydali bo'lishi mumkin: tezroq ishlash (TAS-IX), mahalliy shartnoma va hisob-faktura, Pro-Data granti. Ko'chish rejasi:
 
 | Server | Manzil | Nima | Bot |
 |---|---|---|---|
@@ -208,7 +213,7 @@ Hozir sabaq.uz — demo (Contabo, har kecha tozalanadi), unda haqiqiy markaz och
 
 ⚠️ Bitta bot tokeni bilan bir vaqtda faqat bitta server ishlaydi: 8-qadamdan oldin VPS'ga @sabaquz_bot tokenini qo'ymang. Ko'chishdan oldingi sotuv suhbatlari demo bazasida qoladi: ularning jamoa chatidagi xabariga reply endi yetmaydi, mijozga o'zingiz yozing.
 
-**C. Keyin:** zaxira nusxalarni O'zbekistondagi boshqa joyga ko'chiring (§9); yangilash — §10 (`git pull`, build). Bazani davlat reyestrida ro'yxatdan o'tkazish va yurist (§0). `ANTHROPIC_API_KEY` suhbatlarni AQShdagi xizmatga yuboradi: Sabaq yordamchisi faqat markaz egalari bilan gaplashadi va raqam modelga bormaydi; markazlarning o'z AI agentini (Sozlamalar) yurist tasdiqlamaguncha yoqmang.
+**C. Keyin:** saytdagi "Ma'lumotlarimiz qayerda saqlanadi?" javobini (`src/app/welcome/copy.ts`) va maxfiylik siyosatining 4-bandini (`src/app/legal/content.ts`) O'zbekistonga moslang; zaxira nusxalarni O'zbekistondagi boshqa joyga ko'chiring (§9); yangilash — §10 (`git pull`, build). Yurist bilan tekshiring (§0). `ANTHROPIC_API_KEY` suhbatlarni AQShdagi xizmatga yuboradi (AQSh teng himoya ro'yxatida, §0); Sabaq yordamchisi raqamni ko'rmaydi.
 
 **D. Birinchi markaz.**
 1. Mijozdan oling: markaz nomi, egasining ismi va telefoni; filiallar; kurslar va narxi; guruhlar (kurs, o'qituvchi, kunlar, vaqt, xona); o'qituvchilar (ism, telefon, oylik qoidasi); o'quvchilar Excel'da: Familiya, Ism, Telefon, Ota-ona telefoni, Guruh kodi (#), Balans (qarz minus bilan).
@@ -216,9 +221,9 @@ Hozir sabaq.uz — demo (Contabo, har kecha tozalanadi), unda haqiqiy markaz och
 3. Ega kiradi → sozlash ustasi (filial, kurs, guruh, o'qituvchi) → Sozlamalar → Xodimlar: qolgan o'qituvchi va administratorlar → qolgan kurs va guruhlar → O'quvchilar → Import: Excel'ni "CSV UTF-8" qilib yuklang (eski qarz va oldindan to'lov ochilish balansi bo'ladi; qayta yuklash ikki marta yaratmaydi).
 4. Ota-onalar va o'qituvchilar @sabaquz_bot'ga /start → "raqamni yuborish": raqami bazada bo'lsa, o'zi ulanadi.
 
-## 11e. Hozircha: haqiqiy markazlar Contabo'da (sabaq.uz)
+## 11e. Haqiqiy markazlar Contabo'da (sabaq.uz)
 
-O'zbekistondagi server (§11d) tayyor bo'lguncha haqiqiy markazlar Contabo'dagi `/opt/apps/sabaq` da ishlaydi. ⚠️ Bu §0 ga zid: shaxsga doir ma'lumotlar chet eldagi serverda turadi. Bu egasining ongli qarori (2026-11-18): MChJ ochilib, O'zbekistondagi server (Pro-Data) olingach, baza §11d bo'yicha ko'chiriladi (backup → restore).
+Haqiqiy markazlar Contabo'dagi `/opt/apps/sabaq` da ishlaydi. Server Germaniyada (Contabo GmbH): 2026-yil 27-martdan qonun bunga ruxsat beradi, Germaniya teng himoya ro'yxatida (§0). Serverning joyini Contabo panelida bir marta tekshiring. Keyinchalik O'zbekistonga ko'chish ixtiyoriy (§11d, backup → restore).
 
 `deploy/server/docker-compose.prod.yml` endi ikkita stek, bitta **Promote to production** ikkalasini yangilaydi:
 - **live** (`db`, `migrate`, `web`, `worker`, `backup`) — `DOMAIN` (sabaq.uz, `www` → sabaq.uz): haqiqiy markazlar, `/signup` ochiq, @sabaquz_bot va AI yordamchi. `DEMO_MODE`/`SEED_DEMO` compose'da `false` qilib qo'yilgan, `.env` ularni o'zgartira olmaydi. Har kecha 02:30 da backup, deploy oldidan ham (`hooks/pre-up`).
@@ -256,15 +261,20 @@ Platforma admini: avval o'zingizga hisob (masalan `sabaq.uz/signup` dan), so'ng 
 
 Everything runs in Docker on one plain Ubuntu VPS: **Caddy** (automatic HTTPS) → **web** (Next.js) → **Postgres**, plus **worker** (Telegram bot + scheduled jobs) and **backup** (nightly `pg_dump`, kept 14 days). No paid services.
 
-## 0. Important: Uzbek personal data must stay in Uzbekistan
+## 0. Personal data: where it may be stored
 
 The system stores names, phones, birth dates and payments of students, parents and staff — **personal data**.
-The Law "On Personal Data" (ZRU-547, Article 27¹, in force since 2021) requires personal data of Uzbek citizens to be collected, stored and processed **on servers physically located in Uzbekistan**, and personal-data databases to be registered in the state register.
+
+**Since 27 March 2026** (ZRU-1125 of 26.03.2026, the new Article 27¹ of the Law "On Personal Data"):
+- Only these **must** stay in Uzbekistan: biometric and genetic data, and data of subscribers of telecom operators in Uzbekistan. Sabaq stores none of them (a student photo is not used for face recognition).
+- Everything else may be stored and processed abroad if **one** of these holds: the country is recognised as giving equivalent protection (Cabinet of Ministers list of 29.07.2026, 49 countries including Germany, the USA, the UK, the Netherlands, Singapore and Japan); or the operator has adopted standard contractual clauses / binding corporate rules approved by the authorised body; or the operator follows the approved international standards.
+- Registration in the state register now applies only to databases that must stay in Uzbekistan.
 
 So:
-- Rent the VPS from a provider with a **data center in Uzbekistan** (not Hetzner/DigitalOcean abroad).
-- Copy backups to another machine in Uzbekistan (or the center's own computer).
-- Check with a lawyer before selling (this is not legal advice).
+- A server in a listed country is enough: Contabo (Germany) is fine, and so is a VPS in Uzbekistan. Check in the provider's panel which country your server is in.
+- The other duties stay: the data subject's consent, security measures, and for cross-border transfers a leak report to the authority within 24 hours (full report within 72).
+- Keep backups in a listed country too (your own computer in Uzbekistan is fine).
+- Check with a lawyer before selling (this is not legal advice). Sources: lex.uz/docs/-8099215 and lex.uz/docs/-8369688.
 
 ## 1. Requirements
 
@@ -383,18 +393,18 @@ docker image prune -f
 
 ## 15. Our site and demo: sabaq.uz
 
-sabaq.uz (formerly sabaq.akbarovlabs.uz) is Sabaq's site and public demo, on the shared akbarov-labs server (Contabo, abroad): sample data only, wiped every night. **Real centers never go on that server** (§0): they get a VPS in Uzbekistan with the plain setup above.
+sabaq.uz is Sabaq's site and real centers, the demo is demo.sabaq.uz (formerly sabaq.akbarovlabs.uz); both on the shared akbarov-labs server (Contabo, Germany; allowed by law since March 2026, §0). The two stacks: §15b.
 
 - Files: `deploy/server/docker-compose.prod.yml` (the demo, `/opt/apps/sabaq`) and `docker-compose.staging.yml` (`/opt/apps/sabaq-staging`, password protected, `sabaq.staging.sarvarlogs.uz`). Both are root-owned on the server; CI only names the image tag.
 - Every push to `main` → checks (lint, typecheck, unit tests) → three images (`ghcr.io/akbarov-labs/light-lms/{web,worker,tools}`) → staging. To the demo: Actions → **Promote to production** → Run workflow.
-- The demo has no `MAIN_SITE_URL`, so `/signup` shows the contacts instead of the form and signing up is closed. With `SALES_AGENT=true` the site's contact links go to the bot: Sabaq's AI assistant answers new customers, leads and questions arrive in `SALES_TELEGRAM_CHAT_ID` (or `OPS_TELEGRAM_CHAT_ID`), and a reply to such a message goes back to the customer.
+- The demo has `MAIN_SITE_URL=https://sabaq.uz`: its `/signup` sends people there. On sabaq.uz, with `SALES_AGENT=true`, the site's contact links point at the bot: Sabaq's AI assistant answers new customers, leads and questions arrive in `SALES_TELEGRAM_CHAT_ID` (or `OPS_TELEGRAM_CHAT_ID`), and a reply to that message reaches the customer.
 - Moving to sabaq.uz (once, on the server): 1) DNS: A records for `sabaq.uz` and `www.sabaq.uz` → 169.58.243.86. 2) `/opt/apps/sabaq/.env`: `DOMAIN=sabaq.uz`, `APP_URL=https://sabaq.uz`, `SALES_AGENT=true`, plus `TELEGRAM_BOT_TOKEN`, `ANTHROPIC_API_KEY` and `OPS_TELEGRAM_CHAT_ID` (or `SALES_TELEGRAM_CHAT_ID`), without which the assistant stays off. 3) Refresh the compose file on the server (see "Changing the server's compose file" below): it passes the `SALES_*` variables and carries the `sabaq.akbarovlabs.uz` → `https://sabaq.uz` 301 label; edge-caddy reads the domain off the labels and gets the certificate itself. 4) Actions → **Promote to production**. For `www.sabaq.uz`, add its DNS record first, then add it to the `caddy_1` line. The bot takes its Mini App URL from `APP_URL`.
 - Adding it to the server the first time follows `docs/add-app.md` in the Reads repo: `deploy/prepare-app sabaq ~/dev/sites/light-lms/deploy/server`, then on the server `sudo add-app --images "web worker tools" --up-flags "--remove-orphans" sabaq ghcr.io/akbarov-labs/light-lms <folder with the .env>`.
 - Changing the server's compose file (a new variable or Caddy label): deploys use the root-owned copy at `/opt/apps/sabaq/docker-compose.prod.yml`, which CI never updates. `prepare-app` + `add-app` are for the first setup only: `add-app` never overwrites a file that exists. On the Mac: `git show origin/main:deploy/server/docker-compose.prod.yml | ssh sarvar@169.58.243.86 'cat > /tmp/sabaq-compose.prod.yml'`; on the server: `sudo cp /opt/apps/sabaq/docker-compose.prod.yml{,.bak}`, `sudo install -m 644 -o root -g root /tmp/sabaq-compose.prod.yml /opt/apps/sabaq/docker-compose.prod.yml`, check with `sudo grep <variable> /opt/apps/sabaq/docker-compose.prod.yml`; then **Promote to production**. Staging is the same with `/opt/apps/sabaq-staging/docker-compose.staging.yml`.
 
-## 15a. The real-centers server: sabaq.uz in Uzbekistan
+## 15a. Optional: moving sabaq.uz to a server in Uzbekistan
 
-Today sabaq.uz is the demo (Contabo, wiped every night), so no real center can be opened there. The plan: the site and real centers move to a VPS in Uzbekistan, and the demo moves to `demo.sabaq.uz`.
+Since March 2026 the law allows a server in Germany (§0), so real centers run on Contabo for now (§15b). A server in Uzbekistan may still be worth it later: speed (TAS-IX), a local contract and invoices, the Pro-Data grant. The move:
 
 | Server | Address | What | Bot |
 |---|---|---|---|
@@ -419,7 +429,7 @@ Today sabaq.uz is the demo (Contabo, wiped every night), so no real center can b
 
 ⚠️ One bot token runs on one server at a time: don't put the @sabaquz_bot token on the VPS before step 8. Sales conversations from before the move stay in the demo database: replying to their team-chat messages no longer reaches the person, so write to them yourself.
 
-**C. Afterwards:** copy backups to another place in Uzbekistan (§9); updates per §10 (`git pull`, build). Register the database with the state register and check with a lawyer (§0). `ANTHROPIC_API_KEY` sends conversations to a US service: Sabaq's assistant only talks to center owners and never sees the phone number; keep the centers' own AI agent (Settings) off until a lawyer has approved it.
+**C. Afterwards:** change the site's "Where is our data stored?" answer (`src/app/welcome/copy.ts`) and section 4 of the privacy policy (`src/app/legal/content.ts`) to say Uzbekistan; copy backups to another place in Uzbekistan (§9); updates per §10 (`git pull`, build). Check with a lawyer (§0). `ANTHROPIC_API_KEY` sends conversations to a US service (the USA is on the equivalent-protection list, §0); Sabaq's assistant never sees the phone number.
 
 **D. The first center.**
 1. Collect from the customer: center name, owner's name and phone; branches; courses and prices; groups (course, teacher, days, time, room); teachers (name, phone, salary rule); students in Excel: Last name, First name, Phone, Parent phone, Group code (#), Balance (debt negative).
@@ -427,9 +437,9 @@ Today sabaq.uz is the demo (Contabo, wiped every night), so no real center can b
 3. The owner signs in → setup wizard (branch, course, group, teacher) → Settings → Staff: the other teachers and admins → the other courses and groups → Students → Import: the Excel saved as "CSV UTF-8" (old debts and prepayments become opening balances; importing again creates nothing twice).
 4. Parents and teachers open @sabaquz_bot → /start → "share my number": if the number is in the database, they are linked.
 
-## 15b. For now: real centers on Contabo (sabaq.uz)
+## 15b. Real centers on Contabo (sabaq.uz)
 
-Until the server in Uzbekistan (§15a) is ready, real centers run on Contabo in `/opt/apps/sabaq`. ⚠️ This goes against §0: personal data sits on a server abroad. It is the owner's deliberate call (2026-11-18): once the LLC exists and the Uzbek server (Pro-Data) is rented, the database moves there per §15a (backup → restore).
+Real centers run on Contabo in `/opt/apps/sabaq`. The server is in Germany (Contabo GmbH): since 27 March 2026 the law allows it, Germany being on the equivalent-protection list (§0). Check the server's location once in the Contabo panel. Moving to Uzbekistan later is optional (§15a, backup → restore).
 
 `deploy/server/docker-compose.prod.yml` now holds two stacks, and one **Promote to production** updates both:
 - **live** (`db`, `migrate`, `web`, `worker`, `backup`) on `DOMAIN` (sabaq.uz, `www` → sabaq.uz): real centers, `/signup` open, @sabaquz_bot with the AI assistant. `DEMO_MODE`/`SEED_DEMO` are set to `false` in the compose file, so `.env` cannot turn them on. Backups nightly at 02:30 and before every deploy (`hooks/pre-up`).
