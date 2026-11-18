@@ -216,6 +216,32 @@ Hozir sabaq.uz — demo (Contabo, har kecha tozalanadi), unda haqiqiy markaz och
 3. Ega kiradi → sozlash ustasi (filial, kurs, guruh, o'qituvchi) → Sozlamalar → Xodimlar: qolgan o'qituvchi va administratorlar → qolgan kurs va guruhlar → O'quvchilar → Import: Excel'ni "CSV UTF-8" qilib yuklang (eski qarz va oldindan to'lov ochilish balansi bo'ladi; qayta yuklash ikki marta yaratmaydi).
 4. Ota-onalar va o'qituvchilar @sabaquz_bot'ga /start → "raqamni yuborish": raqami bazada bo'lsa, o'zi ulanadi.
 
+## 11e. Hozircha: haqiqiy markazlar Contabo'da (sabaq.uz)
+
+O'zbekistondagi server (§11d) tayyor bo'lguncha haqiqiy markazlar Contabo'dagi `/opt/apps/sabaq` da ishlaydi. ⚠️ Bu §0 ga zid: shaxsga doir ma'lumotlar chet eldagi serverda turadi. Bu egasining ongli qarori (2026-11-18): MChJ ochilib, O'zbekistondagi server (Pro-Data) olingach, baza §11d bo'yicha ko'chiriladi (backup → restore).
+
+`deploy/server/docker-compose.prod.yml` endi ikkita stek, bitta **Promote to production** ikkalasini yangilaydi:
+- **live** (`db`, `migrate`, `web`, `worker`, `backup`) — `DOMAIN` (sabaq.uz, `www` → sabaq.uz): haqiqiy markazlar, `/signup` ochiq, @sabaquz_bot va AI yordamchi. `DEMO_MODE`/`SEED_DEMO` compose'da `false` qilib qo'yilgan, `.env` ularni o'zgartira olmaydi. Har kecha 02:30 da backup, deploy oldidan ham (`hooks/pre-up`).
+- **demo** (`demo-db`, `demo-migrate`, `demo-web`, `demo-worker`) — `DEMO_DOMAIN` (demo.sabaq.uz): namunaviy ma'lumot, har kecha tozalanadi, o'z boti, `/signup` sabaq.uz ga yuboradi. `sabaq.akbarovlabs.uz` → demo.sabaq.uz.
+
+**O'tish (bir marta):**
+1. DNS: `demo.sabaq.uz` A → 169.58.243.86 (`www.sabaq.uz` allaqachon bor). Demo uchun @BotFather'da yangi bot (ixtiyoriy; bo'sh bo'lsa demoda bot yo'q).
+2. Serverda: `free -h` (ikki stek ~3.5 GB xotira oladi) va `id -u` (backup fayllari egasi).
+3. `sudo nano /opt/apps/sabaq/.env` — qo'shing: `DEMO_DOMAIN=demo.sabaq.uz`, `DEMO_POSTGRES_PASSWORD=` (`openssl rand -hex 24`), `DEMO_AUTH_SECRET=` (`openssl rand -base64 32`), `DEMO_TELEGRAM_BOT_TOKEN=`, `BACKUP_UID=<id -u>`, kerak bo'lsa `DEMO_ANTHROPIC_API_KEY=`. `DEMO_MODE`, `SEED_DEMO`, `MAIN_SITE_URL`, `DEMO_URL`, `APP_URL` qatorlarini o'chiring (endi compose belgilaydi). `DOMAIN=sabaq.uz`, `POSTGRES_PASSWORD`, `AUTH_SECRET`, `TELEGRAM_BOT_TOKEN`, `SALES_AGENT=true` qoladi.
+4. Yangi compose va hook'ni serverga qo'ying (§11c "Serverdagi compose faylini o'zgartirish"), hook uchun: Mac'da `git show origin/main:deploy/hooks/pre-up | ssh sarvar@169.58.243.86 'cat > /tmp/sabaq-pre-up'`; serverda `sudo install -d -m 755 -o root -g root /opt/apps/sabaq/hooks` va `sudo install -m 755 -o root -g root /tmp/sabaq-pre-up /opt/apps/sabaq/hooks/pre-up`.
+5. Actions → **Promote to production**. `db` yangi `live_pgdata` hajmi bilan bo'sh boshlanadi; demo o'zini to'ldiradi.
+6. Tekshirish: `sabaq.uz/api/health`, `sabaq.uz/signup` forma, `www.sabaq.uz` → sabaq.uz, `demo.sabaq.uz/demo`, `sabaq.akbarovlabs.uz` → demo.sabaq.uz, `sudo docker logs sabaq-backup-1`.
+7. Bir hafta o'tib, eski demo bazasini o'chiring: `sudo docker volume rm sabaq_pgdata` (unda eski demo va sinov sotuv suhbatlari bor).
+
+**Serverda skript ishlatish** (markaz ochish, platforma admini, parol tiklash):
+```bash
+cd /opt/apps/sabaq && TAG=$(sudo docker inspect -f '{{.Config.Image}}' sabaq-web-1 | sed 's/.*://')
+sudo IMAGE_TAG=$TAG docker compose -f docker-compose.prod.yml run --rm migrate npx tsx scripts/create-owner.ts --center "<nom>" --slug <slug> --name "<ega>" --phone <telefon>
+```
+Platforma admini: avval o'zingizga hisob (masalan `sabaq.uz/signup` dan), so'ng xuddi shunday `scripts/platform-admin.ts grant <telefon>`. Birinchi markaz uchun nima yig'ish va qadamlar — §11d D.
+
+**Backup:** `/opt/apps/sabaq/backups/lms-*.dump`, 14 kun. Qo'lda: `sudo docker exec sabaq-backup-1 backup`. Serverdan tashqariga (server yo'qolsa, nusxalar ham yo'qoladi) Mac'dan har kuni: `rsync -av sarvar@169.58.243.86:/opt/apps/sabaq/backups/ ~/sabaq-backups/` (fayllar `BACKUP_UID` niki, sudo kerak emas). Tiklash: `deploy/restore.sh` dagi qadamlar, konteyner nomlari `sabaq-db-1`, `sabaq-web-1`, `sabaq-worker-1`. Oxirgi backup 26 soatdan eski bo'lsa, `OPS_TELEGRAM_CHAT_ID` ga xabar keladi.
+
 ## 12. Muammolar
 
 - **Sertifikat olinmadi**: DNS A yozuvini, 80/443 portlar ochiqligini tekshiring; `logs caddy`.
@@ -400,3 +426,29 @@ Today sabaq.uz is the demo (Contabo, wiped every night), so no real center can b
 2. Center and owner: `docker compose -f docker-compose.prod.yml run --rm migrate npx tsx scripts/create-owner.ts --center "<name>" --slug <slug> --name "<owner>" --phone <phone>` → give the owner the temporary password (or the owner signs up at `sabaq.uz/signup`).
 3. The owner signs in → setup wizard (branch, course, group, teacher) → Settings → Staff: the other teachers and admins → the other courses and groups → Students → Import: the Excel saved as "CSV UTF-8" (old debts and prepayments become opening balances; importing again creates nothing twice).
 4. Parents and teachers open @sabaquz_bot → /start → "share my number": if the number is in the database, they are linked.
+
+## 15b. For now: real centers on Contabo (sabaq.uz)
+
+Until the server in Uzbekistan (§15a) is ready, real centers run on Contabo in `/opt/apps/sabaq`. ⚠️ This goes against §0: personal data sits on a server abroad. It is the owner's deliberate call (2026-11-18): once the LLC exists and the Uzbek server (Pro-Data) is rented, the database moves there per §15a (backup → restore).
+
+`deploy/server/docker-compose.prod.yml` now holds two stacks, and one **Promote to production** updates both:
+- **live** (`db`, `migrate`, `web`, `worker`, `backup`) on `DOMAIN` (sabaq.uz, `www` → sabaq.uz): real centers, `/signup` open, @sabaquz_bot with the AI assistant. `DEMO_MODE`/`SEED_DEMO` are set to `false` in the compose file, so `.env` cannot turn them on. Backups nightly at 02:30 and before every deploy (`hooks/pre-up`).
+- **demo** (`demo-db`, `demo-migrate`, `demo-web`, `demo-worker`) on `DEMO_DOMAIN` (demo.sabaq.uz): sample data wiped nightly, its own bot, `/signup` sends to sabaq.uz. `sabaq.akbarovlabs.uz` → demo.sabaq.uz.
+
+**Switching over (once):**
+1. DNS: `demo.sabaq.uz` A → 169.58.243.86 (`www.sabaq.uz` exists already). A new @BotFather bot for the demo (optional; empty = no bot on the demo).
+2. On the server: `free -h` (both stacks take about 3.5 GB) and `id -u` (owner of the backup files).
+3. `sudo nano /opt/apps/sabaq/.env` — add `DEMO_DOMAIN=demo.sabaq.uz`, `DEMO_POSTGRES_PASSWORD=` (`openssl rand -hex 24`), `DEMO_AUTH_SECRET=` (`openssl rand -base64 32`), `DEMO_TELEGRAM_BOT_TOKEN=`, `BACKUP_UID=<id -u>`, and `DEMO_ANTHROPIC_API_KEY=` if wanted. Delete the `DEMO_MODE`, `SEED_DEMO`, `MAIN_SITE_URL`, `DEMO_URL` and `APP_URL` lines (the compose file sets them now). `DOMAIN=sabaq.uz`, `POSTGRES_PASSWORD`, `AUTH_SECRET`, `TELEGRAM_BOT_TOKEN` and `SALES_AGENT=true` stay.
+4. Put the new compose file and the hook on the server (§15 "Changing the server's compose file"); for the hook, on the Mac `git show origin/main:deploy/hooks/pre-up | ssh sarvar@169.58.243.86 'cat > /tmp/sabaq-pre-up'`, on the server `sudo install -d -m 755 -o root -g root /opt/apps/sabaq/hooks` and `sudo install -m 755 -o root -g root /tmp/sabaq-pre-up /opt/apps/sabaq/hooks/pre-up`.
+5. Actions → **Promote to production**. `db` starts empty on the new `live_pgdata` volume; the demo seeds itself.
+6. Check: `sabaq.uz/api/health`, the form at `sabaq.uz/signup`, `www.sabaq.uz` → sabaq.uz, `demo.sabaq.uz/demo`, `sabaq.akbarovlabs.uz` → demo.sabaq.uz, `sudo docker logs sabaq-backup-1`.
+7. After a week, delete the old demo database: `sudo docker volume rm sabaq_pgdata` (it holds the old demo and the test sales chats).
+
+**Running a script on the server** (open a center, platform admin, password reset):
+```bash
+cd /opt/apps/sabaq && TAG=$(sudo docker inspect -f '{{.Config.Image}}' sabaq-web-1 | sed 's/.*://')
+sudo IMAGE_TAG=$TAG docker compose -f docker-compose.prod.yml run --rm migrate npx tsx scripts/create-owner.ts --center "<name>" --slug <slug> --name "<owner>" --phone <phone>
+```
+Platform admin: first an account for yourself (e.g. via `sabaq.uz/signup`), then the same way `scripts/platform-admin.ts grant <phone>`. What to collect for the first center and the steps: §15a D.
+
+**Backups:** `/opt/apps/sabaq/backups/lms-*.dump`, 14 days. By hand: `sudo docker exec sabaq-backup-1 backup`. Off the server (lose the server and the copies go with it), daily from the Mac: `rsync -av sarvar@169.58.243.86:/opt/apps/sabaq/backups/ ~/sabaq-backups/` (the files belong to `BACKUP_UID`, no sudo needed). Restore: the steps in `deploy/restore.sh`, with containers `sabaq-db-1`, `sabaq-web-1`, `sabaq-worker-1`. A backup older than 26 hours sends an alert to `OPS_TELEGRAM_CHAT_ID`.

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# deploy-app runs this as root in /opt/apps/<app> before every deploy (Reads repo, deploy/server/deploy-app):
+# a dump of the live database first, so a bad migration can be undone with deploy/restore.sh's steps.
+# Stacks without a running `backup` service (staging, the very first deploy) skip it.
+set -euo pipefail
+if docker compose -f "$COMPOSE_FILE" ps --status running --services 2>/dev/null | grep -qx backup; then
+  echo "pre-up: dumping the live database"
+  docker compose -f "$COMPOSE_FILE" exec -T backup backup
+else
+  echo "pre-up: no running backup service, no dump"
+fi
