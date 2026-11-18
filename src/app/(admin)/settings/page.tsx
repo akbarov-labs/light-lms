@@ -55,6 +55,15 @@ export default async function CenterSettings() {
           <Field label={t("settings.reportCardsDay")}><Input type="number" min={1} max={28} name="reportCardsDay" defaultValue={s.reportCards.sendDay} /></Field>
         </div>
       </Card>
+      <Card title={t("settings.homework")}>
+        <p className="mb-3 text-sm text-zinc-500">{t("settings.homeworkHint")}</p>
+        <div className="grid items-end gap-3 sm:grid-cols-2">
+          <Checkbox name="homeworkEnabled" label={t("settings.homeworkEnabled")} defaultChecked={s.homework.enabled} />
+          <Field label={t("settings.homeworkDirectFromGrade")} hint={t("settings.homeworkDirectHint")}>
+            <Input type="number" min={1} max={12} name="homeworkDirectFromGrade" defaultValue={s.homework.directFromGrade} />
+          </Field>
+        </div>
+      </Card>
       <Card title={t("settings.expenseCategories")}>
         <Field hint={t("expenses.categoriesHint")}><Textarea name="expenseCategories" rows={6} defaultValue={s.expenseCategories.join("\n")} /></Field>
       </Card>

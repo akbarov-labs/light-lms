@@ -35,6 +35,9 @@ export async function StudentForm({ ctx, student, prefill }: { ctx: Ctx; student
               <option value="F">{t("gender.F")}</option>
             </Select>
           </Field>
+          <Field label={t("students.schoolGrade")} hint={t("students.schoolGradeHint")}>
+            <Input type="number" name="schoolGrade" min={1} max={12} inputMode="numeric" defaultValue={student?.schoolGrade ?? ""} />
+          </Field>
           <Field label={t("common.branch")}>
             <Select name="branchId" defaultValue={student?.branchId ?? ctx.activeBranchId ?? branches[0]?.id}>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}

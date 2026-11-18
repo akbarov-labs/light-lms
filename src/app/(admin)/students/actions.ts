@@ -7,7 +7,7 @@ import { runAction, type ActionState } from "@/lib/action";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { assertBranch, assertFamilyAccess, assertStudentAccess } from "@/lib/ctx";
-import { formObject, zBool, zId, zOptDate, zOptId, zOptPhone, zOptStr, zPhone, zStr, zTags } from "@/lib/forms";
+import { formObject, zBool, zId, zOptDate, zOptId, zOptInt, zOptPhone, zOptStr, zPhone, zStr, zTags } from "@/lib/forms";
 import { UserError } from "@/lib/user-error";
 import { fromISODate, todayISO } from "@/lib/dates";
 import { enrollStudent } from "@/lib/services/enrollments";
@@ -20,6 +20,7 @@ const studentFields = {
   phone: zOptPhone,
   birthDate: zOptDate,
   gender: z.preprocess((v) => (v === "" ? undefined : v), z.enum(["M", "F"]).optional()),
+  schoolGrade: zOptInt(1, 12),
   source: zOptStr,
   tags: zTags,
   notes: zOptStr,
@@ -79,6 +80,7 @@ export async function updateStudentAction(_: ActionState, fd: FormData): Promise
           phone: f.phone ?? null,
           birthDate: f.birthDate ? fromISODate(f.birthDate) : null,
           gender: f.gender ?? null,
+          schoolGrade: f.schoolGrade ?? null,
           source: f.source ?? null,
           tags: f.tags,
           notes: f.notes ?? null,

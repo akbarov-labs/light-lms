@@ -5,26 +5,16 @@ import { z } from "zod";
 import { runAction, type ActionState } from "@/lib/action";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { assertBranch, type Ctx } from "@/lib/ctx";
+import { assertBranch } from "@/lib/ctx";
 import { formObject, zDate, zId, zOptStr, zStr, zTime } from "@/lib/forms";
 import { UserError } from "@/lib/user-error";
 import { fromISODate, toISODate } from "@/lib/dates";
 import { saveAttendance, type AttendanceRow, type AttendanceStatus } from "@/lib/services/attendance";
-import { assertNoLessonClash } from "@/lib/services/lessons";
+import { assertNoLessonClash, lessonFor } from "@/lib/services/lessons";
 import { syncGroup } from "@/lib/billing/sync";
 import { teacherWhere } from "@/lib/queries/staff";
 
 const STATUSES = ["PRESENT", "ABSENT", "LATE", "EXCUSED"] as const;
-
-/** Staff with groups.edit may touch any lesson in their branches; a teacher only their own. */
-async function lessonFor(ctx: Ctx, lessonId: string, teacherAllowed: boolean) {
-  const lesson = await db.lesson.findUnique({ where: { id: lessonId }, include: { group: { select: { centerId: true, branchId: true, teacherId: true } } } });
-  if (!lesson || lesson.group.centerId !== ctx.centerId) throw new UserError("error.notFound");
-  const isOwnTeacher = ctx.isTeacher && (lesson.teacherId === ctx.userId || lesson.group.teacherId === ctx.userId);
-  if (ctx.can("groups.edit") && (!ctx.branchIds || ctx.branchIds.includes(lesson.group.branchId))) return { lesson, asTeacher: false };
-  if (teacherAllowed && isOwnTeacher) return { lesson, asTeacher: true };
-  throw new UserError("error.forbidden");
-}
 
 function readAttendanceRows(fd: FormData): AttendanceRow[] {
   return fd.getAll("studentId").map((v) => {
