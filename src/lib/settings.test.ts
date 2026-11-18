@@ -17,6 +17,7 @@ const defaults = {
   reportCards: { autoSend: false, sendDay: 3 },
   sms: { payment: false, reminder: true, debt: true, absence: false, trial: true, reportCard: false, examResult: false, onlyWithoutTelegram: true },
   agent: { enabled: false, rules: "", monthlyTokenCap: 5_000_000 },
+  homework: { enabled: false, directFromGrade: 9 },
 };
 
 describe("readSettings (Center.settings JSON)", () => {
@@ -31,6 +32,12 @@ describe("readSettings (Center.settings JSON)", () => {
     expect(readSettings(undefined)).toEqual(defaults);
     expect(readSettings(null)).toEqual(defaults);
     expect(readSettings({})).toEqual(defaults);
+  });
+
+  it("keeps homework off by default; a broken homework block does not reset other settings", () => {
+    expect(readSettings({ homework: { enabled: true } }).homework).toEqual({ enabled: true, directFromGrade: 9 });
+    expect(readSettings({ homework: { enabled: true, directFromGrade: 6 } }).homework).toEqual({ enabled: true, directFromGrade: 6 });
+    expect(readSettings({ trialLessons: 2, homework: { directFromGrade: 40 } })).toEqual({ ...defaults, trialLessons: 2 });
   });
 
   it("fills nested notify defaults when notify is partial or empty", () => {

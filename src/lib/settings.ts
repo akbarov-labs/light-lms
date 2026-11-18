@@ -75,6 +75,18 @@ export const centerSettingsSchema = z.object({
     })
     .prefault({})
     .catch(() => ({ enabled: false, rules: "", monthlyTokenCap: 5_000_000 })),
+  /**
+   * Homework (pilot, HANDOFF §2 lists it as a bet to validate): the teacher's answer key per lesson,
+   * students answer in the bot, code grades. Off by default: most centers use Telegram groups for it.
+   */
+  homework: z
+    .object({
+      enabled: z.boolean().default(false),
+      /** school grade from which the student hears about homework directly; below it the parents do */
+      directFromGrade: z.number().int().min(1).max(12).default(9),
+    })
+    .prefault({})
+    .catch(() => ({ enabled: false, directFromGrade: 9 })),
 });
 
 export type CenterSettings = z.infer<typeof centerSettingsSchema>;

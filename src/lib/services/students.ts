@@ -17,6 +17,8 @@ export interface NewStudent {
   phone?: string | null;
   birthDate?: ISODate | null;
   gender?: "M" | "F" | null;
+  /** school class 1–11 (homework routing) */
+  schoolGrade?: number | null;
   source?: string | null;
   tags?: string[];
   notes?: string | null;
@@ -66,6 +68,7 @@ export async function createStudentWithFamily(tx: Tx, a: StudentActor, s: NewStu
       phone: s.phone ?? null,
       birthDate: s.birthDate ? fromISODate(s.birthDate) : null,
       gender: s.gender ?? null,
+      schoolGrade: s.schoolGrade ?? null,
       source: s.source ?? null,
       tags: s.tags ?? [],
       notes: s.notes ?? null,

@@ -11,9 +11,12 @@ import { ActionForm, Modal, ModalForm, SubmitButton } from "@/components/client"
 import { AttendanceForm } from "@/components/attendance-form";
 import { cancelLessonAction, rescheduleLessonAction, restoreLessonAction, saveAttendanceAction, substituteAction } from "../actions";
 import { listTeachers } from "@/lib/queries/staff";
+import { lessonHomework } from "@/lib/services/homework";
+import { HomeworkPanel } from "@/components/homework-panel";
 
-export default async function LessonPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function LessonPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ hw?: string }> }) {
   const { id } = await params;
+  const { hw } = await searchParams;
   const ctx = await requireStaff();
   const { t } = ctx;
   const lesson = await db.lesson.findUnique({
@@ -22,12 +25,15 @@ export default async function LessonPage({ params }: { params: Promise<{ id: str
   });
   if (!lesson || lesson.group.centerId !== ctx.centerId || !canAccessBranch(ctx, lesson.group.branchId)) notFound();
   const date = toISODate(lesson.date);
-  const [rows, teachers, rooms] = await Promise.all([
+  const homeworkOn = ctx.settings.homework.enabled;
+  const [rows, teachers, rooms, homework] = await Promise.all([
     lessonRoster(id),
     listTeachers(ctx.centerId),
     db.room.findMany({ where: { branchId: lesson.group.branchId, archivedAt: null }, orderBy: { name: "asc" } }),
+    homeworkOn ? lessonHomework(lesson) : null,
   ]);
   const canEdit = ctx.can("groups.edit");
+  const ownTeacher = ctx.isTeacher && (lesson.teacherId === ctx.userId || lesson.group.teacherId === ctx.userId);
   const future = date > todayISO();
   return (
     <>
@@ -117,6 +123,21 @@ export default async function LessonPage({ params }: { params: Promise<{ id: str
           disabled={lesson.status === "CANCELLED" || future || !canEdit}
         />
       </Card>
+      {homework && (
+        <div className="mt-4">
+          <HomeworkPanel
+            t={t}
+            lessonId={id}
+            set={homework.set}
+            due={homework.due}
+            canEdit={canEdit || ownTeacher}
+            lessonCancelled={lesson.status === "CANCELLED"}
+            showAll={hw === "all"}
+            path={`/lessons/${id}`}
+            directFromGrade={ctx.settings.homework.directFromGrade}
+          />
+        </div>
+      )}
     </>
   );
 }

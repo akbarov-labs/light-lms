@@ -7,14 +7,17 @@ import { attendanceLabels, lessonRoster } from "@/lib/roster";
 import { AttendanceForm } from "@/components/attendance-form";
 import { Badge } from "@/components/ui";
 import { saveAttendanceAction } from "@/app/(admin)/lessons/actions";
+import { lessonHomework } from "@/lib/services/homework";
+import { HomeworkPanel } from "@/components/homework-panel";
 
-export default async function TeacherLesson({ params }: { params: Promise<{ id: string }> }) {
+export default async function TeacherLesson({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ hw?: string }> }) {
   const { id } = await params;
+  const { hw } = await searchParams;
   const ctx = await requireCtx();
   const { t } = ctx;
   const lesson = await db.lesson.findUnique({ where: { id }, include: { group: true, room: true } });
   if (!lesson || lesson.group.centerId !== ctx.centerId || (lesson.teacherId !== ctx.userId && lesson.group.teacherId !== ctx.userId && !(ctx.can("groups.edit") && canAccessBranch(ctx, lesson.group.branchId)))) notFound();
-  const rows = await lessonRoster(id);
+  const [rows, homework] = await Promise.all([lessonRoster(id), ctx.settings.homework.enabled ? lessonHomework(lesson) : null]);
   const date = toISODate(lesson.date);
   return (
     <div className="space-y-4">
@@ -36,6 +39,19 @@ export default async function TeacherLesson({ params }: { params: Promise<{ id: 
         disabled={lesson.status === "CANCELLED" || date > todayISO()}
         stickyClass="bottom-[76px]"
       />
+      {homework && (
+        <HomeworkPanel
+          t={t}
+          lessonId={id}
+          set={homework.set}
+          due={homework.due}
+          canEdit
+          lessonCancelled={lesson.status === "CANCELLED"}
+          showAll={hw === "all"}
+          path={`/t/lessons/${id}`}
+          directFromGrade={ctx.settings.homework.directFromGrade}
+        />
+      )}
     </div>
   );
 }

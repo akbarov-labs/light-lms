@@ -15,6 +15,7 @@ import { createResetCodeForChat } from "@/lib/auth/password";
 import { B, buttonKey } from "./texts";
 import { CANCEL, PICK, agentOnCancel, agentOnContact, agentOnPick, agentOnRestart, agentOnStart, agentOnText } from "./agent";
 import { answerFromTelegram } from "@/lib/agent/service";
+import { HOMEWORK_CB, homeworkMenu, homeworkOnCallback, homeworkOnText } from "./homework";
 import { salesOnContact, salesOnStart, salesOnTeamReply, salesOnText } from "./sales";
 import { appUrl, telegramRichMessages } from "@/lib/env";
 import { richRefused } from "../notifications";
@@ -22,6 +23,7 @@ import {
   attendanceReply,
   balanceText,
   centerText,
+  chatHomeworkOn,
   chatLocale,
   chatRoles,
   linkChat,
@@ -65,6 +67,7 @@ async function menu(chatId: string, l: Locale): Promise<Keyboard> {
   const roles = await chatRoles(chatId);
   const kb = new Keyboard();
   if (roles.family) kb.text(B.balanceBtn[l]).text(B.scheduleBtn[l]).row().text(B.attendanceBtn[l]).text(B.paymentsBtn[l]).text(B.centerBtn[l]).row();
+  if (roles.family && (await chatHomeworkOn(chatId))) kb.text(B.homeworkBtn[l]).row();
   if (roles.teacher) kb.text(B.todayBtn[l]).text(B.salaryBtn[l]).text(B.weekBtn[l]).row();
   if (roles.owner) kb.text(B.reportBtn[l]).row();
   return kb.resized();
@@ -186,6 +189,9 @@ export function createBot(token: string): Bot {
       case "centerBtn":
         await ctx.reply(await centerText(chatId, l), html);
         return;
+      case "homeworkBtn":
+        await homeworkMenu(ctx, chatId, l);
+        return;
       case "todayBtn": {
         const teacher = await teacherFor(chatId);
         if (!teacher) return void (await ctx.reply(B.forbidden[l]));
@@ -223,6 +229,8 @@ export function createBot(token: string): Bot {
         return;
       }
       default:
+        // a typed answer to the homework question this chat is on
+        if (await homeworkOnText(ctx, ctx.message.text, l)) return;
         if (await agentOnText(ctx, ctx.message.text, l)) return;
         {
           const roles = await chatRoles(chatId);
@@ -236,6 +244,8 @@ export function createBot(token: string): Bot {
   bot.callbackQuery(PICK, async (ctx) => agentOnPick(ctx, ctx.match[1], await localeOf(ctx)));
   // the agent's "cancel this trial?" buttons: the booking is cancelled only here, by the person's press
   bot.callbackQuery(CANCEL, async (ctx) => agentOnCancel(ctx, ctx.match[1] === "y", ctx.match[2], await localeOf(ctx)));
+  // homework answers (pilot): open / letter / go to question / summary
+  bot.callbackQuery(HOMEWORK_CB, async (ctx) => homeworkOnCallback(ctx, ctx.match, await localeOf(ctx)));
 
   bot.on("callback_query:data", async (ctx) => {
     const chatId = String(ctx.chat?.id ?? "");

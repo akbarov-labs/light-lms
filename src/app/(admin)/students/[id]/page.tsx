@@ -116,6 +116,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               [t("common.phone"), formatPhone(student.phone)],
               [t("students.birthDate"), formatDate(student.birthDate)],
               [t("students.gender"), student.gender ? t(`gender.${student.gender as "M"}`) : "—"],
+              [t("students.schoolGrade"), student.schoolGrade ?? "—"],
               [t("common.branch"), student.branch?.name ?? "—"],
               [t("common.source"), student.source ?? "—"],
               [t("common.createdAt"), formatDate(student.createdAt)],

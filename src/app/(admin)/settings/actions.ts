@@ -58,6 +58,8 @@ const centerSchema = z.object({
   uzumPassword: zOptStr,
   reportCardsAuto: zBool,
   reportCardsDay: zOptInt(1, 28),
+  homeworkEnabled: zBool,
+  homeworkDirectFromGrade: zOptInt(1, 12),
   smsLogin: zOptStr,
   smsPassword: zOptStr,
   smsFrom: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().trim().max(11).optional()),
@@ -117,6 +119,7 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
       notify: Object.fromEntries(NOTIFY.map((k) => [k, fd.get(`notify.${k}`) === "on"])) as typeof old.notify,
       paymeFiscal,
       reportCards: { autoSend: f.reportCardsAuto, sendDay: f.reportCardsDay ?? old.reportCards.sendDay },
+      homework: { enabled: f.homeworkEnabled, directFromGrade: f.homeworkDirectFromGrade ?? old.homework.directFromGrade },
       sms: { ...Object.fromEntries(SMS_EVENTS.map((k) => [k, fd.get(`sms.${k}`) === "on"])), onlyWithoutTelegram: fd.get("sms.onlyWithoutTelegram") === "on" } as typeof old.sms,
     };
     await db
