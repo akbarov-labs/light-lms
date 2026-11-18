@@ -4,8 +4,10 @@ import cron, { type ScheduledTask } from "node-cron";
 import type { Bot } from "grammy";
 import { db } from "@/lib/db";
 import { TZ } from "@/lib/dates";
-import { createBot, miniAppUrl } from "./bot";
-import { processNotifications, telegramSender, type Sender } from "./notifications";
+import { ALLOWED_UPDATES, createBot, miniAppUrl } from "./bot";
+import { BotPool } from "./bot/pool";
+import { managedBotsOn } from "@/lib/managed-bots/service";
+import { processNotifications, routedSender, telegramSender, type Sender } from "./notifications";
 import { errText, sleep } from "./util";
 import { dailyReport, jobProblems, nightly, reminders, reportCardsJob, teacherReminders, type JobResult } from "./jobs";
 import { lockKeyFor, withJobLock } from "./job-lock";
@@ -30,6 +32,7 @@ const DRAIN_MS = 10_000;
 
 let stopping = false;
 let bot: Bot | null = null;
+let pool: BotPool | null = null;
 const tasks: ScheduledTask[] = [];
 const timers: NodeJS.Timeout[] = [];
 const queueAbort = new AbortController();
@@ -96,7 +99,7 @@ async function shutdown(signal: string) {
   await Promise.allSettled(tasks.map((t) => t.stop()));
   queueAbort.abort(); // the batch stops after the message in flight and gives the rest back to the queue
   const drained = await Promise.race([
-    Promise.allSettled([bot?.stop(), ...queueRuns.values()]).then(() => true),
+    Promise.allSettled([bot?.stop(), pool?.stopAll(), ...queueRuns.values()]).then(() => true),
     sleep(DRAIN_MS).then(() => false),
   ]);
   if (!drained) log(`gave up waiting after ${DRAIN_MS}ms (unsent rows return to the queue after 10 min)`);
@@ -114,10 +117,22 @@ async function main() {
   const token = telegramBotToken();
   let send: Sender | null = null;
   if (token) {
-    const b = createBot(token);
+    // centers' own bots (managed bots): polled next to the shared bot, which manages them
+    const p = managedBotsOn() ? new BotPool(log) : null;
+    pool = p;
+    const b = createBot(token, { onManagedBot: (r) => p?.onManagedBot(r) });
     bot = b;
-    send = telegramSender(b.api);
-    b.start({ drop_pending_updates: true, onStart: (me) => log(`bot @${me.username} polling`) }).catch((e) => log("bot stopped", e));
+    // a row goes through the center's own bot when the person started it, else through the shared bot
+    send = routedSender(telegramSender(b.api));
+    b.start({ drop_pending_updates: true, allowed_updates: [...ALLOWED_UPDATES], onStart: (me) => {
+      log(`bot @${me.username} polling`);
+      if (p && !me.can_manage_bots) log("TELEGRAM_MANAGED_BOTS=true but Bot Management Mode is off for this bot in @BotFather — centers can't create bots");
+    } }).catch((e) => log("bot stopped", e));
+    if (p) {
+      void p.reconcile();
+      timers.push(setInterval(() => void p.reconcile(), 60_000));
+      log("managed bots on — centers' own bots are polled by this worker");
+    }
     // the chat menu button opens the Mini App for everyone (unlinked chats are told to share their phone)
     const app = miniAppUrl();
     if (app) b.api.setChatMenuButton({ menu_button: { type: "web_app", text: "📱 Ilova", web_app: { url: app } } }).then(() => log(`mini app menu button → ${app}`), (e) => log("mini app menu button failed", e));

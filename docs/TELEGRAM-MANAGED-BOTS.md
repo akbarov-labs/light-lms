@@ -1,7 +1,42 @@
-# A center's own Telegram bot (managed bots): design note (not built)
+# A center's own Telegram bot (managed bots)
 
 *2026-11-18. Checked against https://core.telegram.org/bots/api, https://core.telegram.org/bots/features and
-the Bot API changelog (9.6, 10.0, 10.4). Design only: no code yet.*
+the Bot API changelog (9.6, 10.0, 10.4). **Built** behind `TELEGRAM_MANAGED_BOTS=false` (phases 1 and 2
+below), covered by unit and DB tests; **not yet tried with a real managed bot** — step 1 of "Rollout" is
+still to do.*
+
+## Where it lives
+
+| Part | File |
+|---|---|
+| Token cache, Bot API calls (`getManagedBotToken`, access settings) | `src/lib/managed-bots/api.ts` |
+| Creation codes, `managed_bot` updates, status changes, routing, "tell families" | `src/lib/managed-bots/service.ts` |
+| Center scope (AsyncLocalStorage) read by `validLinks` and `activeAgentChat` | `src/lib/managed-bots/scope.ts` |
+| Bot handlers (`createBot(token, { scope })`, `/start nb_<code>`, `managed_bot`) | `src/worker/bot/index.ts` |
+| Polling one bot per center | `src/worker/bot/pool.ts` |
+| Choosing the bot per queued row, 403 fallback, `sentVia` | `src/worker/notifications.ts` (`routedSender`) |
+| Settings → Telegram bot; platform allow-list | `src/app/(admin)/settings/telegram/`, `src/app/(admin)/platform/` |
+| Mini App `?b=<bot id>` | `src/app/api/tg/data/route.ts`, `src/app/tg/mini-app.tsx` |
+| Tests | `src/lib/managed-bots/managed-bots.test.ts`, `src/worker/notifications.test.ts`, `tests/managed-bots.test.ts` |
+
+**To turn it on:** set `TELEGRAM_MANAGED_BOTS=true` for web and worker; turn on "Bot Management Mode" for
+the shared bot in the @BotFather Mini App (the worker logs a warning when `getMe.can_manage_bots` is false);
+a platform admin allows the center on `/platform` ("O'z boti"); the center's OWNER, linked in the shared bot,
+presses "Bot yaratish" in Settings → Telegram bot.
+
+### Built differently from the design below
+
+- **Center disabled or allow-list removed** doesn't change the bot's status: the worker stops polling it and
+  routing skips it, and it comes back by itself when the center is enabled again. PAUSED is only the owner's
+  choice in Settings. "Resume" goes straight to ACTIVE.
+- **429 from a center bot** pauses the whole Telegram batch, as a 429 from the shared bot does; there is no
+  backoff per bot yet.
+- **Owner change** is recorded (audit `bot.owner`) but nobody is notified in the app yet. **A gone bot** shows
+  its reason in Settings and sends an ops alert; no in-app notice to the owner.
+- Set up on start: commands and the Mini App menu button. Descriptions aren't set (the owner can set them
+  in BotFather).
+- `npm run job:notifications` uses the same routing as the worker, so a manual run can't unlink a chat
+  that only a center bot reaches.
 
 ## The problem
 

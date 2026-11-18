@@ -13,7 +13,9 @@ import { UserError } from "@/lib/user-error";
 import { ownerReport } from "../jobs";
 import { createResetCodeForChat } from "@/lib/auth/password";
 import { B, buttonKey } from "./texts";
-import { CANCEL, PICK, agentOnCancel, agentOnContact, agentOnPick, agentOnRestart, agentOnStart, agentOnText } from "./agent";
+import { CANCEL, PICK, agentOnCancel, agentOnCenterStart, agentOnContact, agentOnPick, agentOnRestart, agentOnStart, agentOnText } from "./agent";
+import { withBotScope, type BotScope } from "@/lib/managed-bots/scope";
+import { CODE_PREFIX, markBotBlocked, markBotChat, onManagedBotUpdate, openBotRequest, suggestedUsername, type UpdateResult } from "@/lib/managed-bots/service";
 import { answerFromTelegram } from "@/lib/agent/service";
 import { appUrl, telegramRichMessages } from "@/lib/env";
 import { richRefused } from "../notifications";
@@ -33,10 +35,21 @@ import {
 
 const CYCLE: AttendanceStatus[] = ["PRESENT", "ABSENT", "LATE", "EXCUSED"];
 
-/** The Mini App URL, or null: Telegram opens Mini Apps only over HTTPS. */
-export function miniAppUrl(): string | null {
+/** The Mini App URL, or null: Telegram opens Mini Apps only over HTTPS. A center's own bot adds ?b=<bot id>
+ * so /api/tg/data checks the init data with that bot's token and shows that center only. */
+export function miniAppUrl(botId?: string): string | null {
   const base = appUrl();
-  return base.startsWith("https://") ? `${base}/tg` : null;
+  return base.startsWith("https://") ? `${base}/tg${botId ? `?b=${botId}` : ""}` : null;
+}
+
+/** Update types every bot asks for: the default set may leave out managed_bot (Bot API 9.6). */
+export const ALLOWED_UPDATES = ["message", "callback_query", "my_chat_member", "managed_bot"] as const;
+
+export interface BotOptions {
+  /** A center's own bot: everything it shows and does is that center's (null = the shared bot). */
+  scope?: BotScope | null;
+  /** Shared bot only: a managed bot was attached, or its token or owner changed (the pool restarts it). */
+  onManagedBot?: (r: UpdateResult) => void;
 }
 /** Unsaved attendance per chat + lesson (single worker process, so memory is enough). */
 const drafts = new Map<string, Map<string, AttendanceStatus>>();
@@ -76,25 +89,78 @@ function rosterKeyboard(lessonId: string, rows: { studentId: string; name: strin
   return kb.text(B.save[l], `S:${lessonId}`);
 }
 
+/** Shared bot, /start nb_<code>: the OWNER checked, Telegram's "create a bot" button is shown. */
+async function startBotCreation(ctx: Context, code: string, l: Locale): Promise<void> {
+  if (!ctx.chat || ctx.chat.type !== "private") return;
+  const r = await openBotRequest(code, String(ctx.chat.id));
+  if (!r.ok) {
+    const text = { expired: B.nbExpired, notOwner: B.nbNotOwner, hasBot: B.nbHasBot, off: B.nbOff }[r.reason][l];
+    await ctx.reply(text);
+    return;
+  }
+  const button = { text: B.nbButton[l], request_managed_bot: { request_id: Math.floor(Math.random() * 2 ** 31), suggested_name: r.centerName.slice(0, 64), suggested_username: suggestedUsername(r.slug) } };
+  await ctx.reply(B.nbAsk[l].replace("{center}", esc(r.centerName)), { parse_mode: "HTML", reply_markup: { keyboard: [[button]], resize_keyboard: true, one_time_keyboard: true } });
+}
+
 async function teacherFor(chatId: string) {
   return (await chatRoles(chatId)).teacher;
 }
 
-export function createBot(token: string): Bot {
+export function createBot(token: string, opts: BotOptions = {}): Bot {
   const bot = new Bot(token);
+  const scope = opts.scope ?? null;
+
+  // every handler below runs in this bot's scope: a center's own bot reads that center's data only
+  bot.use((ctx, next) =>
+    withBotScope(scope, async () => {
+      if (scope && ctx.chat?.type === "private") {
+        const member = ctx.myChatMember?.new_chat_member.status;
+        if (member === "kicked") await markBotBlocked(scope.botId, String(ctx.chat.id));
+        else await markBotChat(scope.botId, String(ctx.chat.id)).catch((e) => console.error("[bot] bot chat", e));
+      }
+      await next();
+    }),
+  );
+
+  if (!scope) {
+    // Telegram reports a created managed bot (and later token/owner changes) to the shared bot
+    bot.on("managed_bot", async (ctx) => {
+      const r = await onManagedBotUpdate(ctx.update.managed_bot);
+      console.log(`[bot] managed_bot ${r.kind} bot=${ctx.update.managed_bot.bot.id}`);
+      opts.onManagedBot?.(r);
+    });
+    // the service message in the owner's chat may come before or after the update: either one attaches
+    bot.on("message:managed_bot_created", async (ctx) => {
+      const l = await localeOf(ctx);
+      const created = ctx.message.managed_bot_created.bot;
+      let row = await db.centerBot.findUnique({ where: { botId: String(created.id) } });
+      if (!row) {
+        const r = await onManagedBotUpdate({ user: ctx.from, bot: created });
+        console.log(`[bot] managed_bot_created ${r.kind} bot=${created.id}`);
+        opts.onManagedBot?.(r);
+        row = r.kind === "attached" ? r.bot : null;
+      }
+      const ok = row && row.ownerTgId === String(ctx.from.id);
+      await ctx.reply(ok ? B.nbReady[l].replace("{bot}", row!.username) : B.nbIgnored[l], { reply_markup: { remove_keyboard: true } });
+    });
+  }
 
   bot.command("start", async (ctx) => {
     const l = await localeOf(ctx);
-    // t.me/<bot>?start=<center-slug>: the center's AI lead agent (when that center switched it on)
-    if (ctx.match && (await agentOnStart(ctx, ctx.match, l))) return;
     const chatId = String(ctx.chat.id);
+    if (!scope && ctx.match.startsWith(CODE_PREFIX)) return void (await startBotCreation(ctx, ctx.match.slice(CODE_PREFIX.length), l));
+    // t.me/<bot>?start=<center-slug>: the center's AI lead agent (when that center switched it on); a center's
+    // own bot ignores payloads: it is that center's bot, and a slug must not pull in another center
+    if (!scope && ctx.match && (await agentOnStart(ctx, ctx.match, l))) return;
     const roles = await chatRoles(chatId);
     if (roles.family || roles.teacher || roles.owner) {
       await ctx.reply(B.linked[l], { reply_markup: await menu(chatId, l) });
       return;
     }
+    // a center's own bot: anyone else talks to that center's AI agent (when it is on)
+    if (scope && (await agentOnCenterStart(ctx, scope.centerId, l))) return;
     // a stranger already talking to a center's agent: plain /start goes on with that conversation
-    if (await agentOnRestart(ctx, l)) return;
+    if (!scope && (await agentOnRestart(ctx, l))) return;
     await ctx.reply(B.welcome[l], { reply_markup: new Keyboard().requestContact(B.shareContact[l]).resized().oneTime() });
   });
 
@@ -125,13 +191,16 @@ export function createBot(token: string): Bot {
     if (await agentOnContact(ctx, phone, l)) return;
     const chatId = String(ctx.chat.id);
     const linked = phone ? await linkChat(chatId, phone, l) : { guardians: 0, students: 0, staff: [] };
-    if (!linked.guardians && !linked.students && linked.staff.length === 0) {
+    // links are global (one person, one chat id in every bot); a center's own bot only counts its center
+    const roles = scope ? await chatRoles(chatId) : null;
+    const found = roles ? roles.family || !!roles.teacher || !!roles.owner : linked.guardians || linked.students || linked.staff.length > 0;
+    if (!found) {
       await ctx.reply(B.notFound[l], { reply_markup: { remove_keyboard: true } });
       return;
     }
     await ctx.reply(B.linked[l], { reply_markup: await menu(chatId, l) });
-    const app = miniAppUrl();
-    if (app && (linked.guardians || linked.students)) {
+    const app = miniAppUrl(scope?.botId);
+    if (app && (roles ? roles.family : linked.guardians || linked.students)) {
       const t = makeT(l);
       await ctx.reply(t("tg.openAppHint"), { reply_markup: new InlineKeyboard().webApp(t("tg.openApp"), app) });
     }

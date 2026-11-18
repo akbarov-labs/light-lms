@@ -4,19 +4,32 @@
 // manual `npm run job:notifications` never pick the same row. A row left in SENDING by a crashed worker is
 // taken back after STALE_LOCK_MIN minutes — the only case where a message can go out twice (sent, then the
 // process died before marking it SENT). That is accepted: losing the message would be worse.
-import type { Api } from "grammy";
+import { Api } from "grammy";
 import type { NotificationChannel } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { telegramRichMessages } from "@/lib/env";
 import { SmsError } from "@/lib/sms/eskiz";
 import { stripTgTime } from "@/lib/messages";
 import { sleep } from "./util";
+import { managedBotToken } from "@/lib/managed-bots/api";
+import { markBotBlocked, reachableByCenterBot, routeBotFor } from "@/lib/managed-bots/service";
 
 /**
  * Deliver one queued row; `chatId` is the Telegram chat, or the phone for an SMS row. `meta.rich` is the
- * row's optional rich-message HTML (Telegram only; SMS senders ignore it).
+ * row's optional rich-message HTML (Telegram only; SMS senders ignore it). Returns the center bot's id when
+ * a center's own bot delivered it (routedSender), nothing otherwise.
  */
-export type Sender = (chatId: string, text: string, meta: { centerId: string; rich?: string | null }) => Promise<void>;
+export type Sender = (chatId: string, text: string, meta: { centerId: string; rich?: string | null }) => Promise<string | void>;
+
+/** A failure the sender already classified (e.g. "don't unlink: a center bot still reaches this person"). */
+export class DeliveryError extends Error {
+  constructor(
+    public kind: "permanent" | "transient",
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 /** One Telegram call may take this long; then it is aborted and retried later (transient), so a hung
  * connection cannot hold the whole batch — and its SENDING rows — until the 10-minute reclaim. */
@@ -70,6 +83,70 @@ export function telegramSender(
   };
 }
 
+/** How routedSender finds and reaches center bots; tests pass their own. */
+export interface BotRouter {
+  /** the center bot to use for this row, or null for the shared bot */
+  route(centerId: string, chatId: string): Promise<string | null>;
+  sender(botId: string): Promise<Sender>;
+  blocked(botId: string, chatId: string): Promise<void>;
+  /** does an ACTIVE center bot still reach this person? */
+  reachable(chatId: string): Promise<boolean>;
+}
+
+const apis = new Map<string, { token: string; send: Sender }>();
+export const defaultRouter: BotRouter = {
+  route: routeBotFor,
+  async sender(botId) {
+    const token = await managedBotToken(botId);
+    const hit = apis.get(botId);
+    if (hit?.token === token) return hit.send;
+    const send = telegramSender(new Api(token));
+    apis.set(botId, { token, send });
+    return send;
+  },
+  blocked: markBotBlocked,
+  reachable: reachableByCenterBot,
+};
+
+/**
+ * Managed bots: a row goes through the center's own bot when the person started it (routeBotFor), else
+ * through the shared bot. 403 / chat not found from the center bot marks it blocked and the shared bot
+ * tries in the same attempt. A 403 from the shared bot unlinks the chat only when no center bot reaches the
+ * person any more: someone who only ever opened a center's bot hasn't blocked us.
+ */
+export function routedSender(shared: Sender, router: BotRouter = defaultRouter, log: (m: string) => void = (m) => console.warn(m)): Sender {
+  return async (chatId, text, meta) => {
+    const botId = await router.route(meta.centerId, chatId).catch((e) => {
+      log(`[notifications] center bot lookup failed, using the shared bot: ${errorText(e)}`);
+      return null;
+    });
+    if (botId) {
+      const send = await router.sender(botId).catch((e) => {
+        log(`[notifications] center bot ${botId} token not available, using the shared bot: ${errorText(e)}`);
+        return null;
+      });
+      if (send) {
+        try {
+          await send(chatId, text, meta);
+          return botId;
+        } catch (e) {
+          if (classifySendError(e).kind !== "gone") throw e;
+          await router.blocked(botId, chatId);
+          log(`[notifications] center bot ${botId} can't reach the chat (${errorText(e)}), using the shared bot`);
+        }
+      }
+    }
+    try {
+      await shared(chatId, text, meta);
+    } catch (e) {
+      if (classifySendError(e).kind === "gone" && (await router.reachable(chatId))) {
+        throw new DeliveryError("permanent", `shared bot: ${errorText(e)} (the person uses a center's own bot; chat kept)`);
+      }
+      throw e;
+    }
+  };
+}
+
 export const MAX_ATTEMPTS = 5;
 export const STALE_LOCK_MIN = 10;
 const GAP_MS: Record<NotificationChannel, number> = { TELEGRAM: 40, SMS: 200 }; // Telegram 25 msg/s, SMS 5/s
@@ -89,7 +166,7 @@ export type SendFailure =
 
 /** Classify a grammY error ({ error_code, description, parameters: { retry_after } }) or any other throw. */
 export function classifySendError(e: unknown): SendFailure {
-  if (e instanceof SmsError) return { kind: e.kind };
+  if (e instanceof SmsError || e instanceof DeliveryError) return { kind: e.kind };
   const err = (e ?? {}) as { error_code?: number; description?: string; parameters?: { retry_after?: number } };
   if (err.error_code === 429) return { kind: "rate", retryAfterS: Math.max(1, Number(err.parameters?.retry_after) || 5) };
   if (err.error_code === 403) return { kind: "gone" };
@@ -191,8 +268,11 @@ export async function processNotifications(
       continue;
     }
     try {
-      await send(n.chatId, n.text, { centerId: n.centerId, rich: n.richText });
-      await db.notification.update({ where: { id: n.id }, data: { status: "SENT", sentAt: new Date(), attempts: n.attempts + 1, error: null, lockedAt: null } });
+      const via = await send(n.chatId, n.text, { centerId: n.centerId, rich: n.richText });
+      await db.notification.update({
+        where: { id: n.id },
+        data: { status: "SENT", sentAt: new Date(), attempts: n.attempts + 1, error: null, lockedAt: null, sentVia: typeof via === "string" ? via : null },
+      });
       res.sent++;
     } catch (e) {
       const why = classifySendError(e);

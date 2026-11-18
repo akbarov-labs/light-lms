@@ -17,6 +17,7 @@ import { enqueue } from "@/lib/notify";
 import { audit } from "@/lib/audit";
 import { latinToCyrillic } from "@/lib/translit";
 import { validLinks } from "@/lib/telegram-links";
+import { scopedCenterId } from "@/lib/managed-bots/scope";
 import { allowedBranches, effectivePerms, type RoleName } from "@/lib/perms";
 import { HISTORY_LIMITS, personTexts, stripThinking, trimHistory, type AgentMessage } from "./history";
 import { AgentToolError, runTurn, type CreateMessage, type TurnUsage } from "./loop";
@@ -70,7 +71,16 @@ function defaultCreate(): CreateMessage {
 /** The center a deep link (?start=<slug>) points at, when its agent may answer. */
 export async function agentCenterBySlug(slug: string): Promise<{ id: string; name: string } | null> {
   if (!anthropicApiKey() || !/^[a-z0-9-]{1,60}$/.test(slug)) return null;
-  const c = await db.center.findUnique({ where: { slug }, select: { id: true, name: true, settings: true, disabledAt: true } });
+  return agentCenter(await db.center.findUnique({ where: { slug }, select: { id: true, name: true, settings: true, disabledAt: true } }));
+}
+
+/** A center's own bot (managed bots): the center is the bot's, no link needed. */
+export async function agentCenterById(id: string): Promise<{ id: string; name: string } | null> {
+  if (!anthropicApiKey()) return null;
+  return agentCenter(await db.center.findUnique({ where: { id }, select: { id: true, name: true, settings: true, disabledAt: true } }));
+}
+
+function agentCenter(c: { id: string; name: string; settings: unknown; disabledAt: Date | null } | null): { id: string; name: string } | null {
   if (!c || c.disabledAt || !readSettings(c.settings).agent.enabled) return null;
   return { id: c.id, name: c.name };
 }
@@ -92,7 +102,9 @@ export async function openAgentChat(centerId: string, chatId: string, now = new 
 /** The conversation a free-text message from this chat belongs to: its most recent one, if not idle. */
 export async function activeAgentChat(chatId: string, now = new Date()): Promise<AgentChat | null> {
   const stale = new Date(now.getTime() - IDLE_RESET_DAYS * 86_400_000);
-  return db.agentChat.findFirst({ where: { chatId, lastMessageAt: { gte: stale } }, orderBy: { lastMessageAt: "desc" } });
+  // in a center's own bot only that center's conversation counts (managed bots)
+  const centerId = scopedCenterId();
+  return db.agentChat.findFirst({ where: { chatId, lastMessageAt: { gte: stale }, ...(centerId ? { centerId } : {}) }, orderBy: { lastMessageAt: "desc" } });
 }
 
 /**

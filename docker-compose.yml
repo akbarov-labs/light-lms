@@ -11,6 +11,8 @@ x-app-env: &app-env
   TELEGRAM_RICH_MESSAGES: ${TELEGRAM_RICH_MESSAGES:-false}
   # lesson times / payment dates shown in the reader's local time (Telegram date_time entities); off by default
   TELEGRAM_DATE_TIME: ${TELEGRAM_DATE_TIME:-false}
+  # a center's own bot through Telegram managed bots (Settings → Telegram bot); off by default
+  TELEGRAM_MANAGED_BOTS: ${TELEGRAM_MANAGED_BOTS:-false}
   # local stack: SMS rows are logged by the worker, never sent to a paid gateway (set false to send)
   SMS_DRY_RUN: ${SMS_DRY_RUN:-true}
   SEED_DEMO: ${SEED_DEMO:-true}

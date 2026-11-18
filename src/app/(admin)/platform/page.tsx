@@ -12,7 +12,8 @@ import { Badge, Card, EmptyState, FilterBar, PageHeader, Pagination, Table, Td, 
 import { Field, Input, Select, Textarea } from "@/components/fields";
 import { Modal, ModalForm, SubmitButton } from "@/components/client";
 import { buttonClass } from "@/components/ui";
-import { setCenterDisabledAction, setCenterPlanAction } from "./actions";
+import { setCenterDisabledAction, setCenterOwnBotAction, setCenterPlanAction } from "./actions";
+import { managedBotsOn } from "@/lib/managed-bots/service";
 import { pageParam } from "@/lib/queries/params";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export default async function PlatformPage({ searchParams }: { searchParams: Pro
   const ctx = await requireCtx();
   if (!ctx.isPlatformAdmin) notFound();
   const { t } = ctx;
+  const botsOn = managedBotsOn();
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const digits = q.replace(/\D/g, "");
@@ -121,6 +123,14 @@ export default async function PlatformPage({ searchParams }: { searchParams: Pro
                     <SubmitButton variant="danger">{t("platform.disable")}</SubmitButton>
                   </ModalForm>
                 );
+                const ownBotForm = (
+                  <ModalForm action={setCenterOwnBotAction} className="space-y-4">
+                    <input type="hidden" name="centerId" value={c.id} />
+                    <input type="hidden" name="allow" value={c.ownBotAllowed ? "0" : "1"} />
+                    <p className="text-sm text-zinc-600">{t("platform.ownBotText")}</p>
+                    <SubmitButton variant={c.ownBotAllowed ? "danger" : "primary"}>{t(c.ownBotAllowed ? "platform.ownBotRevoke" : "platform.ownBotAllow")}</SubmitButton>
+                  </ModalForm>
+                );
                 return (
                   <Tr key={c.id}>
                     <Td className="min-w-[200px]">
@@ -152,6 +162,9 @@ export default async function PlatformPage({ searchParams }: { searchParams: Pro
                     <Td className="whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
                         <Modal label={t("platform.plan")} title={`${t("platform.changePlan")} · ${c.name}`} variant="secondary" size="sm">{planForm}</Modal>
+                        {botsOn && (
+                          <Modal label={`${t("platform.ownBot")}${c.ownBotAllowed ? " ✓" : ""}`} title={`${t("platform.ownBot")} · ${c.name}`} variant="ghost" size="sm">{ownBotForm}</Modal>
+                        )}
                         {!self && (
                           <Modal label={c.disabledAt ? t("platform.enable") : t("platform.disable")} title={c.name} variant="ghost" size="sm">{statusForm}</Modal>
                         )}

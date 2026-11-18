@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backoffMs, classifySendError, richRefused, telegramSender } from "./notifications";
+import { DeliveryError, backoffMs, classifySendError, richRefused, routedSender, telegramSender } from "./notifications";
 
 describe("classifySendError", () => {
   it("429 → rate limit with Telegram's retry_after", () => {
@@ -119,5 +119,69 @@ describe("telegramSender with date_time entities", () => {
     const api = { sendMessage: async () => { n++; throw err; }, sendRichMessage: async () => ({}) };
     await expect(telegramSender(api as never, 1000, { rich: false })("1", "plain", { centerId: "c" })).rejects.toBe(err);
     expect(n).toBe(1);
+  });
+});
+
+describe("routedSender (managed bots)", () => {
+  const tg = (error_code: number, description: string) => Object.assign(new Error(description), { error_code, description });
+  function setup(o: { route?: string | null; centerFails?: unknown; sharedFails?: unknown; reachable?: boolean; tokenFails?: boolean } = {}) {
+    const log: string[] = [];
+    const sent: string[] = [];
+    const blocked: string[] = [];
+    const router = {
+      route: async () => o.route ?? null,
+      sender: async (botId: string) => {
+        if (o.tokenFails) throw tg(400, "Bad Request: bot not found");
+        return async (chatId: string) => {
+          if (o.centerFails) throw o.centerFails;
+          sent.push(`${botId}:${chatId}`);
+        };
+      },
+      blocked: async (botId: string, chatId: string) => void blocked.push(`${botId}:${chatId}`),
+      reachable: async () => o.reachable ?? false,
+    };
+    const shared = async (chatId: string) => {
+      if (o.sharedFails) throw o.sharedFails;
+      sent.push(`shared:${chatId}`);
+    };
+    return { send: routedSender(shared, router, (m) => log.push(m)), sent, blocked, log };
+  }
+  const meta = { centerId: "c1" };
+
+  it("no center bot for this chat → the shared bot, nothing returned", async () => {
+    const s = setup();
+    expect(await s.send("5", "hi", meta)).toBeUndefined();
+    expect(s.sent).toEqual(["shared:5"]);
+  });
+  it("the center bot delivers and its id is returned (Notification.sentVia)", async () => {
+    const s = setup({ route: "777" });
+    expect(await s.send("5", "hi", meta)).toBe("777");
+    expect(s.sent).toEqual(["777:5"]);
+  });
+  it("403 from the center bot → marked blocked, the shared bot sends in the same attempt", async () => {
+    const s = setup({ route: "777", centerFails: tg(403, "Forbidden: bot was blocked by the user") });
+    expect(await s.send("5", "hi", meta)).toBeUndefined();
+    expect(s.blocked).toEqual(["777:5"]);
+    expect(s.sent).toEqual(["shared:5"]);
+  });
+  it("other center bot errors are not hidden behind the shared bot (the queue retries)", async () => {
+    const s = setup({ route: "777", centerFails: tg(429, "Too Many Requests") });
+    await expect(s.send("5", "hi", meta)).rejects.toMatchObject({ error_code: 429 });
+    expect(s.sent).toEqual([]);
+  });
+  it("token not available → the shared bot", async () => {
+    const s = setup({ route: "777", tokenFails: true });
+    await s.send("5", "hi", meta);
+    expect(s.sent).toEqual(["shared:5"]);
+  });
+  it("403 from the shared bot while a center bot still reaches the person → permanent, not 'gone' (no unlink)", async () => {
+    const s = setup({ sharedFails: tg(403, "Forbidden: bot can't initiate conversation with a user"), reachable: true });
+    const e = await s.send("5", "hi", meta).catch((x) => x);
+    expect(e).toBeInstanceOf(DeliveryError);
+    expect(classifySendError(e).kind).toBe("permanent");
+  });
+  it("403 from the shared bot and no center bot → 'gone' as before", async () => {
+    const s = setup({ sharedFails: tg(403, "Forbidden: bot was blocked by the user"), reachable: false });
+    expect(classifySendError(await s.send("5", "hi", meta).catch((x) => x)).kind).toBe("gone");
   });
 });

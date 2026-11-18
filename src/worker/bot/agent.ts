@@ -11,7 +11,7 @@ import type { AgentChat } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { normalizePhone } from "@/lib/phone";
 import type { Locale } from "@/lib/i18n";
-import { MARK, activeAgentChat, agentCenterBySlug, agentNotice, agentText, confirmCancel, handleAgentMessage, openAgentChat, recordPhone, setAgentUsername } from "@/lib/agent/service";
+import { MARK, activeAgentChat, agentCenterById, agentCenterBySlug, agentNotice, agentText, confirmCancel, handleAgentMessage, openAgentChat, recordPhone, setAgentUsername } from "@/lib/agent/service";
 import { NOT_PERSON, pickedGroupMarker } from "@/lib/agent/markers";
 
 /** Callback data of a group card's "book a trial" button. */
@@ -91,6 +91,23 @@ export async function agentOnStart(ctx: Context, payload: string, l: Locale): Pr
   const chat = await openAgentChat(center.id, String(ctx.chat.id));
   console.log(`[agent] start chat=${chat.id} center=${center.id}`);
   schedule(ctx, chat, MARK.start, l);
+  return true;
+}
+
+/**
+ * /start in a center's own bot (managed bots) from someone who is not this center's family or staff: the
+ * center's agent, no ?start=<slug> needed. An open conversation goes on (restart marker), otherwise it
+ * starts. False when the center's agent is off.
+ */
+export async function agentOnCenterStart(ctx: Context, centerId: string, l: Locale): Promise<boolean> {
+  if (!ctx.chat || ctx.chat.type !== "private") return false;
+  const center = await agentCenterById(centerId);
+  if (!center) return false;
+  const chatId = String(ctx.chat.id);
+  const active = await activeAgentChat(chatId);
+  const chat = await openAgentChat(center.id, chatId);
+  console.log(`[agent] ${active ? "restart" : "start"} chat=${chat.id} center=${center.id} (own bot)`);
+  schedule(ctx, chat, active ? MARK.restart : MARK.start, l);
   return true;
 }
 

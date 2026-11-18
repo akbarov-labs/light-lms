@@ -56,7 +56,7 @@ export async function requestResetCode(phone: string | null, ip: string): Promis
   await db.passwordReset.create({ data: { userId: user.id, codeHash: hashResetCode(user.id, code), expiresAt: new Date(Date.now() + RESET_CODE_TTL_MS) } });
   const locale = isLocale(user.locale) ? user.locale : isLocale(user.center.locale) ? user.center.locale : "uz";
   try {
-    await sendTelegram(user.telegramChatId, makeT(locale)("auth.codeMessage", { code }));
+    await sendTelegram(user.telegramChatId, makeT(locale)("auth.codeMessage", { code }), user.centerId);
   } catch (e) {
     console.error("[reset] telegram send failed", (e as Error).message);
   }
