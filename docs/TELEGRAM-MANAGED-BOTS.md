@@ -71,6 +71,9 @@ The person who confirms creation becomes the bot's owner in Telegram. Our bot co
 - What the owner can do in BotFather with a managed bot: see or revoke the token, delete the bot, transfer
   it, turn our management off. And what update (if any) we get for each.
 - How many bots one manager bot can manage.
+- *Found in the first live test (2026-11-18):* a managed bot counts toward its **creator's** 20-bot limit.
+  An owner who already has 20 bots gets Telegram's own error in the create window, and we receive no update.
+  The opened request just expires.
 - Whether grammY 1.46 has types for these methods and the `managed_bot` update. If not, call them with
   `fetch`, as `src/lib/telegram.ts` already does.
 

@@ -94,6 +94,7 @@ async function startBotCreation(ctx: Context, code: string, l: Locale): Promise<
   if (!ctx.chat || ctx.chat.type !== "private") return;
   const r = await openBotRequest(code, String(ctx.chat.id));
   if (!r.ok) {
+    console.log(`[bot] bot creation refused: ${r.reason} chat=${ctx.chat.id}`);
     const text = { expired: B.nbExpired, notOwner: B.nbNotOwner, hasBot: B.nbHasBot, off: B.nbOff }[r.reason][l];
     await ctx.reply(text);
     return;
@@ -109,6 +110,16 @@ async function teacherFor(chatId: string) {
 export function createBot(token: string, opts: BotOptions = {}): Bot {
   const bot = new Bot(token);
   const scope = opts.scope ?? null;
+
+  // TELEGRAM_DEBUG_UPDATES=true: log each update's kind (field names only, never content) — live tests
+  if (process.env.TELEGRAM_DEBUG_UPDATES === "true") {
+    bot.use((ctx, next) => {
+      const kinds = Object.keys(ctx.update).filter((k) => k !== "update_id");
+      const fields = ctx.message ? Object.keys(ctx.message).filter((k) => !["message_id", "date", "chat", "from"].includes(k)) : [];
+      console.log(`[bot] update ${ctx.update.update_id} ${scope ? `center=${scope.centerId}` : "shared"}: ${kinds.join(",")}${fields.length ? ` (${fields.join(",")})` : ""}`);
+      return next();
+    });
+  }
 
   // every handler below runs in this bot's scope: a center's own bot reads that center's data only
   bot.use((ctx, next) =>
