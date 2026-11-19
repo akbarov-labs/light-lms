@@ -153,7 +153,7 @@ services:
       # alerts (OPS_TELEGRAM_CHAT_ID) when last night's dump is missing
       BACKUP_CHECK_DIR: /backups
     volumes:
-      - ./backups:/backups:ro
+      - db_backups:/backups:ro
     init: true
     stop_grace_period: 20s
     healthcheck: *worker-healthcheck
@@ -164,9 +164,11 @@ services:
     restart: unless-stopped
     logging: *logging
 
-  # Nightly pg_dump of the live database to /opt/apps/sabaq/backups (same steps as deploy/backup.sh, inlined
-  # because only this file is on the server). Dumps belong to BACKUP_UID so they can be copied off the server
-  # without sudo (DEPLOY.md §11e). Run one now: docker compose -f docker-compose.prod.yml exec backup backup
+  # Nightly pg_dump of the live database into the sabaq_db_backups volume (same steps as deploy/backup.sh,
+  # inlined because only this file is on the server). The server's offsite-backup copies that volume to
+  # Backblaze every night, like the other apps' (Reads repo, docs/offsite-backups.md). A volume, not a folder
+  # under /opt/apps: that folder goes into offsite-backup's nightly settings tarball, dumps and all.
+  # Run one now: sudo docker exec sabaq-backup-1 backup
   backup:
     image: postgres:16.14-alpine
     environment:
@@ -177,9 +179,8 @@ services:
       TZ: Asia/Tashkent
       BACKUP_CRON: ${BACKUP_CRON:-30 2 * * *}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
-      BACKUP_UID: ${BACKUP_UID:-1000}
     volumes:
-      - ./backups:/backups
+      - db_backups:/backups
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -194,13 +195,12 @@ services:
         pg_restore --list "$$TMP" > /dev/null
         mv "$$TMP" "$$FILE"
         chmod 600 "$$FILE"
-        chown "$$BACKUP_UID" "$$FILE"
         find /backups -maxdepth 1 -name 'lms-*.dump' -type f -mtime +"$$((BACKUP_KEEP_DAYS - 1))" -print -delete | sed 's/^/[backup] removed /'
         echo "[backup] $$(date '+%F %T') ok $$(basename "$$FILE") $$(du -h "$$FILE" | cut -f1), kept $$(ls /backups/lms-*.dump | wc -l) file(s)"
         SH
         chmod 755 /usr/local/bin/backup
         # readable listing for the worker's backup check; the dumps themselves are 600
-        chown "$$BACKUP_UID" /backups && chmod 755 /backups
+        chmod 755 /backups
         echo "$$BACKUP_CRON /usr/local/bin/backup > /proc/1/fd/1 2>&1" > /etc/crontabs/root
         echo "[backup] schedule: $$BACKUP_CRON ($$TZ), keep $$BACKUP_KEEP_DAYS days"
         exec crond -f -l 8
@@ -284,4 +284,5 @@ services:
 
 volumes:
   live_pgdata:
+  db_backups:
   demo_pgdata:
