@@ -298,7 +298,13 @@ const attemptInclude = {
 /** The center's linked owners in Telegram. */
 async function ownerChats(tx: Tx, centerId: string): Promise<Chat[]> {
   const owners = await tx.user.findMany({ where: { centerId, role: "OWNER", archivedAt: null, telegramChatId: { not: null } }, select: { id: true } });
-  return (await Promise.all(owners.map((o) => staffChat(tx, o.id)))).filter((c): c is Chat => c !== null);
+  // one after another: a transaction's connection runs one query at a time
+  const chats: Chat[] = [];
+  for (const o of owners) {
+    const c = await staffChat(tx, o.id);
+    if (c) chats.push(c);
+  }
+  return chats;
 }
 
 /** Groups with a current topic, for placement suggestions. */
