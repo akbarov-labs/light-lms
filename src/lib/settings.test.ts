@@ -18,6 +18,8 @@ const defaults = {
   sms: { payment: false, reminder: true, debt: true, absence: false, trial: true, reportCard: false, examResult: false, onlyWithoutTelegram: true },
   agent: { enabled: false, rules: "", monthlyTokenCap: 5_000_000 },
   homework: { enabled: false, directFromGrade: 9, dueMinutesBefore: 0, lateDays: 0, attempts: 3, remindHoursBefore: 3, photos: false },
+  parentReports: { weekly: false, weekday: 7, hour: 18 },
+  makeupWeekdays: [1, 2, 3, 4, 5, 6, 7],
   dailyReportHour: 21,
 };
 

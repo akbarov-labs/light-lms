@@ -30,6 +30,8 @@ export function applyPreset(s: CenterSettings, rules?: string): CenterSettings {
     reminderDaysBefore: 0,
     notify: { ...s.notify, reminder: true, debt: true, debtDaily: true, absence: true, dailyReport: true },
     dailyReportHour: 19,
+    // "qoldirilgan dars faqat yakshanbada"
+    makeupWeekdays: [7],
     homework: { ...s.homework, enabled: true, photos: true, directFromGrade: 9, dueMinutesBefore: 60, lateDays: 7, attempts: 3, remindHoursBefore: 3 },
     // results reach parents only when the owner sends them
     reportCards: { ...s.reportCards, autoSend: false },

@@ -57,6 +57,12 @@ enum EnrollmentStatus {
   TRANSFERRED
 }
 
+enum MakeupStatus {
+  PLANNED
+  DONE
+  MISSED
+}
+
 enum AttendanceStatus {
   PRESENT
   ABSENT
@@ -204,6 +210,7 @@ model Center {
   homeworks      Homework[]
   questionTopics QuestionTopic[]
   questions      Question[]
+  makeups        Makeup[]
 }
 
 model Branch {
@@ -396,6 +403,7 @@ model Lesson {
   attendance Attendance[]
   ledger     LedgerEntry[]
   homework   Homework?
+  makeups    Makeup[]
 
   @@unique([groupId, date, startTime])
   @@index([groupId, date])
@@ -506,6 +514,7 @@ model Student {
   examResults  ExamResult[]
   certificates Certificate[]
   homeworks    HomeworkSubmission[]
+  makeups      Makeup[]
 
   @@index([centerId, createdAt])
   @@index([familyId])
@@ -1304,4 +1313,27 @@ model Question {
 
   @@unique([topicId, number])
   @@index([centerId, status])
+}
+
+/// A make-up lesson for one missed lesson (first pilot: "qoldirilgan dars faqat yakshanbada" — only on the
+/// days in settings.makeupWeekdays). Not billed: it replaces a lesson the family already paid for.
+model Makeup {
+  id          String       @id @default(cuid())
+  centerId    String
+  center      Center       @relation(fields: [centerId], references: [id])
+  studentId   String
+  student     Student      @relation(fields: [studentId], references: [id])
+  /// the missed lesson
+  lessonId    String
+  lesson      Lesson       @relation(fields: [lessonId], references: [id])
+  date        DateTime     @db.Date
+  /// "HH:mm"
+  time        String
+  status      MakeupStatus @default(PLANNED)
+  createdById String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([studentId, lessonId])
+  @@index([centerId, date])
 }

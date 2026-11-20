@@ -228,7 +228,7 @@ export const ru: Record<DictKey, string> = {
   "method.SYSTEM": "Система",
   "pricing.SUBSCRIPTION": "Ежемесячная подписка",
   "pricing.PACKAGE": "Пакет",
-  "renewal.CALENDAR": "Каждое 1-е число",
+  "renewal.CALENDAR": "Каждый месяц в один день (1-е или выбранное число)",
   "renewal.GROUP_START": "В день старта группы",
   "renewal.STUDENT_START": "В день начала ученика",
   "salary.PERCENT_EARNED": "% от начисленной оплаты",

@@ -18,7 +18,7 @@ export default async function CenterSettings() {
       <Card title={t("settings.center")}>
         <FormGrid cols={3}>
           <Field label={t("settings.centerName")}><Input name="name" defaultValue={c.name} required /></Field>
-          <Field label={t("settings.slug")} hint={`${appUrl}/f/${c.slug}`}><Input name="slug" defaultValue={c.slug} required pattern="[a-z0-9-]{2,40}" /></Field>
+          <Field label={t("settings.slug")} hint={`${appUrl}/f/${c.slug}`}><Input name="slug" defaultValue={c.slug} required pattern="[a-z0-9\-]{2,40}" /></Field>
           <Field label={t("common.phone")}><Input name="phone" defaultValue={c.phone ?? ""} /></Field>
           <Field label={t("settings.accent")}><Input type="color" name="accentColor" defaultValue={c.accentColor} /></Field>
           <Field label={t("settings.logo")}><Input name="logoUrl" defaultValue={c.logoUrl ?? ""} /></Field>
@@ -48,11 +48,27 @@ export default async function CenterSettings() {
           <Checkbox name="payFromCollected" label={t("settings.payFromCollected")} defaultChecked={s.payFromCollected} />
           <Checkbox name="transferAsTrial" label={t("settings.transferAsTrial")} defaultChecked={s.transferAsTrial} />
         </div>
+        <p className="mt-4 mb-2 text-sm text-zinc-500">{t("settings.makeupDays")}</p>
+        <div className="flex flex-wrap gap-3">
+          {[1, 2, 3, 4, 5, 6, 7].map((d) => (
+            <Checkbox key={d} name="makeupDays" value={String(d)} label={t(`common.weekday.${d}` as "common.weekday.1")} defaultChecked={s.makeupWeekdays.includes(d)} />
+          ))}
+        </div>
       </Card>
       <Card title={t("settings.reportCards")}>
         <div className="grid items-end gap-3 sm:grid-cols-2">
           <Checkbox name="reportCardsAuto" label={t("settings.reportCardsAuto")} defaultChecked={s.reportCards.autoSend} />
           <Field label={t("settings.reportCardsDay")}><Input type="number" min={1} max={28} name="reportCardsDay" defaultValue={s.reportCards.sendDay} /></Field>
+        </div>
+        <p className="mt-4 mb-2 text-sm text-zinc-500">{t("settings.weeklyHint")}</p>
+        <div className="grid items-end gap-3 sm:grid-cols-3">
+          <Checkbox name="weeklyReport" label={t("settings.weeklyReport")} defaultChecked={s.parentReports.weekly} />
+          <Field label={t("settings.weeklyDay")}>
+            <Select name="weeklyDay" defaultValue={String(s.parentReports.weekday)}>
+              {[1, 2, 3, 4, 5, 6, 7].map((d) => <option key={d} value={d}>{t(`common.weekday.${d}` as "common.weekday.1")}</option>)}
+            </Select>
+          </Field>
+          <Field label={t("settings.weeklyHour")}><Input type="number" min={8} max={22} name="weeklyHour" defaultValue={s.parentReports.hour} /></Field>
         </div>
       </Card>
       <Card title={t("settings.homework")}>

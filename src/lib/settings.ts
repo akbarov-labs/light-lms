@@ -99,6 +99,22 @@ export const centerSettingsSchema = z.object({
     })
     .prefault({})
     .catch(() => homeworkDefaults()),
+  /**
+   * Weekly report to families (first pilot: "hafta oxiri"): the week's attendance and homework results per
+   * student. Off by default — turning it on is the owner's permission for parents to see results.
+   */
+  parentReports: z
+    .object({
+      weekly: z.boolean().default(false),
+      /** ISO weekday it goes out (7 = Sunday) */
+      weekday: z.number().int().min(1).max(7).default(7),
+      /** Tashkent hour */
+      hour: z.number().int().min(8).max(22).default(18),
+    })
+    .prefault({})
+    .catch(() => ({ weekly: false, weekday: 7, hour: 18 })),
+  /** ISO weekdays make-up lessons may be booked on (first pilot: Sunday only) */
+  makeupWeekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7).default([1, 2, 3, 4, 5, 6, 7]).catch([1, 2, 3, 4, 5, 6, 7]),
   /** hour (Tashkent) of the owner's daily report in Telegram */
   dailyReportHour: z.number().int().min(6).max(23).default(21).catch(21),
 });

@@ -10,6 +10,7 @@ import { BotPool } from "./bot/pool";
 import { managedBotsOn } from "@/lib/managed-bots/service";
 import { processNotifications, routedSender, telegramSender, type Sender } from "./notifications";
 import { errText, sleep } from "./util";
+import { weeklyParentReports } from "@/lib/services/weekly-report";
 import { dailyReport, jobProblems, nightly, reminders, reportCardsJob, tashkentHour, teacherReminders, type JobResult } from "./jobs";
 import { lockKeyFor, withJobLock } from "./job-lock";
 import { assertStrongAuthSecret } from "@/lib/auth/startup";
@@ -149,6 +150,8 @@ async function main() {
   // homework: reminders before the deadline, the teacher's summary at it
   schedule("*/5 * * * *", "homework", () => homeworkJob(), (r) => !r.reminded && !r.summaries);
   schedule("0 11 * * *", "report-cards", () => reportCardsJob());
+  // weekly report to families, at each center's weekday and hour (off by default)
+  schedule("0 * * * *", "weekly-report", () => weeklyParentReports(todayISO(), tashkentHour()), (r) => !r.centers);
   // family balance cache: pages refresh it themselves, this keeps that work off page views
   schedule("*/5 * * * *", "balances", () => refreshAllBalances(), (r) => !r.balancesRefreshed);
   // prod: the backups folder is mounted read-only at BACKUP_CHECK_DIR; alert if last night's dump is missing

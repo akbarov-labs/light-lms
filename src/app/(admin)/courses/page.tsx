@@ -90,7 +90,7 @@ export default async function CoursesPage() {
                       <Badge tone={c.pricingType === "SUBSCRIPTION" ? "blue" : "violet"}>{t(`pricing.${c.pricingType}`)}</Badge>
                       <div className="mt-1 text-xs text-zinc-500">
                         {c.pricingType === "SUBSCRIPTION"
-                          ? c.renewal === "CALENDAR" && c.renewalDay > 1 ? t("courses.fromDay", { d: c.renewalDay }) : t(`renewal.${c.renewal}`)
+                          ? c.renewal === "CALENDAR" ? t("courses.fromDay", { d: c.renewalDay }) : t(`renewal.${c.renewal}`)
                           : `${c.packageLessons === 1 ? t("courses.perLesson") : c.packageLessons ? t("courses.lessonsN", { n: c.packageLessons }) : t("courses.wholeCourse")}${c.installments > 1 ? ` · ${c.installments}×` : ""}`}
                       </div>
                     </Td>

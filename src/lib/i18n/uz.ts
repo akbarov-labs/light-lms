@@ -227,7 +227,7 @@ export const uz = {
   "method.SYSTEM": "Tizim",
   "pricing.SUBSCRIPTION": "Oylik obuna",
   "pricing.PACKAGE": "Paket",
-  "renewal.CALENDAR": "Har oy 1-sanada",
+  "renewal.CALENDAR": "Har oy bir xil kunda (1-sana yoki tanlangan kun)",
   "renewal.GROUP_START": "Guruh boshlangan sanada",
   "renewal.STUDENT_START": "O'quvchi boshlagan sanada",
   "salary.PERCENT_EARNED": "Ishlangan to'lovdan %",

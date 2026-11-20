@@ -58,6 +58,9 @@ const centerSchema = z.object({
   uzumPassword: zOptStr,
   reportCardsAuto: zBool,
   reportCardsDay: zOptInt(1, 28),
+  weeklyReport: zBool,
+  weeklyDay: zOptInt(1, 7),
+  weeklyHour: zOptInt(8, 22),
   homeworkEnabled: zBool,
   homeworkDirectFromGrade: zOptInt(1, 12),
   homeworkDueMinutes: zOptInt(0, 720),
@@ -125,6 +128,11 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
       notify: Object.fromEntries(NOTIFY.map((k) => [k, fd.get(`notify.${k}`) === "on"])) as typeof old.notify,
       paymeFiscal,
       reportCards: { autoSend: f.reportCardsAuto, sendDay: f.reportCardsDay ?? old.reportCards.sendDay },
+      makeupWeekdays: (() => {
+        const days = formList(fd, "makeupDays").map(Number).filter((d) => Number.isInteger(d) && d >= 1 && d <= 7);
+        return days.length ? [...new Set(days)].sort() : old.makeupWeekdays;
+      })(),
+      parentReports: { weekly: f.weeklyReport, weekday: f.weeklyDay ?? old.parentReports.weekday, hour: f.weeklyHour ?? old.parentReports.hour },
       homework: {
         enabled: f.homeworkEnabled,
         directFromGrade: f.homeworkDirectFromGrade ?? old.homework.directFromGrade,
