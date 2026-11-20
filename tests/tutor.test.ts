@@ -301,6 +301,20 @@ describe("other flows keep going", () => {
     expect(params).toHaveLength(0);
   });
 
+  it("a timed test running in the chat: no help until it ends", async () => {
+    const quiz = await db.quiz.create({ data: { centerId, title: "Kvadrat tenglamalar", minutes: 20, status: "PUBLISHED" } });
+    const attempt = await db.quizAttempt.create({ data: { quizId: quiz.id, studentId: sid.laylo, chatId: String(CHAT.layloParent), questionIds: [], total: 0, deadlineAt: new Date(Date.now() + 10 * 60_000) } });
+    await send(text(CHAT.layloParent, "x² − 5x + 6 = 0 ni qanday yechaman?"));
+    expect(last().payload.text).toBe(t("tutor.testOpen"));
+    expect(params).toHaveLength(0);
+    // the time is up: the tutor helps again
+    await db.quizAttempt.update({ where: { id: attempt.id }, data: { deadlineAt: new Date(Date.now() - 1000) } });
+    await send(text(CHAT.layloParent, "x² − 5x + 6 = 0 ni qanday yechaman?"));
+    expect(params).toHaveLength(1);
+    await db.quizAttempt.delete({ where: { id: attempt.id } });
+    await db.quiz.delete({ where: { id: quiz.id } });
+  });
+
   it("a photo with no sheet open: the tutor reads typed questions only", async () => {
     await send(photo(CHAT.ali));
     expect(last().payload.text).toBe(t("tutor.photo"));

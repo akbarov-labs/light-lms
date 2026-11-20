@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { generateAllLessons } from "@/lib/services/lessons";
 import { homeworkJob } from "@/lib/services/homework";
+import { quizJob } from "@/lib/services/quizzes";
 import { billingSync, dailyReport, nightly, reminders, reportCardsJob, teacherReminders } from "./jobs";
 import { processNotifications, routedSender, telegramSender } from "./notifications";
 import { resetDemo } from "./demo-reset";
@@ -25,6 +26,7 @@ const jobs: Record<string, () => Promise<unknown>> = {
   "daily-report": () => dailyReport(today),
   "report-cards": () => reportCardsJob(today),
   homework: () => homeworkJob(),
+  quizzes: () => quizJob(),
   "demo-reset": async () => ({ ...(await resetDemo()), ...(await nightly(today)) }),
   notifications: async () => {
     const token = telegramBotToken();

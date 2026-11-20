@@ -13,13 +13,22 @@ import { stripTgTime } from "@/lib/messages";
 import { sleep } from "./util";
 import { managedBotToken } from "@/lib/managed-bots/api";
 import { markBotBlocked, reachableByCenterBot, routeBotFor } from "@/lib/managed-bots/service";
+import type { NotifyButtonRow } from "@/lib/notify";
+import { webAppUrl } from "@/lib/telegram-webapp";
+import { appUrl } from "@/lib/env";
 
 /**
  * Deliver one queued row; `chatId` is the Telegram chat, or the phone for an SMS row. `meta.rich` is the
  * row's optional rich-message HTML (Telegram only; SMS senders ignore it). Returns the center bot's id when
  * a center's own bot delivered it (routedSender), nothing otherwise.
  */
-export type Sender = (chatId: string, text: string, meta: { centerId: string; rich?: string | null }) => Promise<string | void>;
+export type Sender = (chatId: string, text: string, meta: { centerId: string; rich?: string | null; button?: unknown }) => Promise<string | void>;
+
+/** A row's Mini App button ({ text, path }), or null when the stored value is not one. */
+export function rowButton(v: unknown): NotifyButtonRow | null {
+  const b = v as Partial<NotifyButtonRow> | null | undefined;
+  return b && typeof b.text === "string" && typeof b.path === "string" && b.path.startsWith("/") ? { text: b.text, path: b.path } : null;
+}
 
 /** A failure the sender already classified (e.g. "don't unlink: a center bot still reaches this person"). */
 export class DeliveryError extends Error {
@@ -55,14 +64,19 @@ export function richRefused(e: unknown): boolean {
 export function telegramSender(
   api: Pick<Api, "sendMessage" | "sendRichMessage">,
   timeoutMs = SEND_TIMEOUT_MS,
-  opts: { rich?: boolean; log?: (m: string) => void } = {},
+  opts: { rich?: boolean; log?: (m: string) => void; botId?: string; appBase?: string } = {},
 ): Sender {
   const useRich = opts.rich ?? telegramRichMessages();
   const log = opts.log ?? ((m: string) => console.warn(m));
   return async (chatId, text, meta) => {
     // grammY types its signal with the abort-controller shim; it only listens for "abort", so the native one works
     const signal = () => AbortSignal.timeout(timeoutMs) as unknown as Parameters<Api["sendMessage"]>[3];
-    if (useRich && meta?.rich) {
+    // a Mini App button (a test to open) points at this bot's Mini App: a center's own bot checks init data with its token
+    const button = rowButton(meta?.button);
+    const url = button ? webAppUrl(opts.appBase ?? appUrl(), button.path, opts.botId) : null;
+    const reply_markup = button && url ? { inline_keyboard: [[{ text: button.text, web_app: { url } }]] } : undefined;
+    // the rich form carries no buttons: a row with one goes out as plain HTML
+    if (useRich && meta?.rich && !reply_markup) {
       try {
         await api.sendRichMessage(chatId, { html: meta.rich }, {}, signal());
         return;
@@ -71,14 +85,14 @@ export function telegramSender(
         log(`[notifications] rich message refused, sending plain text: ${errorText(e)}`);
       }
     }
-    const opts = { parse_mode: "HTML" as const, link_preview_options: { is_disabled: true } };
+    const send = { parse_mode: "HTML" as const, link_preview_options: { is_disabled: true }, ...(reply_markup ? { reply_markup } : {}) };
     try {
-      await api.sendMessage(chatId, text, opts, signal());
+      await api.sendMessage(chatId, text, send, signal());
     } catch (e) {
       // date_time entities (<tg-time>, TELEGRAM_DATE_TIME) refused: the same message without them
       if (!text.includes("<tg-time") || !richRefused(e)) throw e;
       log(`[notifications] date_time entity refused, sending without it: ${errorText(e)}`);
-      await api.sendMessage(chatId, stripTgTime(text), opts, signal());
+      await api.sendMessage(chatId, stripTgTime(text), send, signal());
     }
   };
 }
@@ -100,7 +114,7 @@ export const defaultRouter: BotRouter = {
     const token = await managedBotToken(botId);
     const hit = apis.get(botId);
     if (hit?.token === token) return hit.send;
-    const send = telegramSender(new Api(token));
+    const send = telegramSender(new Api(token), SEND_TIMEOUT_MS, { botId });
     apis.set(botId, { token, send });
     return send;
   },
@@ -185,6 +199,7 @@ interface Claimed {
   chatId: string;
   text: string;
   richText: string | null;
+  button: unknown;
   attempts: number;
   createdAt: Date;
 }
@@ -209,7 +224,7 @@ async function claim(limit: number, channel: NotificationChannel): Promise<Claim
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING id, "centerId", "chatId", text, "richText", attempts, "createdAt"`;
+    RETURNING id, "centerId", "chatId", text, "richText", button, attempts, "createdAt"`;
   return rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
 }
 
@@ -268,7 +283,7 @@ export async function processNotifications(
       continue;
     }
     try {
-      const via = await send(n.chatId, n.text, { centerId: n.centerId, rich: n.richText });
+      const via = await send(n.chatId, n.text, { centerId: n.centerId, rich: n.richText, button: n.button });
       await db.notification.update({
         where: { id: n.id },
         data: { status: "SENT", sentAt: new Date(), attempts: n.attempts + 1, error: null, lockedAt: null, sentVia: typeof via === "string" ? via : null },

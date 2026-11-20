@@ -34,12 +34,33 @@ export async function staffChat(tx: Tx, userId: string): Promise<Chat | null> {
   return { chatId: u.telegramChatId, locale: u.locale === "ru" ? "ru" : "uz" };
 }
 
+/** A button under the message that opens a Mini App page (`path` on this app, "/tg/quiz?q=…"). */
+export interface NotifyButton {
+  text: (l: Locale) => string;
+  path: string;
+}
+/** As stored on the row (Notification.button). */
+export interface NotifyButtonRow {
+  text: string;
+  path: string;
+}
+
 /**
  * Queue one message per chat. dedupeKey (per chat) makes re-runs of a job harmless. `rich` is the optional
  * rich-message form (Bot API 10.1); the worker sends it only with TELEGRAM_RICH_MESSAGES=true and falls
- * back to `text`, so `text` must always be the complete message.
+ * back to `text`, so `text` must always be the complete message. `button` opens a Mini App page; a row with
+ * a button is sent as plain HTML (and without it when the app is not on HTTPS), so `text` must make sense alone.
  */
-export async function enqueue(tx: Tx, centerId: string, chats: Chat[], text: (l: Locale) => string, dedupeKey?: string, rich?: (l: Locale) => string, notBefore?: Date): Promise<number> {
+export async function enqueue(
+  tx: Tx,
+  centerId: string,
+  chats: Chat[],
+  text: (l: Locale) => string,
+  dedupeKey?: string,
+  rich?: (l: Locale) => string,
+  notBefore?: Date,
+  button?: NotifyButton,
+): Promise<number> {
   if (chats.length === 0) return 0;
   const res = await tx.notification.createMany({
     data: chats.map((c) => ({
@@ -47,6 +68,7 @@ export async function enqueue(tx: Tx, centerId: string, chats: Chat[], text: (l:
       chatId: c.chatId,
       text: text(c.locale),
       richText: rich ? rich(c.locale) : null,
+      ...(button ? { button: { text: button.text(c.locale), path: button.path } satisfies NotifyButtonRow } : {}),
       dedupeKey: dedupeKey ? `${dedupeKey}:${c.chatId}` : null,
       // a message prepared ahead of its moment (homework typed before the lesson ends) waits for it
       ...(notBefore ? { nextAttemptAt: notBefore } : {}),

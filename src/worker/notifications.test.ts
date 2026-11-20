@@ -122,6 +122,28 @@ describe("telegramSender with date_time entities", () => {
   });
 });
 
+describe("telegramSender with a Mini App button", () => {
+  function api() {
+    const calls: { method: string; args: unknown[] }[] = [];
+    return { calls, api: { sendMessage: async (...args: unknown[]) => void calls.push({ method: "sendMessage", args }), sendRichMessage: async (...args: unknown[]) => void calls.push({ method: "sendRichMessage", args }) } };
+  }
+  const button = { text: "📝 Testni boshlash", path: "/tg/quiz?q=abc" };
+
+  it("adds a web_app button for this bot's Mini App, as plain HTML even with a rich form", async () => {
+    const f = api();
+    await telegramSender(f.api as never, 1000, { rich: true, appBase: "https://sabaq.uz", botId: "777", log: () => {} })("1", "Test", { centerId: "c", rich: "<h3>r</h3>", button });
+    expect(f.calls.map((c) => c.method)).toEqual(["sendMessage"]);
+    expect((f.calls[0].args[2] as { reply_markup: unknown }).reply_markup).toEqual({ inline_keyboard: [[{ text: button.text, web_app: { url: "https://sabaq.uz/tg/quiz?q=abc&b=777" } }]] });
+  });
+
+  it("sends without a button when the app is not on HTTPS or the stored button is not one", async () => {
+    const f = api();
+    await telegramSender(f.api as never, 1000, { rich: false, appBase: "http://localhost:3000" })("1", "Test", { centerId: "c", button });
+    await telegramSender(f.api as never, 1000, { rich: false, appBase: "https://sabaq.uz" })("1", "Test", { centerId: "c", button: { text: "x", path: "https://evil.example" } });
+    expect(f.calls.every((c) => !(c.args[2] as { reply_markup?: unknown }).reply_markup)).toBe(true);
+  });
+});
+
 describe("routedSender (managed bots)", () => {
   const tg = (error_code: number, description: string) => Object.assign(new Error(description), { error_code, description });
   function setup(o: { route?: string | null; centerFails?: unknown; sharedFails?: unknown; reachable?: boolean; tokenFails?: boolean } = {}) {

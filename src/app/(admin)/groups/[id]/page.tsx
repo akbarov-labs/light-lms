@@ -12,6 +12,9 @@ import { Badge, Card, EmptyState, KV, LinkButton, PageHeader, Table, Td, Th, Tr,
 import { ActionMenu, Modal, ModalForm, SubmitButton } from "@/components/client";
 import { EnrollForm, EnrollmentActions } from "../../enrollments/ui";
 import { setGroupStatusAction } from "../actions";
+import { setGroupTopicAction } from "../../quizzes/actions";
+import { topicOptions } from "@/lib/services/quizzes";
+import { Field, Select } from "@/components/fields";
 
 export default async function GroupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,7 +22,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
   const { t } = ctx;
   const group = await db.group.findFirst({
     where: { id, centerId: ctx.centerId },
-    include: { course: true, teacher: true, room: true, branch: true, slots: true },
+    include: { course: true, teacher: true, room: true, branch: true, slots: true, currentTopic: { select: { code: true, title: true } } },
   });
   if (!group || !canAccessBranch(ctx, group.branchId)) notFound();
   const today = todayISO();
@@ -48,6 +51,8 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
       : Promise.resolve([]),
   ]);
   const allocs = await allocationsFor([...new Set(enrollments.map((e) => e.student.familyId))]);
+  // the bank's topics: the owner marks where the group is now (topic tests, placement suggestions)
+  const topics = ctx.can("groups.edit") ? await topicOptions(ctx.centerId) : [];
   const open = enrollments.filter((e) => !e.endDate);
   const closed = enrollments.filter((e) => e.endDate);
   const inGroup = new Set(open.map((e) => e.studentId));
@@ -64,6 +69,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
             <LinkButton variant="secondary" href={`/groups/${id}/reports`}>{t("rc.title")}</LinkButton>
             {ctx.can("groups.edit") && (
               <>
+                {topics.length > 0 && <LinkButton variant="secondary" href={`/quizzes/new?group=${id}`}>{t("quizzes.newForGroup")}</LinkButton>}
                 <LinkButton variant="secondary" href={`/groups/${id}/edit`}>{t("common.edit")}</LinkButton>
                 <ActionMenu
                   label={t("shell.more")}
@@ -126,6 +132,30 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
             [t("groups.schedule"), slotSummary(group.slots, t)],
             [`${t("common.start")} – ${t("common.end")}`, `${formatDate(toISODate(group.startDate))} – ${group.endDate ? formatDate(toISODate(group.endDate)) : "…"}`],
             [t("groups.studentsCount"), `${open.length}${group.capacity ? ` / ${group.capacity}` : ""}`],
+            ...(topics.length > 0 || group.currentTopic
+              ? [
+                  [
+                    t("quizzes.groupTopic"),
+                    <span key="topic" className="inline-flex flex-wrap items-center gap-2">
+                      <span className={group.currentTopic ? "" : "text-zinc-500"}>{group.currentTopic ? `${group.currentTopic.code}. ${group.currentTopic.title}` : t("quizzes.groupTopicNone")}</span>
+                      {topics.length > 0 && (
+                        <Modal label={t("quizzes.groupTopicSet")} title={t("quizzes.groupTopicSet")} variant="secondary" size="sm">
+                          <ModalForm action={setGroupTopicAction} className="space-y-3">
+                            <input type="hidden" name="groupId" value={id} />
+                            <Field label={t("quizzes.groupTopic")} hint={t("quizzes.groupTopicHint")}>
+                              <Select name="topicId" defaultValue={group.currentTopicId ?? ""}>
+                                <option value="">{t("quizzes.groupTopicNone")}</option>
+                                {topics.map((x) => <option key={x.id} value={x.id}>{"  ".repeat(x.code.split(".").length - 1)}{x.code}. {x.title}</option>)}
+                              </Select>
+                            </Field>
+                            <SubmitButton>{t("common.save")}</SubmitButton>
+                          </ModalForm>
+                        </Modal>
+                      )}
+                    </span>,
+                  ] as [string, React.ReactNode],
+                ]
+              : []),
           ]}
         />
       </Card>

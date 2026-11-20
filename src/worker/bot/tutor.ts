@@ -6,6 +6,7 @@ import type { Context } from "grammy";
 import { makeT, type Locale } from "@/lib/i18n";
 import { handleTutorMessage, tutorFor } from "@/lib/tutor/service";
 import { tutorRoute } from "@/lib/tutor/route";
+import { db } from "@/lib/db";
 import { queueTurn } from "./agent";
 import { homeworkSheetOpen } from "./homework";
 
@@ -37,10 +38,14 @@ export async function tutorOnText(ctx: Context, text: string, l: Locale): Promis
   const chatId = String(ctx.chat.id);
   // cheap checks first: a command or an empty text never costs a database round trip
   if (tutorRoute({ text, eligible: true, sheetOpen: false }) === "skip") return false;
-  const route = tutorRoute({ text, eligible: !!(await tutorFor(chatId)), sheetOpen: homeworkSheetOpen(chatId) });
+  const eligible = !!(await tutorFor(chatId));
+  // a timed test running in this chat's Mini App: no help until it is finished
+  const testOpen = eligible && !!(await db.quizAttempt.findFirst({ where: { chatId, submittedAt: null, deadlineAt: { gt: new Date() } }, select: { id: true } }));
+  const sheetOpen = homeworkSheetOpen(chatId);
+  const route = tutorRoute({ text, eligible, sheetOpen, testOpen });
   if (route === "skip") return false;
   if (route === "busy") {
-    await ctx.reply(makeT(l)("tutor.sheetOpen"));
+    await ctx.reply(makeT(l)(testOpen && !sheetOpen ? "tutor.testOpen" : "tutor.sheetOpen"));
     return true;
   }
   const api = ctx.api;

@@ -20,6 +20,7 @@ export const tutorUz = {
     "Bu uy vazifasi yoki testga o'xshaydi: ularning javobini aytmayman. Bitta misolni tanlab yozing va qayerda qiynalayotganingizni ayting — birga qadamma-qadam yechamiz.",
   "tutor.leak":
     "Bu savol ochiq uy vazifangizga tegishli, shuning uchun javobini aytolmayman. Qaysi qadamda qiynalayotganingizni yozing — yo'l-yo'riq beraman yoki o'xshash misolni ko'rsataman.",
+  "tutor.testOpen": "Siz hozir test topshiryapsiz: test tugaguncha yordamchi javob bermaydi.",
   "tutor.sheetOpen": "Siz hozir uy vazifasi ustida ishlayapsiz: bu vaqtda yordamchi javob bermaydi. Vazifadagi oxirgi harakatingizdan 30 daqiqa o'tgach savol bering.",
   "tutor.photo":
     "Matematika yordamchisi hozircha faqat matn bilan yozilgan savolni o'qiydi: misolni matn bilan yozing (masalan: 2x + 3 = 11).\nUy vazifasi javoblarini rasm bilan yubormoqchi bo'lsangiz, avval «📝 Uy vazifasi» tugmasi orqali vazifani oching.",
@@ -44,6 +45,7 @@ export const tutorRu: Record<keyof typeof tutorUz, string> = {
     "Похоже на домашнее задание или тест: их ответы я не говорю. Выберите один пример и напишите, где застряли, — решим вместе шаг за шагом.",
   "tutor.leak":
     "Этот вопрос из вашего открытого домашнего задания, поэтому ответ я сказать не могу. Напишите, на каком шаге застряли, — подскажу или покажу похожий пример.",
+  "tutor.testOpen": "Вы сейчас проходите тест: до его окончания помощник не отвечает.",
   "tutor.sheetOpen": "Вы сейчас работаете над домашним заданием: в это время помощник не отвечает. Задайте вопрос через 30 минут после последнего действия в задании.",
   "tutor.photo":
     "Пока помощник по математике читает только вопросы, написанные текстом: напишите пример текстом (например: 2x + 3 = 11).\nЧтобы отправить ответы домашнего задания фото, сначала откройте задание кнопкой «📝 Домашнее задание».",

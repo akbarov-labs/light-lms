@@ -7,6 +7,11 @@ import { salesAgentEnabled, telegramBotToken } from "@/lib/env";
 const DAY = 86_400_000;
 let cache: { at: number; name: string | null } | null = null;
 
+/** The shared bot's @username (without @), or null when there is no bot or Telegram did not answer. */
+export async function sharedBotUsername(): Promise<string | null> {
+  return botUsername();
+}
+
 async function botUsername(): Promise<string | null> {
   const token = telegramBotToken();
   if (!token) return null;

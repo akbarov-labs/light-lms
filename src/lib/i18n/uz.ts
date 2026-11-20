@@ -11,6 +11,7 @@ import { homeworkUz } from "./extra-homework";
 import { questionsUz } from "./extra-questions";
 import { pilotUz } from "./extra-pilot";
 import { tutorUz } from "./extra-tutor";
+import { quizzesUz } from "./extra-quizzes";
 
 export const uz = {
   ...saasUz,
@@ -24,6 +25,7 @@ export const uz = {
   ...questionsUz,
   ...pilotUz,
   ...tutorUz,
+  ...quizzesUz,
   "app.name": BRAND.name as string,
   "common.save": "Saqlash",
   "common.cancel": "Bekor qilish",

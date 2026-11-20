@@ -19,6 +19,7 @@ import { CODE_PREFIX, markBotBlocked, markBotChat, onManagedBotUpdate, openBotRe
 import { answerFromTelegram } from "@/lib/agent/service";
 import { HOMEWORK_CB, homeworkMenu, homeworkOnCallback, homeworkOnPhoto, homeworkOnText } from "./homework";
 import { chatTutorOn, tutorButton, tutorOnPhoto, tutorOnText } from "./tutor";
+import { PLACEMENT_PREFIX, placementOnStart } from "./quizzes";
 import { SALES_ACCESS, salesOnAccess, salesOnContact, salesOnFile, salesOnStart, salesOnTeamReply, salesOnText } from "./sales";
 import { appUrl, telegramRichMessages } from "@/lib/env";
 import { richRefused } from "../notifications";
@@ -170,6 +171,8 @@ export function createBot(token: string, opts: BotOptions = {}): Bot {
     const l = await localeOf(ctx);
     const chatId = String(ctx.chat.id);
     if (!scope && ctx.match.startsWith(CODE_PREFIX)) return void (await startBotCreation(ctx, ctx.match.slice(CODE_PREFIX.length), l));
+    // t.me/<bot>?start=pt_<center-slug> (a center's own bot: ?start=pt): the placement test's start link
+    if (ctx.match.startsWith(PLACEMENT_PREFIX) && (await placementOnStart(ctx, ctx.match, scope, l))) return;
     // t.me/<bot>?start=<center-slug>: the center's AI lead agent (when that center switched it on); a center's
     // own bot ignores payloads: it is that center's bot, and a slug must not pull in another center
     if (!scope && ctx.match && (await agentOnStart(ctx, ctx.match, l))) return;
