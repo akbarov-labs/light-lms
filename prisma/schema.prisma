@@ -1129,17 +1129,26 @@ model Homework {
 /// in the bot) and changeable until the deadline. No grade is stored: it is computed from the current key,
 /// so a corrected key re-grades everyone.
 model HomeworkSubmission {
-  id         String   @id @default(cuid())
-  homeworkId String
-  homework   Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
-  studentId  String
-  student    Student  @relation(fields: [studentId], references: [id])
+  id              String    @id @default(cuid())
+  homeworkId      String
+  homework        Homework  @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  studentId       String
+  student         Student   @relation(fields: [studentId], references: [id])
   /// in question order; "" = not answered
-  answers    String[]
+  answers         String[]
   /// the Telegram chat that answered last (the student's or a parent's)
-  chatId     String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  chatId          String?
+  /// times the student pressed "check" (settings.homework.attempts at most)
+  checks          Int       @default(0)
+  /// the answers at the first check: the class report is built from them, so retries do not hide mistakes
+  firstAnswers    String[]  @default([])
+  /// the answers at the last check: questions right here are locked
+  checkedAnswers  String[]  @default([])
+  /// the first non-empty answer: after the deadline it marks the submission as late
+  firstAnsweredAt DateTime?
+  checkedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@unique([homeworkId, studentId])
   @@index([studentId])

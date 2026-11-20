@@ -3,11 +3,12 @@ import { writeFile } from "node:fs/promises";
 import cron, { type ScheduledTask } from "node-cron";
 import type { Bot } from "grammy";
 import { db } from "@/lib/db";
-import { TZ } from "@/lib/dates";
+import { TZ, todayISO } from "@/lib/dates";
+import { homeworkJob } from "@/lib/services/homework";
 import { createBot, miniAppUrl } from "./bot";
 import { processNotifications, telegramSender, type Sender } from "./notifications";
 import { errText, sleep } from "./util";
-import { dailyReport, jobProblems, nightly, reminders, reportCardsJob, teacherReminders, type JobResult } from "./jobs";
+import { dailyReport, jobProblems, nightly, reminders, reportCardsJob, tashkentHour, teacherReminders, type JobResult } from "./jobs";
 import { lockKeyFor, withJobLock } from "./job-lock";
 import { assertStrongAuthSecret } from "@/lib/auth/startup";
 import { refreshAllBalances } from "@/lib/billing/balance-cache";
@@ -129,7 +130,9 @@ async function main() {
   schedule("30 0 * * *", "nightly", () => nightly());
   schedule("0 10 * * *", "reminders", () => reminders());
   schedule("0 20 * * *", "teacher-reminders", () => teacherReminders());
-  schedule("0 21 * * *", "daily-report", () => dailyReport());
+  schedule("0 * * * *", "daily-report", () => dailyReport(todayISO(), tashkentHour()), (r) => !r.sent);
+  // homework: reminders before the deadline, the teacher's summary at it
+  schedule("*/5 * * * *", "homework", () => homeworkJob(), (r) => !r.reminded && !r.summaries);
   schedule("0 11 * * *", "report-cards", () => reportCardsJob());
   // family balance cache: pages refresh it themselves, this keeps that work off page views
   schedule("*/5 * * * *", "balances", () => refreshAllBalances(), (r) => !r.balancesRefreshed);

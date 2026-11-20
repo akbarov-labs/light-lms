@@ -72,8 +72,9 @@ export function HomeworkPanel({ t, lessonId, set, due, canEdit, lessonCancelled,
 function windowText(t: TFn, v: HomeworkView): string {
   const from = formatDateTime(v.window.opensAt);
   const to = v.window.dueAt ? formatDateTime(v.window.dueAt) : "";
+  const late = v.window.lateUntil ? ` ${t("homework.windowLate", { to: formatDateTime(v.window.lateUntil) })}` : "";
   if (v.state === "closed") return t("homework.closed", { to });
-  return v.window.dueAt ? t("homework.windowOpen", { from, to }) : t("homework.windowNoEnd", { from });
+  return (v.window.dueAt ? t("homework.windowOpen", { from, to }) : t("homework.windowNoEnd", { from })) + late;
 }
 
 export function HomeworkResults({ t, view, showAll, path }: { t: TFn; view: HomeworkView; showAll: boolean; path: string }) {
@@ -81,7 +82,8 @@ export function HomeworkResults({ t, view, showAll, path }: { t: TFn; view: Home
   const name = new Map(view.students.map((s) => [s.studentId, s.name]));
   const names = (ids: string[]) => ids.map((id) => name.get(id) ?? "?").join(", ");
   const answered = new Set(report.answeredBy);
-  const missing = view.students.filter((s) => !answered.has(s.studentId));
+  const lateIds = new Set(view.late.map((s) => s.studentId));
+  const missing = view.students.filter((s) => !answered.has(s.studentId) && !lateIds.has(s.studentId));
   const hidden = showAll ? [] : report.questions.filter((q) => q.allCorrect);
   const shown = report.questions.filter((q) => showAll || !q.allCorrect);
   const total = view.answers.length;
@@ -153,12 +155,29 @@ export function HomeworkResults({ t, view, showAll, path }: { t: TFn; view: Home
                     <span className="truncate">{s.name}</span>
                     <span className="shrink-0 font-mono tabular-nums">
                       {s.score.correct}/{total}
+                      {view.improved.has(s.studentId) && <span className="text-zinc-500"> ({t("homework.improved", { c: view.improved.get(s.studentId)! })})</span>}
                     </span>
                   </li>
                 ))}
             </ul>
           </div>
         </>
+      )}
+      {view.improved.size > 0 && <p className="text-xs text-zinc-500">{t("homework.firstAttempt")}</p>}
+      {view.late.length > 0 && (
+        <div>
+          <div className="mb-1.5 text-xs font-medium text-amber-800">⏰ {t("homework.late")}</div>
+          <ul className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+            {view.late.map((s) => (
+              <li key={s.studentId} className="flex justify-between gap-3 border-b border-dashed border-line py-0.5">
+                <span className="truncate">{s.name}</span>
+                <span className="shrink-0 font-mono tabular-nums">
+                  {s.correct}/{total}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {missing.length > 0 && (
         <p className="text-zinc-600">

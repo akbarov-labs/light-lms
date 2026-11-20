@@ -30,6 +30,15 @@ export function agentModel(): string {
   return str(process.env.AGENT_MODEL) ?? "claude-haiku-5-5";
 }
 
+/**
+ * Claude model that reads homework answers from notebook photos. Reading handwriting is where a model
+ * mistake costs a student a wrong mark, so the default is the most capable general model; ~1–2k image
+ * tokens per Telegram photo. Measure with scripts/homework-photo-eval.ts before lowering it.
+ */
+export function homeworkPhotoModel(): string {
+  return str(process.env.HOMEWORK_PHOTO_MODEL) ?? "claude-opus-5-5";
+}
+
 /** Sabaq's own sales agent on the shared bot: strangers who write without a center link get answers about
  * Sabaq. Off unless "true"; also needs ANTHROPIC_API_KEY. */
 export function salesAgentEnabled(): boolean {

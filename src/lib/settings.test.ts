@@ -17,7 +17,8 @@ const defaults = {
   reportCards: { autoSend: false, sendDay: 3 },
   sms: { payment: false, reminder: true, debt: true, absence: false, trial: true, reportCard: false, examResult: false, onlyWithoutTelegram: true },
   agent: { enabled: false, rules: "", monthlyTokenCap: 5_000_000 },
-  homework: { enabled: false, directFromGrade: 9 },
+  homework: { enabled: false, directFromGrade: 9, dueMinutesBefore: 0, lateDays: 0, attempts: 3, remindHoursBefore: 3, photos: false },
+  dailyReportHour: 21,
 };
 
 describe("readSettings (Center.settings JSON)", () => {
@@ -35,8 +36,13 @@ describe("readSettings (Center.settings JSON)", () => {
   });
 
   it("keeps homework off by default; a broken homework block does not reset other settings", () => {
-    expect(readSettings({ homework: { enabled: true } }).homework).toEqual({ enabled: true, directFromGrade: 9 });
-    expect(readSettings({ homework: { enabled: true, directFromGrade: 6 } }).homework).toEqual({ enabled: true, directFromGrade: 6 });
+    const hw = { enabled: true, directFromGrade: 9, dueMinutesBefore: 0, lateDays: 0, attempts: 3, remindHoursBefore: 3, photos: false };
+    expect(readSettings({ homework: { enabled: true } }).homework).toEqual(hw);
+    expect(readSettings({ homework: { enabled: true, directFromGrade: 6 } }).homework).toEqual({ ...hw, directFromGrade: 6 });
+    // the first pilot center
+    expect(readSettings({ homework: { enabled: true, dueMinutesBefore: 60, lateDays: 2, photos: true } }).homework).toEqual({ ...hw, dueMinutesBefore: 60, lateDays: 2, photos: true });
+    expect(readSettings({ dailyReportHour: 19 }).dailyReportHour).toBe(19);
+    expect(readSettings({ dailyReportHour: 3 }).dailyReportHour).toBe(21);
     expect(readSettings({ trialLessons: 2, homework: { directFromGrade: 40 } })).toEqual({ ...defaults, trialLessons: 2 });
   });
 

@@ -233,3 +233,59 @@ export function homeworkReport(key: string[], subs: Submission[]): HomeworkRepor
   });
   return { questions, scores, answeredBy: active.map((s) => s.studentId) };
 }
+
+// ------------------------------------------------------------------ the student's own check
+
+export type Hint = "sign" | "decimal";
+
+export interface CheckResult {
+  correct: number;
+  total: number;
+  /** 0-based questions answered wrong, with a hint when the mistake has a recognisable shape */
+  wrong: { q: number; hint: Hint | null }[];
+  /** 0-based questions left empty */
+  blank: number[];
+}
+
+/**
+ * The student's check: which questions are wrong, never the right answer (the client: "do not tell the
+ * homework answers"). A hint only names the kind of slip: the right number with the wrong sign, or the
+ * right digits with the decimal point in the wrong place.
+ */
+export function checkAnswers(key: string[], answers: string[]): CheckResult {
+  const wrong: CheckResult["wrong"] = [];
+  const blank: number[] = [];
+  let correct = 0;
+  key.forEach((item, q) => {
+    const given = (answers[q] ?? "").trim();
+    if (!given) return void blank.push(q);
+    if (isCorrect(item, given)) correct++;
+    else wrong.push({ q, hint: hintFor(item, given) });
+  });
+  return { correct, total: key.length, wrong, blank };
+}
+
+export function hintFor(item: string, given: string): Hint | null {
+  const g = parseAnswer(given);
+  if (!g || g.kind !== "number" || g.num === BigInt(0)) return null;
+  for (const a of alternatives(item)) {
+    if (a.kind !== "number") continue;
+    // -g = a
+    if (-g.num * a.den === a.num * g.den) return "sign";
+    // g = a × 10^k, k ≠ 0 (both written as decimals: same digits, point moved)
+    for (let k = 1; k <= 6; k++) {
+      const p = BigInt(10) ** BigInt(k);
+      if (g.num * a.den === a.num * g.den * p || g.num * a.den * p === a.num * g.den) return "decimal";
+    }
+  }
+  return null;
+}
+
+/** Questions right at the last check: the student cannot change them any more. */
+export function lockedQuestions(key: string[], checkedAnswers: string[]): Set<number> {
+  const out = new Set<number>();
+  key.forEach((item, q) => {
+    if (isCorrect(item, checkedAnswers[q])) out.add(q);
+  });
+  return out;
+}
