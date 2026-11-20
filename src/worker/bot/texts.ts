@@ -123,6 +123,30 @@ export const B = {
     uz: "✅ Javobingiz mijozga yuborildi. Mijoz yozsa, AI yordamchi suhbatni shundan davom ettiradi.",
     ru: "✅ Ответ отправлен клиенту. Когда клиент ответит, AI-помощник продолжит разговор с учётом вашего ответа.",
   },
+  // a center's own bot (managed bots), created from the shared bot
+  nbAsk: {
+    uz: "🤖 <b>{center}</b> uchun o'z botingizni yaratamiz.\nPastdagi tugmani bosing: Telegram oynasida bot nomi va manzilini tekshirib, «Yaratish»ni bosing. Bot sizniki bo'ladi, uni biz boshqaramiz.",
+    ru: "🤖 Создадим собственный бот для <b>{center}</b>.\nНажмите кнопку ниже: в окне Telegram проверьте имя и адрес бота и нажмите «Создать». Бот будет вашим, управлять им будем мы.",
+  },
+  nbButton: { uz: "🤖 Botni yaratish", ru: "🤖 Создать бота" },
+  nbExpired: {
+    uz: "Bu havola eskirgan. Sozlamalar → Telegram bot sahifasida «Bot yaratish»ni qayta bosing.",
+    ru: "Ссылка устарела. Нажмите «Создать бота» ещё раз в Настройки → Telegram-бот.",
+  },
+  nbNotOwner: {
+    uz: "Botni faqat markaz egasi yaratadi. Avval shu botga o'z raqamingizni yuboring (/start), keyin havolani qayta oching.",
+    ru: "Создать бота может только владелец центра. Сначала отправьте этому боту свой номер (/start), затем откройте ссылку снова.",
+  },
+  nbHasBot: { uz: "Markazingizda bot allaqachon bor.", ru: "У вашего центра уже есть бот." },
+  nbOff: { uz: "O'z boti bu markaz uchun yoqilmagan.", ru: "Собственный бот для этого центра не включён." },
+  nbReady: {
+    uz: "✅ @{bot} tayyor! Hozircha uni faqat siz ko'rasiz: oching, tekshiring, keyin Sozlamalar → Telegram bot sahifasida «Ishga tushirish»ni bosing.",
+    ru: "✅ @{bot} готов! Пока его видите только вы: откройте, проверьте, затем нажмите «Запустить» в Настройки → Telegram-бот.",
+  },
+  nbIgnored: {
+    uz: "Bot yaratildi, lekin markazga ulanmadi (havola eskirgan bo'lishi mumkin). Sozlamalardan qayta urinib ko'ring.",
+    ru: "Бот создан, но не подключён к центру (возможно, ссылка устарела). Попробуйте снова из настроек.",
+  },
   answerNotFound: { uz: "Bu mijozning suhbati topilmadi. Lead sahifasidan yozing.", ru: "Разговор с этим клиентом не найден. Напишите со страницы лида." },
   days: {
     uz: ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"],

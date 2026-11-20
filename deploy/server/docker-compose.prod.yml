@@ -32,6 +32,7 @@ x-app-env: &app-env
   TELEGRAM_RICH_MESSAGES: ${TELEGRAM_RICH_MESSAGES:-false}
   # lesson times / payment dates shown in the reader's local time (Telegram date_time entities); off by default
   TELEGRAM_DATE_TIME: ${TELEGRAM_DATE_TIME:-false}
+  TELEGRAM_MANAGED_BOTS: ${TELEGRAM_MANAGED_BOTS:-false}
   SMS_DRY_RUN: ${SMS_DRY_RUN:-false}
   # the live stack is never the demo, whatever .env says
   SEED_DEMO: "false"

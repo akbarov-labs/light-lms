@@ -173,6 +173,8 @@ model Center {
   /// Set by a platform admin: staff can't sign in, public forms are closed. Data is kept.
   disabledAt      DateTime?
   disabledReason  String?
+  /// Set by a platform admin: this center may create its own Telegram bot (managed bots, pilot allow-list)
+  ownBotAllowed   Boolean   @default(false)
   /// Setup wizard progress: { step, done: { branch, course, group, teacher }, courseId?, groupId?, dismissedAt?, completedAt? }
   onboarding      Json      @default("{}")
   createdAt       DateTime  @default(now())
@@ -197,6 +199,7 @@ model Center {
   certificates   Certificate[]
   agentChats     AgentChat[]
   agentUsage     AgentUsage[]
+  bot            CenterBot?
   homeworks      Homework[]
   questionTopics QuestionTopic[]
   questions      Question[]
@@ -1061,6 +1064,8 @@ model Notification {
   /// optional Bot API rich-message HTML (sendRichMessage); sent instead of `text` only when
   /// TELEGRAM_RICH_MESSAGES=true, and `text` is the fallback if Telegram refuses it. Never used for SMS.
   richText      String?
+  /// the center's own bot that delivered it (CenterBot.botId); null = the shared bot or not sent yet
+  sentVia       String?
   dedupeKey     String?             @unique
   status        NotificationStatus  @default(PENDING)
   error         String?
@@ -1100,6 +1105,63 @@ model PasswordReset {
   createdAt DateTime  @default(now())
 
   @@index([userId, createdAt])
+}
+
+/// A center's own Telegram bot, created through Telegram's managed bots (Bot API 9.6) and controlled by
+/// the shared bot. The token is never stored: it is read with getManagedBotToken (src/lib/managed-bots).
+model CenterBot {
+  /// the bot's Telegram user id (string, like chatId)
+  botId     String          @id
+  centerId  String          @unique
+  center    Center          @relation(fields: [centerId], references: [id])
+  username  String
+  name      String
+  /// Telegram user id of the bot's owner: the creator, updated when Telegram reports an owner change
+  ownerTgId String
+  status    CenterBotStatus @default(TESTING)
+  lastError String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  chats     BotChat[]
+}
+
+enum CenterBotStatus {
+  /// only the owner can open it (setManagedBotAccessSettings); messages still go through the shared bot
+  TESTING
+  /// open to everyone; the center's messages go through it to people who started it
+  ACTIVE
+  /// center disabled, pilot access removed or switched off in Settings: not polled, shared bot used
+  PAUSED
+  /// deleted, or its token can't be read: not polled, shared bot used
+  GONE
+}
+
+/// Who started which center bot: a bot can only message people who started it.
+model BotChat {
+  botId     String
+  bot       CenterBot @relation(fields: [botId], references: [botId], onDelete: Cascade)
+  chatId    String
+  startedAt DateTime  @default(now())
+  /// the person blocked this bot (403): messages go through the shared bot again
+  blockedAt DateTime?
+
+  @@id([botId, chatId])
+  @@index([chatId])
+}
+
+/// One-time code behind "Create our bot" in Settings: 10 minutes, single use.
+model BotCreateRequest {
+  code      String    @id
+  centerId  String
+  /// the OWNER who pressed the button
+  userId    String
+  /// the shared-bot chat that opened the code (must be that owner's linked chat)
+  chatId    String?
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([chatId])
 }
 
 /// Homework set at a lesson (pilot, used only while settings.homework.enabled): the teacher's answer key.

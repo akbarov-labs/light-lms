@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { generateAllLessons } from "@/lib/services/lessons";
 import { homeworkJob } from "@/lib/services/homework";
 import { billingSync, dailyReport, nightly, reminders, reportCardsJob, teacherReminders } from "./jobs";
-import { processNotifications, telegramSender } from "./notifications";
+import { processNotifications, routedSender, telegramSender } from "./notifications";
 import { resetDemo } from "./demo-reset";
 import { lockKeyFor, withJobLock } from "./job-lock";
 import { todayISO } from "@/lib/dates";
@@ -31,7 +31,7 @@ const jobs: Record<string, () => Promise<unknown>> = {
     if (!token) return "TELEGRAM_BOT_TOKEN empty — nothing sent";
     const { Bot } = await import("grammy");
     const bot = new Bot(token);
-    return processNotifications(telegramSender(bot.api));
+    return processNotifications(routedSender(telegramSender(bot.api)));
   },
   sms: () => processNotifications(smsSender(), { channel: "SMS" }),
 };

@@ -6,6 +6,7 @@ import { securityRu } from "./extra-security";
 import { workerRu } from "./extra-worker";
 import { uiRu } from "./extra-ui";
 import { v2Ru } from "./extra-v2";
+import { botsRu } from "./extra-bots";
 import { homeworkRu } from "./extra-homework";
 import { questionsRu } from "./extra-questions";
 
@@ -17,6 +18,7 @@ export const ru: Record<DictKey, string> = {
   ...workerRu,
   ...uiRu,
   ...v2Ru,
+  ...botsRu,
   ...homeworkRu,
   ...questionsRu,
   "app.name": BRAND.name,

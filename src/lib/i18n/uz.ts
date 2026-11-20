@@ -6,6 +6,7 @@ import { securityUz } from "./extra-security";
 import { workerUz } from "./extra-worker";
 import { uiUz } from "./extra-ui";
 import { v2Uz } from "./extra-v2";
+import { botsUz } from "./extra-bots";
 import { homeworkUz } from "./extra-homework";
 import { questionsUz } from "./extra-questions";
 
@@ -16,6 +17,7 @@ export const uz = {
   ...workerUz,
   ...uiUz,
   ...v2Uz,
+  ...botsUz,
   ...homeworkUz,
   ...questionsUz,
   "app.name": BRAND.name as string,

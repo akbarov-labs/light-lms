@@ -80,6 +80,12 @@ export function telegramDateTime(): boolean {
   return process.env.TELEGRAM_DATE_TIME === "true";
 }
 
+/** Bot API 9.6 managed bots: centers on the platform allow-list may create their own bot, controlled by the
+ * shared bot (needs Bot Management Mode on in @BotFather). Off unless "true" (docs/TELEGRAM-MANAGED-BOTS.md). */
+export function telegramManagedBots(): boolean {
+  return process.env.TELEGRAM_MANAGED_BOTS === "true";
+}
+
 export function opsTelegramChatId(): string | undefined {
   return str(process.env.OPS_TELEGRAM_CHAT_ID);
 }

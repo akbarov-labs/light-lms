@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireStaff } from "@/lib/ctx";
 import { PageHeader } from "@/components/ui";
 import { Tabs } from "@/components/tabs";
+import { managedBotsOn } from "@/lib/managed-bots/service";
 
 export default async function SettingsLayout({ children }: { children: ReactNode }) {
   const ctx = await requireStaff();
@@ -15,6 +16,7 @@ export default async function SettingsLayout({ children }: { children: ReactNode
           { href: "/settings/branches", label: t("settings.branches") },
           { href: "/settings/holidays", label: t("settings.holidays") },
           { href: "/settings/plan", label: t("plan.title") },
+          ...(managedBotsOn() ? [{ href: "/settings/telegram", label: t("settings.telegramBot") }] : []),
         ]
       : []),
     ...(ctx.can("staff.manage") ? [{ href: "/settings/staff", label: t("settings.staff") }] : []),

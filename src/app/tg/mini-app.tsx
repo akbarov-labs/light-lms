@@ -68,7 +68,10 @@ export function MiniApp({ labels }: { labels: { uz: MiniLabels; ru: MiniLabels }
       setState({ kind: "outside" });
       return;
     }
-    fetch("/api/tg/data", { method: "POST", body: initData, headers: { "content-type": "text/plain" } })
+    // a center's own bot opens /tg?b=<bot id>: the server checks the init data with that bot's token
+    const b = new URLSearchParams(window.location.search).get("b");
+    const url = b && /^\d{1,20}$/.test(b) ? `/api/tg/data?b=${b}` : "/api/tg/data";
+    fetch(url, { method: "POST", body: initData, headers: { "content-type": "text/plain" } })
       .then(async (r) => {
         const j = (await r.json().catch(() => ({}))) as { locale?: "uz" | "ru"; data?: PortalData; error?: string };
         if (r.ok && j.data) setState({ kind: "ready", locale: j.locale === "ru" ? "ru" : "uz", data: j.data });

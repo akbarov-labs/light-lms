@@ -4,6 +4,7 @@
 import type { LinkKind } from "@/generated/prisma/client";
 import { db, type Tx } from "./db";
 import { normalizePhone } from "./phone";
+import { scopedCenterId } from "./managed-bots/scope";
 
 async function clearChatId(tx: Tx, kind: LinkKind, refIds: string[], chatId?: string) {
   if (refIds.length === 0) return;
@@ -48,20 +49,23 @@ export interface ValidLinks {
  * Re-check a chat's links on every bot update: drop links whose person changed phone, was archived
  * (staff) or whose center is disabled. Stale links (phone changed / person gone) are deleted; links
  * of a disabled center are only ignored, so they work again when the center is switched back on.
+ * Inside a center bot's scope (managed bots) only that center's people are returned; stale links of any
+ * center are still cleaned up.
  */
 export async function validLinks(chatId: string, client: Tx = db): Promise<ValidLinks> {
   const links = await client.telegramLink.findMany({ where: { chatId } });
   const ids = (k: LinkKind) => links.filter((l) => l.kind === k).map((l) => l.refId);
   const [guardians, students, users] = await Promise.all([
-    client.guardian.findMany({ where: { id: { in: ids("GUARDIAN") } }, select: { id: true, phone: true, family: { select: { center: { select: { disabledAt: true } } } } } }),
-    client.student.findMany({ where: { id: { in: ids("STUDENT") } }, select: { id: true, phone: true, center: { select: { disabledAt: true } } } }),
-    client.user.findMany({ where: { id: { in: ids("STAFF") } }, select: { id: true, phone: true, archivedAt: true, center: { select: { disabledAt: true } } } }),
+    client.guardian.findMany({ where: { id: { in: ids("GUARDIAN") } }, select: { id: true, phone: true, family: { select: { centerId: true, center: { select: { disabledAt: true } } } } } }),
+    client.student.findMany({ where: { id: { in: ids("STUDENT") } }, select: { id: true, phone: true, centerId: true, center: { select: { disabledAt: true } } } }),
+    client.user.findMany({ where: { id: { in: ids("STAFF") } }, select: { id: true, phone: true, archivedAt: true, centerId: true, center: { select: { disabledAt: true } } } }),
   ]);
-  const people = new Map<string, { phone: string | null; disabled: boolean; archived: boolean }>([
-    ...guardians.map((g) => [`GUARDIAN:${g.id}`, { phone: g.phone, disabled: !!g.family.center.disabledAt, archived: false }] as const),
-    ...students.map((s) => [`STUDENT:${s.id}`, { phone: s.phone, disabled: !!s.center.disabledAt, archived: false }] as const),
-    ...users.map((u) => [`STAFF:${u.id}`, { phone: u.phone, disabled: !!u.center.disabledAt, archived: !!u.archivedAt }] as const),
+  const people = new Map<string, { phone: string | null; disabled: boolean; archived: boolean; centerId: string }>([
+    ...guardians.map((g) => [`GUARDIAN:${g.id}`, { phone: g.phone, disabled: !!g.family.center.disabledAt, archived: false, centerId: g.family.centerId }] as const),
+    ...students.map((s) => [`STUDENT:${s.id}`, { phone: s.phone, disabled: !!s.center.disabledAt, archived: false, centerId: s.centerId }] as const),
+    ...users.map((u) => [`STAFF:${u.id}`, { phone: u.phone, disabled: !!u.center.disabledAt, archived: !!u.archivedAt, centerId: u.centerId }] as const),
   ]);
+  const scope = scopedCenterId();
   const out: ValidLinks = { guardianIds: [], studentIds: [], staffIds: [] };
   const stale: typeof links = [];
   for (const l of links) {
@@ -70,7 +74,7 @@ export async function validLinks(chatId: string, client: Tx = db): Promise<Valid
       stale.push(l);
       continue;
     }
-    if (p.disabled) continue;
+    if (p.disabled || (scope && p.centerId !== scope)) continue;
     (l.kind === "GUARDIAN" ? out.guardianIds : l.kind === "STUDENT" ? out.studentIds : out.staffIds).push(l.refId);
   }
   if (stale.length) {

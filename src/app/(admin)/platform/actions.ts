@@ -56,3 +56,20 @@ export async function setCenterPlanAction(_: ActionState, fd: FormData): Promise
     revalidatePath("/platform");
   });
 }
+
+/** Pilot allow-list: may this center create its own Telegram bot (managed bots)? Revoking stops its bot. */
+export async function setCenterOwnBotAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(undefined, async (ctx) => {
+    assertPlatform(ctx);
+    const f = z.object({ centerId: z.string().min(1), allow: z.enum(["1", "0"]) }).parse(formObject(fd));
+    const c = await db.center.findUnique({ where: { id: f.centerId }, select: { id: true, ownBotAllowed: true } });
+    if (!c) throw new UserError("error.notFound");
+    const allow = f.allow === "1";
+    if (c.ownBotAllowed === allow) return;
+    await db.$transaction(async (tx) => {
+      await tx.center.update({ where: { id: c.id }, data: { ownBotAllowed: allow } });
+      await audit(tx, { centerId: c.id, userId: ctx.userId, entity: "Center", entityId: c.id, action: "platform.ownBot", before: { ownBotAllowed: c.ownBotAllowed }, after: { ownBotAllowed: allow, by: ctx.userName } });
+    });
+    revalidatePath("/platform");
+  });
+}

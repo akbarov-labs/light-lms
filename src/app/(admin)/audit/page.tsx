@@ -10,7 +10,7 @@ import { Card, EmptyState, LinkButton, PageHeader, Pagination, Table, Td, Th, Tr
 import { Input, Select } from "@/components/fields";
 
 const PAGE = 50;
-const ENTITIES = ["LedgerEntry", "Enrollment", "Student", "Lesson", "Group", "Course", "Payslip", "SalaryRule", "SalaryAdjustment", "Expense", "Lead", "User", "Branch", "Holiday", "Center", "Guardian", "PaymeTransaction"];
+const ENTITIES = ["LedgerEntry", "Enrollment", "Student", "Lesson", "Group", "Course", "Payslip", "SalaryRule", "SalaryAdjustment", "Expense", "Lead", "User", "Branch", "Holiday", "Center", "CenterBot", "Guardian", "PaymeTransaction"];
 
 function link(entity: string, id: string): string | null {
   switch (entity) {
