@@ -8,7 +8,8 @@ import { Keyboard, type Api, type Context } from "grammy";
 import { normalizePhone } from "@/lib/phone";
 import type { Locale } from "@/lib/i18n";
 import { salesAgentEnabled, salesTeamChatId } from "@/lib/env";
-import { SALES_MARK, activeSalesChat, handleSalesMessage, openSalesChat, recordSalesPhone, salesChatOfTeamMessage, salesText, teamReplyMarker } from "@/lib/sales-agent/service";
+import { SALES_MARK, activeSalesChat, handleSalesMessage, openSalesChat, recordOnboardingFile, recordSalesPhone, salesChatOfTeamMessage, salesText, teamReplyMarker } from "@/lib/sales-agent/service";
+import type { OnboardingFile } from "@/lib/sales-agent/onboarding";
 import { db } from "@/lib/db";
 import { looksLikePhone, queueTurn } from "./agent";
 
@@ -32,9 +33,20 @@ async function notifier(api: Api): Promise<(html: string) => Promise<number | nu
   };
 }
 
+/** Copies the person's own file messages into the team chat, in the order they were sent. */
+function fileSender(api: Api, chatId: string): (files: OnboardingFile[]) => Promise<void> {
+  return async (files) => {
+    const team = salesTeamChatId();
+    if (!team) return;
+    for (const f of files) {
+      await api.copyMessage(team, chatId, f.messageId).catch((e) => console.error("[sales] copy file", f.name, e));
+    }
+  };
+}
+
 async function runFor(api: Api, chatRowId: string, chatId: string, text: string, l: Locale): Promise<void> {
   await api.sendChatAction(chatId, "typing").catch(() => {});
-  const r = await handleSalesMessage({ chatRowId, text, locale: l, notifyTeam: await notifier(api) });
+  const r = await handleSalesMessage({ chatRowId, text, locale: l, notifyTeam: await notifier(api), sendFilesToTeam: fileSender(api, chatId) });
   for (const [i, t] of r.replies.entries()) {
     const last = i === r.replies.length - 1;
     await api.sendMessage(chatId, t.slice(0, 4000), last && r.askPhone ? { reply_markup: phoneButton(l) } : {});
@@ -77,6 +89,32 @@ export async function salesOnText(ctx: Context, text: string, l: Locale): Promis
     return true;
   }
   schedule(ctx, chat.id, text.slice(0, 2000), l);
+  return true;
+}
+
+/** A document or photo from a stranger who is setting up their center in the chat (student list, exercises). */
+export async function salesOnFile(ctx: Context, l: Locale): Promise<boolean> {
+  if (!salesAgentEnabled() || ctx.chat?.type !== "private" || !ctx.message) return false;
+  const chat = await activeSalesChat(String(ctx.chat.id));
+  if (!chat) return false;
+  const m = ctx.message;
+  const doc = m.document;
+  // the biggest size of a photo is the last one
+  const photo = m.photo?.at(-1);
+  if (!doc && !photo) return false;
+  const file: OnboardingFile = {
+    kind: doc ? "document" : "photo",
+    fileId: doc?.file_id ?? photo!.file_id,
+    name: doc?.file_name ?? `rasm-${m.message_id}.jpg`,
+    mime: doc?.mime_type ?? (photo ? "image/jpeg" : null),
+    size: doc?.file_size ?? photo?.file_size ?? null,
+    messageId: m.message_id,
+    caption: m.caption?.slice(0, 1000) ?? null,
+    at: new Date().toISOString(),
+  };
+  const marker = await recordOnboardingFile(chat.id, file);
+  if (!marker) return false;
+  schedule(ctx, chat.id, marker, l);
   return true;
 }
 

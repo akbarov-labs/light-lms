@@ -16,7 +16,7 @@ import { B, buttonKey } from "./texts";
 import { CANCEL, PICK, agentOnCancel, agentOnContact, agentOnPick, agentOnRestart, agentOnStart, agentOnText } from "./agent";
 import { answerFromTelegram } from "@/lib/agent/service";
 import { HOMEWORK_CB, homeworkMenu, homeworkOnCallback, homeworkOnText } from "./homework";
-import { salesOnContact, salesOnStart, salesOnTeamReply, salesOnText } from "./sales";
+import { salesOnContact, salesOnFile, salesOnStart, salesOnTeamReply, salesOnText } from "./sales";
 import { appUrl, telegramRichMessages } from "@/lib/env";
 import { richRefused } from "../notifications";
 import {
@@ -142,6 +142,14 @@ export function createBot(token: string): Bot {
       const t = makeT(l);
       await ctx.reply(t("tg.openAppHint"), { reply_markup: new InlineKeyboard().webApp(t("tg.openApp"), app) });
     }
+  });
+
+  // files: only a stranger setting up their center in the chat sends them (student list, homework PDFs)
+  bot.on(["message:document", "message:photo"], async (ctx) => {
+    if (ctx.chat.type !== "private") return;
+    const roles = await chatRoles(String(ctx.chat.id));
+    if (roles.family || roles.teacher || roles.owner) return;
+    await salesOnFile(ctx, await localeOf(ctx));
   });
 
   bot.on("message:text", async (ctx) => {
