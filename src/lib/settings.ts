@@ -99,6 +99,19 @@ export const centerSettingsSchema = z.object({
     })
     .prefault({})
     .catch(() => homeworkDefaults()),
+  /**
+   * Math tutor in the bot (src/lib/tutor): linked students and parents ask about any math topic and get hints
+   * step by step, never homework or test answers. Off by default: an external paid API (Anthropic, DEPLOY.md
+   * §0), metered against agent.monthlyTokenCap.
+   */
+  tutor: z
+    .object({
+      enabled: z.boolean().default(false),
+      /** messages one chat may send the tutor per day (Tashkent date) */
+      dailyMessages: z.number().int().min(1).max(200).default(30),
+    })
+    .prefault({})
+    .catch(() => ({ enabled: false, dailyMessages: 30 })),
   /** hour (Tashkent) of the owner's daily report in Telegram */
   dailyReportHour: z.number().int().min(6).max(23).default(21).catch(21),
 });
