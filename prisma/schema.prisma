@@ -204,6 +204,7 @@ model Center {
   homeworks      Homework[]
   questionTopics QuestionTopic[]
   questions      Question[]
+  quizzes        Quiz[]
 }
 
 model Branch {
@@ -323,27 +324,30 @@ model Course {
 }
 
 model Group {
-  id            String      @id @default(cuid())
-  centerId      String
-  center        Center      @relation(fields: [centerId], references: [id])
-  branchId      String
-  branch        Branch      @relation(fields: [branchId], references: [id])
-  courseId      String
-  course        Course      @relation(fields: [courseId], references: [id])
-  teacherId     String
-  teacher       User        @relation("GroupTeacher", fields: [teacherId], references: [id])
-  roomId        String?
-  room          Room?       @relation(fields: [roomId], references: [id])
-  code          Int
-  name          String
-  startDate     DateTime    @db.Date
-  endDate       DateTime?   @db.Date
-  capacity      Int?
-  priceOverride Int?
+  id             String         @id @default(cuid())
+  centerId       String
+  center         Center         @relation(fields: [centerId], references: [id])
+  branchId       String
+  branch         Branch         @relation(fields: [branchId], references: [id])
+  courseId       String
+  course         Course         @relation(fields: [courseId], references: [id])
+  teacherId      String
+  teacher        User           @relation("GroupTeacher", fields: [teacherId], references: [id])
+  roomId         String?
+  room           Room?          @relation(fields: [roomId], references: [id])
+  code           Int
+  name           String
+  startDate      DateTime       @db.Date
+  endDate        DateTime?      @db.Date
+  capacity       Int?
+  priceOverride  Int?
   /// [{ from, price }] — group price override changes (price null = course price); current field applies after the last.
-  priceHistory  Json        @default("[]")
-  status        GroupStatus @default(ACTIVE)
-  createdAt     DateTime    @default(now())
+  priceHistory   Json           @default("[]")
+  status         GroupStatus    @default(ACTIVE)
+  /// the bank topic the group is at now, set by the owner (topic tests, placement suggestions)
+  currentTopicId String?
+  currentTopic   QuestionTopic? @relation("GroupCurrentTopic", fields: [currentTopicId], references: [id])
+  createdAt      DateTime       @default(now())
 
   slots       GroupSlot[]
   lessons     Lesson[]
@@ -351,6 +355,7 @@ model Group {
   reportCards ReportCard[]
   exams       Exam[]
   homeworks   Homework[]
+  quizzes     Quiz[]
 
   @@unique([centerId, code])
   @@index([centerId, createdAt])
@@ -506,6 +511,7 @@ model Student {
   examResults  ExamResult[]
   certificates Certificate[]
   homeworks    HomeworkSubmission[]
+  quizAttempts QuizAttempt[]
 
   @@index([centerId, createdAt])
   @@index([familyId])
@@ -705,9 +711,10 @@ model Lead {
   updatedAt     DateTime  @updatedAt
   archivedAt    DateTime?
 
-  notes       LeadNote[]
-  examResults ExamResult[]
-  agentChats  AgentChat[]
+  notes        LeadNote[]
+  examResults  ExamResult[]
+  agentChats   AgentChat[]
+  quizAttempts QuizAttempt[]
 
   @@index([centerId, createdAt])
   @@index([centerId, stage])
@@ -1067,6 +1074,9 @@ model Notification {
   /// optional Bot API rich-message HTML (sendRichMessage); sent instead of `text` only when
   /// TELEGRAM_RICH_MESSAGES=true, and `text` is the fallback if Telegram refuses it. Never used for SMS.
   richText      String?
+  /// optional button under the message that opens the Mini App: { text, path } ("/tg/quiz?q=…"); the sender
+  /// builds the URL for the bot that delivers it (a center's own bot adds ?b=<bot id>). Telegram only.
+  button        Json?
   /// the center's own bot that delivered it (CenterBot.botId); null = the shared bot or not sent yet
   sentVia       String?
   dedupeKey     String?             @unique
@@ -1264,6 +1274,9 @@ model QuestionTopic {
   createdAt DateTime @default(now())
 
   questions Question[]
+  groupsAt  Group[]       @relation("GroupCurrentTopic")
+  quizzes   Quiz[]
+  attempts  QuizAttempt[]
 
   @@unique([centerId, code])
 }
@@ -1304,4 +1317,99 @@ model Question {
 
   @@unique([topicId, number])
   @@index([centerId, status])
+}
+
+// ------------------------------------------------------------------ quizzes (timed tests in the Mini App)
+
+enum QuizKind {
+  /// a test on a topic for a group, built from the bank's approved questions
+  TOPIC
+  /// the center's placement test template: each attempt draws its own questions up to the topic reached
+  PLACEMENT
+}
+
+enum QuizStatus {
+  /// the owner reviews the questions; nobody can take it
+  DRAFT
+  /// open: the group was told, students can start (placement: the start link works)
+  PUBLISHED
+  /// no new attempts; running ones are finished
+  CLOSED
+}
+
+/// A timed test taken in the Telegram Mini App. Questions come from the center's bank (approved ones only);
+/// code grades every answer from the question's key (src/lib/quizzes/grade.ts), never a model.
+model Quiz {
+  id            String         @id @default(cuid())
+  centerId      String
+  center        Center         @relation(fields: [centerId], references: [id])
+  kind          QuizKind       @default(TOPIC)
+  title         String
+  /// TOPIC: the group it is for; PLACEMENT: null
+  groupId       String?
+  group         Group?         @relation(fields: [groupId], references: [id])
+  /// TOPIC: the topic the questions come from (with its sub-topics)
+  topicId       String?
+  topic         QuestionTopic? @relation(fields: [topicId], references: [id])
+  /// time limit per attempt, from the moment the student starts
+  minutes       Int
+  /// TOPIC: question ids in order; PLACEMENT: [] (each attempt draws its own)
+  questionIds   String[]       @default([])
+  /// PLACEMENT: questions per attempt
+  questionCount Int            @default(0)
+  passPercent   Int            @default(70)
+  status        QuizStatus     @default(DRAFT)
+  publishedAt   DateTime?
+  closedAt      DateTime?
+  /// the last time the owner sent the results to the parents (their permission is this button)
+  parentsSentAt DateTime?
+  createdById   String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  attempts QuizAttempt[]
+
+  @@index([centerId, kind, createdAt])
+  @@index([groupId])
+}
+
+/// One person's run through a quiz: a student (topic tests; a known student on placement) or a lead (placement).
+/// Answers are saved one by one; past the deadline nothing is accepted and the attempt is finished by code.
+model QuizAttempt {
+  id                 String         @id @default(cuid())
+  quizId             String
+  quiz               Quiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  studentId          String?
+  student            Student?       @relation(fields: [studentId], references: [id])
+  leadId             String?
+  lead               Lead?          @relation(fields: [leadId], references: [id])
+  /// the Telegram chat that started it (the student's own or a parent's)
+  chatId             String
+  /// PLACEMENT: the name typed in the Mini App (the person being placed)
+  name               String?
+  /// PLACEMENT: the topic the person said they reached
+  topicId            String?
+  topic              QuestionTopic? @relation(fields: [topicId], references: [id])
+  /// this attempt's questions in order (a topic test copies the quiz's)
+  questionIds        String[]
+  /// in question order; "" = not answered
+  answers            String[]       @default([])
+  startedAt          DateTime       @default(now())
+  deadlineAt         DateTime
+  submittedAt        DateTime?
+  /// finished by code at the deadline, not by the student
+  autoSubmitted      Boolean        @default(false)
+  correct            Int?
+  total              Int
+  /// PLACEMENT: the owner's decision (enrolled as TRIAL into this group)
+  placedGroupId      String?
+  placedEnrollmentId String?
+  placedAt           DateTime?
+  placedById         String?
+  createdAt          DateTime       @default(now())
+
+  @@unique([quizId, studentId])
+  @@index([quizId, createdAt])
+  @@index([chatId])
+  @@index([submittedAt, deadlineAt])
 }
