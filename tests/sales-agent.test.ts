@@ -53,7 +53,7 @@ describe("Sabaq sales agent", () => {
     // the prompt is Sabaq's, not a center's
     const system = (m.seen[0].system as Anthropic.Beta.BetaTextBlockParam[])[0].text;
     expect(system).toContain("o'qituvchining AI yordamchisi");
-    expect(m.seen[0].tools!.map((x) => (x as { name: string }).name)).toEqual(["request_phone", "notify_team", "start_onboarding"]);
+    expect(m.seen[0].tools!.map((x) => (x as { name: string }).name)).toEqual(["request_phone", "notify_team", "request_access"]);
 
     expect((await turn("120 ta o'quvchimiz bor, qaysi tarif?")).askPhone).toBe(false);
     const asked = await turn("Boshlamoqchiman");

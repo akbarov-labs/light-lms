@@ -8,7 +8,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SalesChat } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
-import { agentModel, anthropicApiKey, mainSiteUrl, rawAppUrl, salesMonthlyTokenCap } from "@/lib/env";
+import { agentModel, anthropicApiKey, mainSiteUrl, rawAppUrl, salesChatTokenCap, salesMonthlyTokenCap } from "@/lib/env";
 import { BRAND, demoHref, signupClosed } from "@/config/brand";
 import { monthKey, todayISO } from "@/lib/dates";
 import type { Locale } from "@/lib/i18n";
@@ -31,7 +31,23 @@ export const SALES_MARK = {
 } as const;
 export const teamReplyMarker = (text: string) => `[Sabaq jamoasi yozdi: «${text.replace(/»/g, '"')}»]`;
 
-const TEXT: Record<"tooMany" | "paused" | "error", Record<Locale, string>> = {
+const TEXT: Record<"tooMany" | "paused" | "error" | "pending" | "rejected" | "approved" | "chatCap", Record<Locale, string>> = {
+  pending: {
+    uz: "So'rovingiz jamoamizda ko'rib chiqilmoqda. Tasdiqlangach, shu yerda markazingizni sozlashni davom ettiramiz.",
+    ru: "Ваша заявка на рассмотрении у нашей команды. После подтверждения продолжим настройку центра здесь же.",
+  },
+  rejected: {
+    uz: "Kechirasiz, hozircha so'rovingizni tasdiqlay olmadik. Savol bo'lsa, jamoamiz bilan bog'laning.",
+    ru: "К сожалению, пока не можем подтвердить заявку. Если есть вопросы, свяжитесь с нашей командой.",
+  },
+  approved: {
+    uz: "✅ So'rovingiz tasdiqlandi! Endi markazingizni sozlaymiz: bir nechta savol beraman.",
+    ru: "✅ Заявка подтверждена! Теперь настроим ваш центр: задам несколько вопросов.",
+  },
+  chatCap: {
+    uz: "Asosiy savollarga javob berdim. Sinab ko'rmoqchi bo'lsangiz, «sinab ko'raman» deb yozing — jamoamiz siz bilan bog'lanadi.",
+    ru: "Я ответил на основные вопросы. Если хотите попробовать, напишите «хочу попробовать» — наша команда свяжется с вами.",
+  },
   tooMany: { uz: "Juda ko'p xabar keldi. Iltimos, bir necha daqiqadan keyin yozing.", ru: "Слишком много сообщений. Пожалуйста, напишите через несколько минут." },
   paused: { uz: "Hozir avtomatik javob bera olmayman. Jamoamiz siz bilan bog'lanadi.", ru: "Сейчас не могу ответить автоматически. Наша команда свяжется с вами." },
   error: { uz: "Kechirasiz, texnik nosozlik bo'ldi. Bir ozdan keyin qayta yozing.", ru: "Извините, произошла техническая ошибка. Напишите чуть позже." },
@@ -63,9 +79,20 @@ export const SALES_TOOLS: AgentTool[] = [
   REQUEST_PHONE,
   NOTIFY_TEAM,
   {
-    name: "start_onboarding",
-    description: "Markazni shu chatda sozlashni boshlaydi (odam rozi bo'lgandan keyin). Keyingi xabarlardan savol-javob rejimi.",
-    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    name: "request_access",
+    description:
+      "Sinab ko'rish so'rovini jamoaga yuboradi (tasdiqlash tugmalari bilan). Faqat odam sinab ko'rishga rozi bo'lgach, maktab nomi, Instagram yoki Telegram havolasi, egasining ismi aytilgach va telefon raqami (request_phone) olingach. Jamoa tasdiqlagach, markazni sozlash shu chatda davom etadi.",
+    input_schema: {
+      type: "object",
+      properties: {
+        schoolName: { type: "string", description: "o'quv markazi yoki maktab nomi" },
+        link: { type: "string", description: "Instagram sahifasi yoki Telegram kanali havolasi (@nom yoki https://...)" },
+        ownerName: { type: "string", description: "egasi yoki direktorning ismi" },
+        city: { type: "string" },
+      },
+      required: ["schoolName", "link", "ownerName"],
+      additionalProperties: false,
+    },
   },
 ];
 
@@ -192,7 +219,7 @@ export interface SalesInput {
   text: string;
   locale: Locale;
   /** sends HTML to the team chat; returns the sent message's id, or null when there is no team chat */
-  notifyTeam: (html: string) => Promise<number | null>;
+  notifyTeam: (html: string, opts?: { accessFor?: string }) => Promise<number | null>;
   /** copies the person's files (their own messages) into the team chat */
   sendFilesToTeam?: (files: OnboardingFile[]) => Promise<void>;
   create?: CreateMessage;
@@ -209,6 +236,20 @@ function teamMessage(chat: SalesChat, kind: string, summary: string): string {
   const phone = chat.phone ? `📞 +${chat.phone}` : "📞 —";
   const title = kind === "lead" ? "🤖 Sabaq: yangi mijoz" : "🤖 Sabaq: savol";
   return `${title}\n${who}\n${phone}\n\n${esc(summary.slice(0, 1500))}\n\n↩️ Javob uchun shu xabarga reply qiling: javobingiz unga boradi.`;
+}
+
+function accessTeamMessage(chat: SalesChat, d: Onboarding["draft"]): string {
+  const who = [chat.name ? esc(chat.name) : "?", chat.username ? `@${esc(chat.username)}` : ""].filter(Boolean).join(" ");
+  return [
+    "🆕 Sabaq: sinab ko'rish so'rovi",
+    `🏫 <b>${esc(d.center?.name ?? "?")}</b>${d.center?.city ? `, ${esc(d.center.city)}` : ""}`,
+    `🔗 ${esc(d.center?.link ?? "—")}`,
+    `👤 ${esc(d.owner?.name ?? "?")} (Telegram: ${who})`,
+    chat.phone ? `📞 +${chat.phone}` : "📞 —",
+    "",
+    "Sahifasini tekshiring: haqiqiy markazmi? Tasdiqlasangiz, bot markazni sozlashni davom ettiradi.",
+    "↩️ Shu xabarga reply qilsangiz, javobingiz unga boradi.",
+  ].join("\n");
 }
 
 function onboardingTeamMessage(chat: SalesChat, o: Onboarding): string {
@@ -253,6 +294,13 @@ export async function handleSalesMessage(h: SalesInput): Promise<SalesReply> {
   const month = monthKey(todayISO(now));
   const used = await db.salesUsage.findUnique({ where: { month } });
   if (used && capTokens(used) >= salesMonthlyTokenCap()) return say("paused");
+
+  // an application waiting for the team, or a refused one: a fixed answer, no model call
+  const status = readOnboarding(chat.onboarding).status;
+  if (status === "pending") return say("pending");
+  if (status === "rejected") return say("rejected");
+  // before approval a chat may only cost so much: strangers cannot run up the bill
+  if (status === "none" && capTokens(chat) >= salesChatTokenCap()) return say("chatCap");
 
   const stored = (chat.messages ?? []) as unknown as AgentMessage[];
   const history = trimHistory(stored, HISTORY_LIMITS);
@@ -306,9 +354,20 @@ export async function handleSalesMessage(h: SalesInput): Promise<SalesReply> {
       await db.salesChat.update({ where: { id: chat.id }, data: { teamMessageIds: { push: id } } });
       return { ok: true };
     }
-    if (name === "start_onboarding" && !setup) {
-      onboarding = await saveOnboarding(chat.id, { status: "collecting" });
-      return { ok: true, note: "boshlandi: endi markaz nomi va shahrini so'ra" };
+    if (name === "request_access" && !setup) {
+      const fresh = await db.salesChat.findUniqueOrThrow({ where: { id: chat.id } });
+      if (!fresh.phone) throw new AgentToolError("avval telefon raqami kerak: request_phone ishlat va raqam kelishini kut");
+      const s = (k: string) => (typeof input[k] === "string" ? (input[k] as string).trim() : "");
+      const [schoolName, link, ownerName, city] = [s("schoolName"), s("link"), s("ownerName"), s("city")];
+      if (!schoolName || !link || !ownerName) throw new AgentToolError("maktab nomi, havola (Instagram yoki Telegram) va egasining ismi kerak");
+      const r = mergeDraft(onboarding.draft, { center: { name: schoolName, link, ...(city ? { city } : {}) }, owner: { name: ownerName } });
+      if (!r.ok) throw new AgentToolError(`saqlanmadi: ${r.errors.join("; ")}`);
+      const id = await h.notifyTeam(accessTeamMessage(fresh, r.draft), { accessFor: chat.id });
+      if (id === null) throw new AgentToolError("jamoaga hozir yuborib bo'lmadi: odamga jamoa keyinroq bog'lanishini ayt");
+      const row = await db.salesChat.findUniqueOrThrow({ where: { id: chat.id }, select: { onboarding: true } });
+      onboarding = { ...readOnboarding(row.onboarding), draft: r.draft, status: "pending", appliedAt: now.toISOString() };
+      await db.salesChat.update({ where: { id: chat.id }, data: { onboarding: JSON.parse(JSON.stringify(onboarding)), teamMessageIds: { push: id } } });
+      return { ok: true, note: "so'rov jamoaga yuborildi: odamga jamoa tekshirib, tasdiqlagach shu yerda davom etishingizni ayt" };
     }
     if (setup && name === "save_onboarding") {
       const r = mergeDraft(onboarding.draft, input);
@@ -390,3 +449,21 @@ export async function recordOnboardingFile(chatRowId: string, file: OnboardingFi
   const caption = file.caption ? ` — izoh: «${file.caption.slice(0, 300).replace(/»/g, '"')}»` : "";
   return `[fayl olindi: ${file.name}${file.mime ? ` (${file.mime})` : ""}${caption}]`;
 }
+
+/**
+ * The team's answer to an application (the buttons under "🆕 Sabaq: sinab ko'rish so'rovi"). Only a pending
+ * application changes; returns the chat for the bot to tell the person, or null when it was already decided.
+ */
+export async function decideAccess(chatRowId: string, approve: boolean, reviewer: string, now = new Date()): Promise<SalesChat | null> {
+  return db.$transaction(async (tx) => {
+    const chat = await tx.salesChat.findUnique({ where: { id: chatRowId } });
+    if (!chat) return null;
+    const o = readOnboarding(chat.onboarding);
+    if (o.status !== "pending") return null;
+    const next: Onboarding = { ...o, status: approve ? "collecting" : "rejected", reviewedBy: reviewer.slice(0, 120), reviewedAt: now.toISOString() };
+    return tx.salesChat.update({ where: { id: chat.id }, data: { onboarding: JSON.parse(JSON.stringify(next)), lastMessageAt: now } });
+  });
+}
+
+/** What the model hears when the team approved: it starts the setup interview from there. */
+export const ACCESS_APPROVED_MARK = "[Jamoa so'rovni tasdiqladi: markazni sozlashni boshla. Markaz nomi, havola, egasining ismi va telefoni allaqachon bor]";

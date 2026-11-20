@@ -1,5 +1,7 @@
-// Center setup in the bot chat: a new customer answers Sabaq's AI assistant question by question (and sends
-// files), the answers become a draft on their SalesChat, the owner confirms a summary, the team checks it and
+// Center setup in the bot chat. First a short application (school, its Instagram/Telegram link, the owner's
+// name and phone) that the team approves with a button, so strangers cannot fill the database or burn AI
+// credits; then the owner answers Sabaq's AI assistant question by question (and sends files), the answers
+// become a draft on their SalesChat, the owner confirms a summary, the team checks it and
 // scripts/create-from-onboarding.ts turns it into a real center. Pure functions here (tested); the agent's
 // side is in service.ts, the Telegram side in src/worker/bot/sales.ts.
 //
@@ -25,7 +27,7 @@ const salary = z.object({
 });
 
 export const draftSchema = z.object({
-  center: z.object({ name: optStr(120), city: optStr(80), phone: optStr(30) }).optional(),
+  center: z.object({ name: optStr(120), city: optStr(80), phone: optStr(30), link: optStr(300) }).optional(),
   owner: z.object({ name: optStr(120), role: optStr(80) }).optional(),
   branches: z.array(z.object({ name: str(), address: optStr(), rooms: z.array(str(60)).max(50).optional() })).max(20).optional(),
   courses: z
@@ -86,12 +88,20 @@ export interface OnboardingFile {
   at: string;
 }
 
-export type OnboardingStatus = "none" | "collecting" | "submitted" | "created";
+/**
+ * none → pending (application sent) → collecting (team approved) → submitted (owner confirmed) → created;
+ * pending → rejected. While pending or rejected the model is not called at all.
+ */
+export type OnboardingStatus = "none" | "pending" | "rejected" | "collecting" | "submitted" | "created";
 
 export interface Onboarding {
   status: OnboardingStatus;
   draft: OnboardingDraft;
   files: OnboardingFile[];
+  appliedAt?: string;
+  /** who pressed approve/reject in the team chat, and when */
+  reviewedBy?: string;
+  reviewedAt?: string;
   submittedAt?: string;
   centerId?: string;
 }
@@ -100,11 +110,10 @@ export function readOnboarding(raw: unknown): Onboarding {
   const o = (raw ?? {}) as Partial<Onboarding>;
   const draft = draftSchema.safeParse(o.draft ?? {});
   return {
-    status: (["collecting", "submitted", "created"] as const).find((s) => s === o.status) ?? "none",
+    status: (["pending", "rejected", "collecting", "submitted", "created"] as const).find((s) => s === o.status) ?? "none",
     draft: draft.success ? draft.data : {},
     files: Array.isArray(o.files) ? o.files : [],
-    ...(o.submittedAt ? { submittedAt: o.submittedAt } : {}),
-    ...(o.centerId ? { centerId: o.centerId } : {}),
+    ...Object.fromEntries((["appliedAt", "reviewedBy", "reviewedAt", "submittedAt", "centerId"] as const).filter((k) => o[k]).map((k) => [k, o[k]])),
   };
 }
 
@@ -182,7 +191,7 @@ const yesNo = (b: boolean | undefined) => (b === undefined ? "—" : b ? "ha" : 
 /** Plain text for the owner (no markdown: Telegram shows it as written). */
 export function draftSummary(d: OnboardingDraft, files: OnboardingFile[], hasOwnerPhone: boolean): string {
   const L: string[] = ["📋 Markazingiz ma'lumotlari", ""];
-  L.push(`Markaz: ${d.center?.name ?? "—"}${d.center?.city ? `, ${d.center.city}` : ""}`);
+  L.push(`Markaz: ${d.center?.name ?? "—"}${d.center?.city ? `, ${d.center.city}` : ""}${d.center?.link ? ` (${d.center.link})` : ""}`);
   L.push(`Egasi: ${d.owner?.name ?? "—"}${d.owner?.role ? ` (${d.owner.role})` : ""} · telefon: ${hasOwnerPhone ? "olingan" : "—"}`);
   if (d.branches?.length) L.push("", "Filiallar:", ...d.branches.map((b) => `- ${b.name}${b.address ? `, ${b.address}` : ""}${b.rooms?.length ? ` (xonalar: ${b.rooms.join(", ")})` : ""}`));
   L.push("", "Kurslar:", ...(d.courses?.length ? d.courses.map((c) => `- ${c.name}: ${sum(c.price)} (${PRICING[c.pricing]}${c.pricing === "package" && c.packageLessons ? `, ${c.packageLessons} dars` : ""}${c.lessonsPerWeek ? `, haftasiga ${c.lessonsPerWeek} dars` : ""}${c.lessonMinutes ? `, ${c.lessonMinutes} daqiqa` : ""})`) : ["- —"]));

@@ -43,6 +43,12 @@ export function salesTeamChatId(): string | undefined {
 }
 
 /** Monthly token cap of the sales agent (weighted like a center's cap). Default 5 000 000 (~$5–10 on Haiku). */
+/** Tokens one not-yet-approved sales chat may use (capTokens units); then a fixed reply, no model. */
+export function salesChatTokenCap(): number {
+  const n = Number(process.env.SALES_CHAT_TOKEN_CAP);
+  return Number.isFinite(n) && n > 0 ? n : 150_000;
+}
+
 export function salesMonthlyTokenCap(): number {
   const n = Number(process.env.SALES_MONTHLY_TOKEN_CAP);
   return Number.isFinite(n) && n > 0 ? n : 5_000_000;

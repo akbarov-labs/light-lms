@@ -16,7 +16,7 @@ import { B, buttonKey } from "./texts";
 import { CANCEL, PICK, agentOnCancel, agentOnContact, agentOnPick, agentOnRestart, agentOnStart, agentOnText } from "./agent";
 import { answerFromTelegram } from "@/lib/agent/service";
 import { HOMEWORK_CB, homeworkMenu, homeworkOnCallback, homeworkOnText } from "./homework";
-import { salesOnContact, salesOnFile, salesOnStart, salesOnTeamReply, salesOnText } from "./sales";
+import { SALES_ACCESS, salesOnAccess, salesOnContact, salesOnFile, salesOnStart, salesOnTeamReply, salesOnText } from "./sales";
 import { appUrl, telegramRichMessages } from "@/lib/env";
 import { richRefused } from "../notifications";
 import {
@@ -250,6 +250,8 @@ export function createBot(token: string): Bot {
 
   // a group card's "book a trial" button (AI lead agent); registered first, the generic handler below is attendance
   bot.callbackQuery(PICK, async (ctx) => agentOnPick(ctx, ctx.match[1], await localeOf(ctx)));
+  // the Sabaq team approving or rejecting a "try Sabaq" application (team chat only)
+  bot.callbackQuery(SALES_ACCESS, async (ctx) => salesOnAccess(ctx, ctx.match[1] === "a", ctx.match[2]));
   // the agent's "cancel this trial?" buttons: the booking is cancelled only here, by the person's press
   bot.callbackQuery(CANCEL, async (ctx) => agentOnCancel(ctx, ctx.match[1] === "y", ctx.match[2], await localeOf(ctx)));
   // homework answers (pilot): open / letter / go to question / summary
