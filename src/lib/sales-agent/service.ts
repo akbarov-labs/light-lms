@@ -8,7 +8,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SalesChat } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
-import { agentModel, anthropicApiKey, mainSiteUrl, rawAppUrl, salesMonthlyTokenCap } from "@/lib/env";
+import { agentModel, anthropicApiKey, mainSiteUrl, rawAppUrl, salesChatTokenCap, salesMonthlyTokenCap } from "@/lib/env";
 import { BRAND, demoHref, signupClosed } from "@/config/brand";
 import { monthKey, todayISO } from "@/lib/dates";
 import type { Locale } from "@/lib/i18n";
@@ -18,7 +18,8 @@ import { attemptKey, checkAttempts, recordAttempt, RULES } from "@/lib/auth/rate
 import { HISTORY_LIMITS, stripThinking, trimHistory, type AgentMessage } from "@/lib/agent/history";
 import { AgentToolError, runTurn, type AgentTool, type CreateMessage, type TurnUsage } from "@/lib/agent/loop";
 import { capTokens } from "@/lib/agent/service";
-import { buildSalesPrompt } from "./prompt";
+import { buildOnboardingPrompt, buildSalesPrompt } from "./prompt";
+import { draftSummary, mergeDraft, missingItems, readOnboarding, type Onboarding, type OnboardingFile } from "./onboarding";
 
 /** A conversation silent this long starts over (the old history stays for the model as context). */
 export const SALES_IDLE_DAYS = 14;
@@ -30,32 +31,162 @@ export const SALES_MARK = {
 } as const;
 export const teamReplyMarker = (text: string) => `[Sabaq jamoasi yozdi: «${text.replace(/»/g, '"')}»]`;
 
-const TEXT: Record<"tooMany" | "paused" | "error", Record<Locale, string>> = {
+const TEXT: Record<"tooMany" | "paused" | "error" | "pending" | "rejected" | "approved" | "chatCap", Record<Locale, string>> = {
+  pending: {
+    uz: "So'rovingiz jamoamizda ko'rib chiqilmoqda. Tasdiqlangach, shu yerda markazingizni sozlashni davom ettiramiz.",
+    ru: "Ваша заявка на рассмотрении у нашей команды. После подтверждения продолжим настройку центра здесь же.",
+  },
+  rejected: {
+    uz: "Kechirasiz, hozircha so'rovingizni tasdiqlay olmadik. Savol bo'lsa, jamoamiz bilan bog'laning.",
+    ru: "К сожалению, пока не можем подтвердить заявку. Если есть вопросы, свяжитесь с нашей командой.",
+  },
+  approved: {
+    uz: "✅ So'rovingiz tasdiqlandi! Endi markazingizni sozlaymiz: bir nechta savol beraman.",
+    ru: "✅ Заявка подтверждена! Теперь настроим ваш центр: задам несколько вопросов.",
+  },
+  chatCap: {
+    uz: "Asosiy savollarga javob berdim. Sinab ko'rmoqchi bo'lsangiz, «sinab ko'raman» deb yozing — jamoamiz siz bilan bog'lanadi.",
+    ru: "Я ответил на основные вопросы. Если хотите попробовать, напишите «хочу попробовать» — наша команда свяжется с вами.",
+  },
   tooMany: { uz: "Juda ko'p xabar keldi. Iltimos, bir necha daqiqadan keyin yozing.", ru: "Слишком много сообщений. Пожалуйста, напишите через несколько минут." },
   paused: { uz: "Hozir avtomatik javob bera olmayman. Jamoamiz siz bilan bog'lanadi.", ru: "Сейчас не могу ответить автоматически. Наша команда свяжется с вами." },
   error: { uz: "Kechirasiz, texnik nosozlik bo'ldi. Bir ozdan keyin qayta yozing.", ru: "Извините, произошла техническая ошибка. Напишите чуть позже." },
 };
 export const salesText = (k: keyof typeof TEXT, l: Locale) => TEXT[k][l];
 
-export const SALES_TOOLS: AgentTool[] = [
-  {
-    name: "request_phone",
-    description: "Odamga Telegram'da «Raqamni yuborish» tugmasini ko'rsatadi. Faqat jamoa bog'lanishi kerak bo'lganda (boshlash, demo, qo'ng'iroq) yoki markazga ulanish uchun.",
-    input_schema: { type: "object", properties: {}, additionalProperties: false },
+const REQUEST_PHONE: AgentTool = {
+  name: "request_phone",
+  description: "Odamga Telegram'da «Raqamni yuborish» tugmasini ko'rsatadi. Faqat jamoa bog'lanishi kerak bo'lganda (boshlash, demo, qo'ng'iroq), markazga ulanish yoki markaz egasining kirish raqami uchun.",
+  input_schema: { type: "object", properties: {}, additionalProperties: false },
+};
+
+const NOTIFY_TEAM: AgentTool = {
+  name: "notify_team",
+  description:
+    "Sabaq jamoasiga Telegram'da xabar yuboradi. kind=lead: odam boshlamoqchi yoki bog'lanishni so'radi. kind=question: javobi ma'lumotlarda yo'q savol. Jamoa javobi keyin «[Sabaq jamoasi yozdi: ...]» bo'lib keladi.",
+  input_schema: {
+    type: "object",
+    properties: {
+      kind: { type: "string", enum: ["lead", "question"] },
+      summary: { type: "string", description: "Jamoa uchun qisqa: kim (ism, roli), markaz nomi, o'quvchilar soni, nima xohlaydi yoki savoli aynan." },
+    },
+    required: ["kind", "summary"],
+    additionalProperties: false,
   },
+};
+
+export const SALES_TOOLS: AgentTool[] = [
+  REQUEST_PHONE,
+  NOTIFY_TEAM,
   {
-    name: "notify_team",
+    name: "request_access",
     description:
-      "Sabaq jamoasiga Telegram'da xabar yuboradi. kind=lead: odam boshlamoqchi yoki bog'lanishni so'radi. kind=question: javobi ma'lumotlarda yo'q savol. Jamoa javobi keyin «[Sabaq jamoasi yozdi: ...]» bo'lib keladi.",
+      "Sinab ko'rish so'rovini jamoaga yuboradi (tasdiqlash tugmalari bilan). Faqat odam sinab ko'rishga rozi bo'lgach, maktab nomi, Instagram yoki Telegram havolasi, egasining ismi aytilgach va telefon raqami (request_phone) olingach. Jamoa tasdiqlagach, markazni sozlash shu chatda davom etadi.",
     input_schema: {
       type: "object",
       properties: {
-        kind: { type: "string", enum: ["lead", "question"] },
-        summary: { type: "string", description: "Jamoa uchun qisqa: kim (ism, roli), markaz nomi, o'quvchilar soni, nima xohlaydi yoki savoli aynan." },
+        schoolName: { type: "string", description: "o'quv markazi yoki maktab nomi" },
+        link: { type: "string", description: "Instagram sahifasi yoki Telegram kanali havolasi (@nom yoki https://...)" },
+        ownerName: { type: "string", description: "egasi yoki direktorning ismi" },
+        city: { type: "string" },
       },
-      required: ["kind", "summary"],
+      required: ["schoolName", "link", "ownerName"],
       additionalProperties: false,
     },
+  },
+];
+
+const nameList = (extra: Record<string, unknown> = {}) => ({ type: "array", items: { type: "object", properties: { name: { type: "string" }, ...extra }, required: ["name"] } });
+
+export const ONBOARDING_TOOLS: AgentTool[] = [
+  REQUEST_PHONE,
+  NOTIFY_TEAM,
+  {
+    name: "save_onboarding",
+    description:
+      "Markaz qoralamasiga bo'limlarni yozadi. Ro'yxat bo'limi (branches, courses, teachers, groups, notes) to'liq almashtiriladi: eski elementlarni ham yubor. Obyekt bo'limlari maydonma-maydon qo'shiladi. Bo'limni o'chirish: null. Natijada «hali kerak» ro'yxati qaytadi.",
+    input_schema: {
+      type: "object",
+      properties: {
+        center: { type: "object", properties: { name: { type: "string" }, city: { type: "string" }, phone: { type: "string", description: "markazning ochiq telefoni, bo'lsa" } } },
+        owner: { type: "object", properties: { name: { type: "string" }, role: { type: "string" } } },
+        branches: nameList({ address: { type: "string" }, rooms: { type: "array", items: { type: "string" } } }),
+        courses: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              pricing: { type: "string", enum: ["monthly", "package"] },
+              price: { type: "integer", description: "so'm, butun son" },
+              lessonsPerWeek: { type: "integer" },
+              lessonMinutes: { type: "integer" },
+              packageLessons: { type: "integer", description: "paketdagi darslar soni (pricing=package)" },
+            },
+            required: ["name", "pricing", "price"],
+          },
+        },
+        teachers: nameList({
+          phone: { type: "string" },
+          salary: {
+            type: "object",
+            properties: {
+              model: {
+                type: "string",
+                enum: ["PERCENT_EARNED", "FIXED", "PER_LESSON", "BASE_PLUS_PERCENT"],
+                description: "PERCENT_EARNED: to'langan puldan foiz; FIXED: belgilangan oylik; PER_LESSON: har dars uchun; BASE_PLUS_PERCENT: oylik + foiz",
+              },
+              percent: { type: "integer" },
+              fixedAmount: { type: "integer" },
+              perLesson: { type: "integer" },
+            },
+            required: ["model"],
+          },
+        }),
+        groups: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              course: { type: "string", description: "courses dagi nom" },
+              teacher: { type: "string", description: "teachers dagi ism yoki egasining ismi" },
+              branch: { type: "string" },
+              room: { type: "string" },
+              days: { type: "array", items: { type: "integer", minimum: 1, maximum: 7 } },
+              startTime: { type: "string", description: "HH:MM" },
+              endTime: { type: "string", description: "HH:MM" },
+              startDate: { type: "string", description: "YYYY-MM-DD, yangi guruh bo'lsa" },
+            },
+            required: ["name", "course", "teacher", "days", "startTime", "endTime"],
+          },
+        },
+        students: { type: "object", properties: { count: { type: "integer" }, source: { type: "string", enum: ["file", "photo", "typed", "later"] }, note: { type: "string" } } },
+        rules: {
+          type: "object",
+          properties: {
+            trialLessons: { type: "integer", description: "bepul sinov darslari soni" },
+            excusedAbsenceCredit: { type: "boolean", description: "sababli qoldirilgan dars puli qaytariladimi" },
+            payFromCollected: { type: "boolean", description: "true: o'qituvchi oyligi yig'ilgan puldan; false: o'tilgan darslardan" },
+            reminderDaysBefore: { type: "integer", description: "to'lovni necha kun oldin eslatish" },
+            other: { type: "string" },
+          },
+        },
+        homework: { type: "object", properties: { wanted: { type: "boolean" }, note: { type: "string" } } },
+        notes: { type: "array", items: { type: "string" } },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "show_summary",
+    description: "Qoralamaning to'liq xulosasini odamga alohida xabar qilib yuboradi (sen qayta yozma). Keyin tasdiqlashni so'ra.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "finish_onboarding",
+    description: "Odam xulosani tasdiqladi: qoralama va fayllar jamoaga yuboriladi, jamoa markazni ochadi. Faqat show_summary dan keyin va odam «ha» deganda.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
 ];
 
@@ -88,7 +219,9 @@ export interface SalesInput {
   text: string;
   locale: Locale;
   /** sends HTML to the team chat; returns the sent message's id, or null when there is no team chat */
-  notifyTeam: (html: string) => Promise<number | null>;
+  notifyTeam: (html: string, opts?: { accessFor?: string }) => Promise<number | null>;
+  /** copies the person's files (their own messages) into the team chat */
+  sendFilesToTeam?: (files: OnboardingFile[]) => Promise<void>;
   create?: CreateMessage;
   now?: Date;
 }
@@ -103,6 +236,43 @@ function teamMessage(chat: SalesChat, kind: string, summary: string): string {
   const phone = chat.phone ? `📞 +${chat.phone}` : "📞 —";
   const title = kind === "lead" ? "🤖 Sabaq: yangi mijoz" : "🤖 Sabaq: savol";
   return `${title}\n${who}\n${phone}\n\n${esc(summary.slice(0, 1500))}\n\n↩️ Javob uchun shu xabarga reply qiling: javobingiz unga boradi.`;
+}
+
+function accessTeamMessage(chat: SalesChat, d: Onboarding["draft"]): string {
+  const who = [chat.name ? esc(chat.name) : "?", chat.username ? `@${esc(chat.username)}` : ""].filter(Boolean).join(" ");
+  return [
+    "🆕 Sabaq: sinab ko'rish so'rovi",
+    `🏫 <b>${esc(d.center?.name ?? "?")}</b>${d.center?.city ? `, ${esc(d.center.city)}` : ""}`,
+    `🔗 ${esc(d.center?.link ?? "—")}`,
+    `👤 ${esc(d.owner?.name ?? "?")} (Telegram: ${who})`,
+    chat.phone ? `📞 +${chat.phone}` : "📞 —",
+    "",
+    "Sahifasini tekshiring: haqiqiy markazmi? Tasdiqlasangiz, bot markazni sozlashni davom ettiradi.",
+    "↩️ Shu xabarga reply qilsangiz, javobingiz unga boradi.",
+  ].join("\n");
+}
+
+function onboardingTeamMessage(chat: SalesChat, o: Onboarding): string {
+  const who = [chat.name ? `<b>${esc(chat.name)}</b>` : "<b>?</b>", chat.username ? `@${esc(chat.username)}` : ""].filter(Boolean).join(" ");
+  const summary = draftSummary(o.draft, o.files, !!chat.phone);
+  return [
+    "🏫 Sabaq: markaz sozlash so'rovi",
+    who,
+    chat.phone ? `📞 +${chat.phone}` : "📞 —",
+    "",
+    `<pre>${esc(summary.slice(0, 3000))}</pre>`,
+    "",
+    `Tekshirib, serverda: <code>scripts/create-from-onboarding.ts ${chat.id}</code> (avval --dry-run).`,
+    "↩️ Shu xabarga reply qilsangiz, javobingiz egasiga boradi.",
+  ].join("\n");
+}
+
+/** Writes status/draft over the stored state, so files the bot saved meanwhile are kept. */
+async function saveOnboarding(id: string, patch: Partial<Pick<Onboarding, "status" | "draft">>): Promise<Onboarding> {
+  const row = await db.salesChat.findUniqueOrThrow({ where: { id }, select: { onboarding: true } });
+  const o = { ...readOnboarding(row.onboarding), ...patch };
+  await db.salesChat.update({ where: { id }, data: { onboarding: JSON.parse(JSON.stringify(o)) } });
+  return o;
 }
 
 function siteUrl(): string | null {
@@ -125,20 +295,38 @@ export async function handleSalesMessage(h: SalesInput): Promise<SalesReply> {
   const used = await db.salesUsage.findUnique({ where: { month } });
   if (used && capTokens(used) >= salesMonthlyTokenCap()) return say("paused");
 
+  // an application waiting for the team, or a refused one: a fixed answer, no model call
+  const status = readOnboarding(chat.onboarding).status;
+  if (status === "pending") return say("pending");
+  if (status === "rejected") return say("rejected");
+  // before approval a chat may only cost so much: strangers cannot run up the bill
+  if (status === "none" && capTokens(chat) >= salesChatTokenCap()) return say("chatCap");
+
   const stored = (chat.messages ?? []) as unknown as AgentMessage[];
   const history = trimHistory(stored, HISTORY_LIMITS);
   const before = stored.slice(0, stored.length - history.length);
   const site = siteUrl();
   const demo = demoHref();
-  const system = buildSalesPrompt({
-    name: BRAND.name,
-    siteUrl: site,
-    // demoHref is a full DEMO_URL or "/demo" on a demo server
-    demoUrl: demo ? (demo.startsWith("/") ? (site ? `${site}${demo}` : null) : demo) : null,
-    signupOpen: !signupClosed(),
-  });
+  // the mode is fixed for the whole turn: start_onboarding takes effect from the person's next message
+  let onboarding = readOnboarding(chat.onboarding);
+  const setup = onboarding.status === "collecting" || onboarding.status === "submitted";
+  const system = setup
+    ? buildOnboardingPrompt({ name: BRAND.name })
+    : buildSalesPrompt({
+        name: BRAND.name,
+        siteUrl: site,
+        // demoHref is a full DEMO_URL or "/demo" on a demo server
+        demoUrl: demo ? (demo.startsWith("/") ? (site ? `${site}${demo}` : null) : demo) : null,
+        signupOpen: !signupClosed(),
+      });
   const state = { awaitingPhone: chat.awaitingPhone, phone: chat.phone };
-  const turnSystem = async () => `<holat>Telefon raqam: ${state.phone ? "olingan" : state.awaitingPhone ? "so'ralgan, hali kelmagan" : "yo'q"}. Bugun: ${todayISO(now)}.</holat>`;
+  const phoneText = () => (state.phone ? "olingan" : state.awaitingPhone ? "so'ralgan, hali kelmagan" : "yo'q");
+  const turnSystem = async () => {
+    if (!setup) return `<holat>Telefon raqam: ${phoneText()}. Bugun: ${todayISO(now)}.</holat>`;
+    const missing = missingItems(onboarding.draft, !!state.phone);
+    const stage = onboarding.status === "submitted" ? "jamoaga yuborilgan (tuzatish bo'lsa, qayta yuborish mumkin)" : "ma'lumot yig'ilmoqda";
+    return `<holat>Markaz sozlash: ${stage}. Telefon raqam: ${phoneText()}. Fayllar: ${onboarding.files.length} ta. Hali kerak: ${missing.length ? missing.join("; ") : "hammasi bor"}. Bugun: ${todayISO(now)}.</holat>`;
+  };
 
   const meter = async (u: TurnUsage) => {
     const tokens = { inputTokens: u.input, outputTokens: u.output, cacheReadTokens: u.cacheRead, cacheWriteTokens: u.cacheWrite };
@@ -166,6 +354,46 @@ export async function handleSalesMessage(h: SalesInput): Promise<SalesReply> {
       await db.salesChat.update({ where: { id: chat.id }, data: { teamMessageIds: { push: id } } });
       return { ok: true };
     }
+    if (name === "request_access" && !setup) {
+      const fresh = await db.salesChat.findUniqueOrThrow({ where: { id: chat.id } });
+      if (!fresh.phone) throw new AgentToolError("avval telefon raqami kerak: request_phone ishlat va raqam kelishini kut");
+      const s = (k: string) => (typeof input[k] === "string" ? (input[k] as string).trim() : "");
+      const [schoolName, link, ownerName, city] = [s("schoolName"), s("link"), s("ownerName"), s("city")];
+      if (!schoolName || !link || !ownerName) throw new AgentToolError("maktab nomi, havola (Instagram yoki Telegram) va egasining ismi kerak");
+      const r = mergeDraft(onboarding.draft, { center: { name: schoolName, link, ...(city ? { city } : {}) }, owner: { name: ownerName } });
+      if (!r.ok) throw new AgentToolError(`saqlanmadi: ${r.errors.join("; ")}`);
+      const id = await h.notifyTeam(accessTeamMessage(fresh, r.draft), { accessFor: chat.id });
+      if (id === null) throw new AgentToolError("jamoaga hozir yuborib bo'lmadi: odamga jamoa keyinroq bog'lanishini ayt");
+      const row = await db.salesChat.findUniqueOrThrow({ where: { id: chat.id }, select: { onboarding: true } });
+      onboarding = { ...readOnboarding(row.onboarding), draft: r.draft, status: "pending", appliedAt: now.toISOString() };
+      await db.salesChat.update({ where: { id: chat.id }, data: { onboarding: JSON.parse(JSON.stringify(onboarding)), teamMessageIds: { push: id } } });
+      return { ok: true, note: "so'rov jamoaga yuborildi: odamga jamoa tekshirib, tasdiqlagach shu yerda davom etishingizni ayt" };
+    }
+    if (setup && name === "save_onboarding") {
+      const r = mergeDraft(onboarding.draft, input);
+      if (!r.ok) throw new AgentToolError(`saqlanmadi: ${r.errors.join("; ")}. Tuzatib qayta yubor.`);
+      onboarding = await saveOnboarding(chat.id, { draft: r.draft });
+      return { ok: true, missing: missingItems(r.draft, !!state.phone) };
+    }
+    if (setup && name === "show_summary") {
+      const row = await db.salesChat.findUniqueOrThrow({ where: { id: chat.id }, select: { onboarding: true } });
+      onboarding = { ...readOnboarding(row.onboarding), draft: onboarding.draft };
+      replies.push(draftSummary(onboarding.draft, onboarding.files, !!state.phone));
+      return { shown: true, missing: missingItems(onboarding.draft, !!state.phone) };
+    }
+    if (setup && name === "finish_onboarding") {
+      const fresh = await db.salesChat.findUniqueOrThrow({ where: { id: chat.id } });
+      const basics = [!onboarding.draft.center?.name && "markaz nomi", !onboarding.draft.owner?.name && "egasining ismi", !fresh.phone && "egasining telefoni (request_phone)"].filter(Boolean);
+      if (basics.length) throw new AgentToolError(`hali yuborib bo'lmaydi, kerak: ${basics.join(", ")}`);
+      // files arrive outside the turn (the bot saves them): take the stored list, not this turn's copy
+      const next: Onboarding = { ...readOnboarding(fresh.onboarding), draft: onboarding.draft, status: "submitted", submittedAt: now.toISOString() };
+      const id = await h.notifyTeam(onboardingTeamMessage(fresh, next));
+      if (id === null) throw new AgentToolError("jamoaga hozir yuborib bo'lmadi: odamga jamoa keyinroq bog'lanishini ayt");
+      await h.sendFilesToTeam?.(next.files).catch((e) => console.error("[sales] files to team", e));
+      onboarding = next;
+      await db.salesChat.update({ where: { id: chat.id }, data: { onboarding: JSON.parse(JSON.stringify(next)), teamMessageIds: { push: id } } });
+      return { ok: true, note: "jamoaga yuborildi" };
+    }
     throw new AgentToolError(`noma'lum vosita: ${name}`);
   };
 
@@ -175,7 +403,7 @@ export async function handleSalesMessage(h: SalesInput): Promise<SalesReply> {
       create: h.create ?? defaultCreate(),
       model: agentModel(),
       system,
-      tools: SALES_TOOLS,
+      tools: setup ? ONBOARDING_TOOLS : SALES_TOOLS,
       history,
       userText: h.text,
       turnSystem,
@@ -203,3 +431,39 @@ export async function salesChatOfTeamMessage(messageId: number): Promise<SalesCh
   return db.salesChat.findFirst({ where: { teamMessageIds: { has: messageId } }, orderBy: { lastMessageAt: "desc" } });
 }
 
+
+export const MAX_ONBOARDING_FILES = 50;
+
+/**
+ * A file sent during center setup: kept as its Telegram file id (no copy on our disk) and later copied to
+ * the team chat. Returns the marker the model hears instead of the file, or null when the chat is not
+ * setting up a center (the bot then ignores the file).
+ */
+export async function recordOnboardingFile(chatRowId: string, file: OnboardingFile): Promise<string | null> {
+  const row = await db.salesChat.findUniqueOrThrow({ where: { id: chatRowId }, select: { onboarding: true } });
+  const o = readOnboarding(row.onboarding);
+  if (o.status !== "collecting" && o.status !== "submitted") return null;
+  if (o.files.length >= MAX_ONBOARDING_FILES) return `[fayl olinmadi: ${MAX_ONBOARDING_FILES} tadan ko'p fayl. Qolganini jamoa bilan alohida hal qilamiz]`;
+  o.files.push(file);
+  await db.salesChat.update({ where: { id: chatRowId }, data: { onboarding: JSON.parse(JSON.stringify(o)), lastMessageAt: new Date() } });
+  const caption = file.caption ? ` — izoh: «${file.caption.slice(0, 300).replace(/»/g, '"')}»` : "";
+  return `[fayl olindi: ${file.name}${file.mime ? ` (${file.mime})` : ""}${caption}]`;
+}
+
+/**
+ * The team's answer to an application (the buttons under "🆕 Sabaq: sinab ko'rish so'rovi"). Only a pending
+ * application changes; returns the chat for the bot to tell the person, or null when it was already decided.
+ */
+export async function decideAccess(chatRowId: string, approve: boolean, reviewer: string, now = new Date()): Promise<SalesChat | null> {
+  return db.$transaction(async (tx) => {
+    const chat = await tx.salesChat.findUnique({ where: { id: chatRowId } });
+    if (!chat) return null;
+    const o = readOnboarding(chat.onboarding);
+    if (o.status !== "pending") return null;
+    const next: Onboarding = { ...o, status: approve ? "collecting" : "rejected", reviewedBy: reviewer.slice(0, 120), reviewedAt: now.toISOString() };
+    return tx.salesChat.update({ where: { id: chat.id }, data: { onboarding: JSON.parse(JSON.stringify(next)), lastMessageAt: now } });
+  });
+}
+
+/** What the model hears when the team approved: it starts the setup interview from there. */
+export const ACCESS_APPROVED_MARK = "[Jamoa so'rovni tasdiqladi: markazni sozlashni boshla. Markaz nomi, havola, egasining ismi va telefoni allaqachon bor]";

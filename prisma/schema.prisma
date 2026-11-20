@@ -800,6 +800,8 @@ model SalesChat {
   messages         Json     @default("[]")
   /// the bot's messages to the team about this chat: a reply to one of them goes back to the person
   teamMessageIds   Int[]    @default([])
+  /// center setup done in the chat (src/lib/sales-agent/onboarding.ts): status, the draft, the files' Telegram ids
+  onboarding       Json     @default("{}")
   inputTokens      Int      @default(0)
   outputTokens     Int      @default(0)
   cacheReadTokens  Int      @default(0)
