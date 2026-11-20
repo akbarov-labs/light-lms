@@ -96,7 +96,7 @@ export async function saveHomework(ctx: Ctx, input: SaveHomeworkInput): Promise<
  * center's grade threshold up (or when the grade is unknown), the parents below it — and the parents
  * when a student who should hear it directly has no linked chat.
  */
-async function recipients(tx: Tx, groupId: string, date: ISODate, directFromGrade: number) {
+export async function recipients(tx: Tx, groupId: string, date: ISODate, directFromGrade: number) {
   const plan = await rosterChats(tx, groupId, date);
   return plan.map((p) => {
     const route = homeworkRoute(p.schoolGrade, directFromGrade);
@@ -445,7 +445,7 @@ export async function checkSubmission(submissionId: string, chatId: string, now 
 }
 
 /** The group's teacher in Telegram; when not linked (or `withOwners`), the center's linked owners too. */
-async function teacherChats(tx: Tx, centerId: string, teacherId: string, withOwners = false): Promise<Chat[]> {
+export async function teacherChats(tx: Tx, centerId: string, teacherId: string, withOwners = false): Promise<Chat[]> {
   const teacher = await staffChat(tx, teacherId);
   if (teacher && !withOwners) return [teacher];
   const owners = await tx.user.findMany({ where: { centerId, role: "OWNER", archivedAt: null, telegramChatId: { not: null }, id: { not: teacherId } }, select: { id: true } });

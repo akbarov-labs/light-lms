@@ -16,6 +16,17 @@ export interface WebAppUser {
 
 export type InitDataCheck = { ok: true; user: WebAppUser; authDate: number } | { ok: false; reason: "missing" | "hash" | "expired" | "user" };
 
+/**
+ * A Mini App page URL, or null: Telegram opens Mini Apps only over HTTPS. A center's own bot (managed bots)
+ * adds ?b=<bot id> so the page checks the init data with that bot's token.
+ */
+export function webAppUrl(base: string, path: string, botId?: string | null): string | null {
+  if (!base.startsWith("https://")) return null;
+  const u = new URL(path, `${base.replace(/\/+$/, "")}/`);
+  if (botId) u.searchParams.set("b", botId);
+  return u.toString();
+}
+
 export function initDataHash(fields: [string, string][], botToken: string): string {
   const check = fields
     .filter(([k]) => k !== "hash")
