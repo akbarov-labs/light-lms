@@ -4,7 +4,7 @@ import { familyScope, type Ctx } from "@/lib/ctx-core";
 import { fromISODate, monthRange, todayISO, isISODate } from "@/lib/dates";
 import { enumParam, strParam } from "./params";
 
-export const PAYMENT_METHODS = ["CASH", "CARD", "TRANSFER", "PAYME", "CLICK", "UZUM", "SYSTEM"] as const;
+export const PAYMENT_METHODS = ["CASH", "CARD", "TRANSFER", "PAYNET", "PAYME", "CLICK", "UZUM", "SYSTEM"] as const;
 
 export interface PaymentFilters {
   from?: string;

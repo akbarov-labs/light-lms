@@ -427,11 +427,11 @@ export async function checkSubmission(submissionId: string, chatId: string, now 
       data: { checks: { increment: 1 }, checkedAnswers: answers, checkedAt: now, chatId, ...(row.checks === 0 ? { firstAnswers: answers } : {}) },
     });
     if (row.checks > 0 || current.state !== "late") return;
-    // late: the teacher (else the owners) hears about it once, with the score
+    // late: the teacher and the owners hear about it once, with the score (first pilot: "tell me")
     const hw = row.homework;
     const student = await tx.student.findUniqueOrThrow({ where: { id: row.studentId }, select: { firstName: true, lastName: true } });
     const r = checkAnswers(hw.answers, answers);
-    const chats = await teacherChats(tx, hw.centerId, hw.group.teacherId);
+    const chats = await teacherChats(tx, hw.centerId, hw.group.teacherId, true);
     await enqueue(
       tx,
       hw.centerId,
@@ -444,12 +444,12 @@ export async function checkSubmission(submissionId: string, chatId: string, now 
   return { ok: true, sheet: after, result: after.lastCheck! };
 }
 
-/** The group's teacher in Telegram; when not linked, the center's linked owners. */
-async function teacherChats(tx: Tx, centerId: string, teacherId: string): Promise<Chat[]> {
+/** The group's teacher in Telegram; when not linked (or `withOwners`), the center's linked owners too. */
+async function teacherChats(tx: Tx, centerId: string, teacherId: string, withOwners = false): Promise<Chat[]> {
   const teacher = await staffChat(tx, teacherId);
-  if (teacher) return [teacher];
-  const owners = await tx.user.findMany({ where: { centerId, role: "OWNER", archivedAt: null, telegramChatId: { not: null } }, select: { id: true } });
-  const chats = await Promise.all(owners.map((o) => staffChat(tx, o.id)));
+  if (teacher && !withOwners) return [teacher];
+  const owners = await tx.user.findMany({ where: { centerId, role: "OWNER", archivedAt: null, telegramChatId: { not: null }, id: { not: teacherId } }, select: { id: true } });
+  const chats = [teacher, ...(await Promise.all(owners.map((o) => staffChat(tx, o.id))))];
   return chats.filter((c): c is Chat => c !== null);
 }
 

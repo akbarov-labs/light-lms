@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeExpected, lessonValue, planSync, round100 } from "./engine";
+import { computeExpected, lessonValue, planSync, renewalAnchor, round100 } from "./engine";
 import { generateLessonDates } from "./lessons";
 import { periodContaining } from "./periods";
 import { FakeLedger, MWF, TTS, scenario, withStatus } from "./testkit";
@@ -234,6 +234,39 @@ describe("subscription — anchors", () => {
     expect(units.map((u) => u.key)).toEqual(["sub:e1:2026-10-15", "sub:e1:2026-11-15"]);
     expect(units[0].amount).toBe(600_000);
     expect(units[0].description.startsWith("15.10–14.11.2026")).toBe(true);
+  });
+
+  it("calendar months from a chosen day (first pilot: the 15th to the 14th), same for every group of the course", () => {
+    const input = scenario({
+      asOf: "2026-12-20",
+      groupStart: "2026-09-01",
+      course: { renewal: "CALENDAR", renewalDay: 15, price: 350_000 },
+      enrollment: { activatedAt: "2026-10-15", startDate: "2026-10-15" },
+    });
+    const units = computeExpected(input);
+    expect(units.map((u) => u.key)).toEqual(["sub:e1:2026-10-15", "sub:e1:2026-11-15", "sub:e1:2026-12-15"]);
+    expect(units.every((u) => u.amount === 350_000)).toBe(true);
+    expect(units[1].description.startsWith("15.11–14.12.2026")).toBe(true);
+  });
+
+  it("a student activated mid-period pays the rest of it pro rata, then full months from the 15th", () => {
+    const input = scenario({
+      asOf: "2026-11-20",
+      course: { renewal: "CALENDAR", renewalDay: 15, price: 350_000 },
+      enrollment: { activatedAt: "2026-11-02", startDate: "2026-11-02" },
+    });
+    const units = computeExpected(input);
+    expect(units.map((u) => u.key)).toEqual(["sub:e1:2026-10-15", "sub:e1:2026-11-15"]);
+    expect(units[0].amount).toBeGreaterThan(0);
+    expect(units[0].amount).toBeLessThan(350_000);
+    expect(units[1].amount).toBe(350_000);
+  });
+
+  it("a renewal day outside 1–28 is clamped; missing = calendar months", () => {
+    expect(renewalAnchor({ renewal: "CALENDAR", renewalDay: 31 }, "2026-09-01", "2026-09-01")).toBe(28);
+    expect(renewalAnchor({ renewal: "CALENDAR", renewalDay: 0 }, "2026-09-01", "2026-09-01")).toBe(1);
+    expect(renewalAnchor({ renewal: "CALENDAR" }, "2026-09-07", "2026-09-09")).toBe(1);
+    expect(renewalAnchor({ renewal: "GROUP_START", renewalDay: 15 }, "2026-09-07", "2026-09-09")).toBe(7);
   });
 
   it("group-start anchor on the 31st clamps to month end", () => {

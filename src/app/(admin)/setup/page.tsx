@@ -156,6 +156,8 @@ async function CourseStep({ ctx, o }: { ctx: Ctx; o: Onboarding }) {
     CALENDAR: t("renewal.CALENDAR"),
     GROUP_START: t("renewal.GROUP_START"),
     STUDENT_START: t("renewal.STUDENT_START"),
+    renewalDay: t("courses.renewalDay"),
+    renewalDayHint: t("courses.renewalDayHint"),
     pricePerMonth: t("courses.pricePerMonth"),
     pricePackage: t("courses.pricePackage"),
     packageLessons: t("courses.packageLessons"),

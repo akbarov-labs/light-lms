@@ -85,7 +85,7 @@ export default async function CenterSettings() {
       </Card>
       <Card title={t("settings.notifications")}>
         <div className="grid gap-2 sm:grid-cols-2">
-          {(["payment", "reminder", "debt", "absence", "trial", "teacherReminder", "dailyReport", "reportCard", "examResult"] as const).map((k) => (
+          {(["payment", "reminder", "debt", "debtDaily", "absence", "trial", "teacherReminder", "dailyReport", "reportCard", "examResult"] as const).map((k) => (
             <Checkbox key={k} name={`notify.${k}`} label={t(`settings.notify.${k}`)} defaultChecked={s.notify[k]} />
           ))}
         </div>

@@ -32,7 +32,7 @@ export function PaymentForm({ ctx, familyId, familyName, options, familyDebt, st
         remaining: t("pay.remaining", { amount: "{amount}" }),
         overpay: t("pay.overpay", { amount: "{amount}" }),
         closes: t("pay.closesDebt"),
-        methods: { CASH: t("method.CASH"), CARD: t("method.CARD"), TRANSFER: t("method.TRANSFER") },
+        methods: { CASH: t("method.CASH"), CARD: t("method.CARD"), TRANSFER: t("method.TRANSFER"), PAYNET: t("method.PAYNET") },
       }}
     />
   );

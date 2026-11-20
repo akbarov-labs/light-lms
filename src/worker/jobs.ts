@@ -5,7 +5,7 @@ import { ensureCards, sendCards } from "@/lib/services/report-cards";
 import { generateAllLessons } from "@/lib/services/lessons";
 import { refreshFreezeStatuses } from "@/lib/services/enrollments";
 import { loadBillingInput, syncEnrollment } from "@/lib/billing/sync";
-import { computeExpected } from "@/lib/billing/engine";
+import { computeExpected, renewalAnchor } from "@/lib/billing/engine";
 import { nextPeriodStart, periodContaining } from "@/lib/billing/periods";
 import { readSettings } from "@/lib/settings";
 import { enqueue, notifyFamily, staffChat } from "@/lib/notify";
@@ -171,7 +171,7 @@ export async function reminders(today: ISODate = todayISO()): Promise<JobResult>
         });
         for (const e of enrollments) {
           await isolated(`reminders enrollment ${e.id}`, async () => {
-            const anchor = e.group.course.renewal === "CALENDAR" ? 1 : e.group.course.renewal === "GROUP_START" ? parts(toISODate(e.group.startDate)).d : parts(toISODate(e.activatedAt ?? e.startDate)).d;
+            const anchor = renewalAnchor(e.group.course, toISODate(e.group.startDate), toISODate(e.activatedAt ?? e.startDate));
             const next = nextPeriodStart(periodContaining(today, anchor).start, anchor);
             if (diffDays(next, today) !== s.reminderDaysBefore) return;
             const { input } = await loadBillingInput(db, e.id, next);
@@ -200,10 +200,12 @@ export async function reminders(today: ISODate = todayISO()): Promise<JobResult>
           await isolated(`reminders debt family ${n.familyId}`, async () => {
             if (!n.oldestUnpaidDate) return;
             const overdue = diffDays(today, toISODate(n.oldestUnpaidDate));
-            if (![3, 7, 14, 30].includes(overdue)) return;
+            const escalation = [3, 7, 14, 30].includes(overdue);
+            // daily: a gentle note every day from the due date; SMS (paid) only on the escalation days
+            if (!escalation && !(s.notify.debtDaily && overdue >= 0)) return;
             const payUrl = await payLinkForFamily(n.familyId);
             debts += await db.$transaction((tx) =>
-              notifyFamily(tx, { centerId: c.id, familyId: n.familyId, event: "debt", text: (l) => msg.debt(l, { center: c.name, debt: -Number(n.balance), payUrl }), rich: (l) => richMsg.debt(l, { center: c.name, debt: -Number(n.balance), payUrl }), dedupeKey: `debt-overdue:${n.familyId}:${today}` }),
+              notifyFamily(tx, { centerId: c.id, familyId: n.familyId, event: "debt", text: (l) => msg.debt(l, { center: c.name, debt: -Number(n.balance), payUrl }), rich: (l) => richMsg.debt(l, { center: c.name, debt: -Number(n.balance), payUrl }), dedupeKey: `debt-overdue:${n.familyId}:${today}`, noSms: !escalation }),
             );
           }, failItem);
         }
@@ -250,7 +252,8 @@ export async function ownerReport(userId: string, today: ISODate = todayISO()): 
   const t = ctx.t;
   const m = monthRange(today.slice(0, 7));
   const agentToday = { centerId: ctx.centerId, source: "Telegram AI", archivedAt: null, createdAt: zonedRange(today, today) };
-  const [day, month, aging, newStudents, left, missing, agentLeads, agentNoPhone] = await Promise.all([
+  const todayLessons = { lesson: { date: fromISODate(today), group: { centerId: ctx.centerId, ...branchWhere(ctx) } } };
+  const [day, month, aging, newStudents, left, missing, agentLeads, agentNoPhone, marks, trials, homework] = await Promise.all([
     revenue(ctx, { from: today, to: today }),
     revenue(ctx, { from: m.start, to: m.end }),
     debtAging(ctx),
@@ -261,7 +264,14 @@ export async function ownerReport(userId: string, today: ISODate = todayISO()): 
     // AI agent leads of the day, and those who left without a number (staff follow up through the bot)
     db.lead.count({ where: agentToday }),
     db.lead.count({ where: { ...agentToday, phone: null } }),
+    // the day's attendance, trial lessons and homework checks (the first pilot center wanted "everything")
+    db.attendance.groupBy({ by: ["status"], where: todayLessons, _count: { _all: true } }),
+    db.attendance.count({ where: { ...todayLessons, status: { in: ["PRESENT", "LATE"] }, enrollment: { status: "TRIAL" } } }),
+    db.homeworkSubmission.count({ where: { checkedAt: zonedRange(today, today), homework: { centerId: ctx.centerId, group: branchWhere(ctx) } } }),
   ]);
+  const markCount = (st: string[]) => marks.filter((x) => st.includes(x.status)).reduce((n, x) => n + x._count._all, 0);
+  const came = markCount(["PRESENT", "LATE"]);
+  const absent = markCount(["ABSENT", "EXCUSED"]);
   const money = (n: number) => formatMoney(n, ctx.locale === "ru" ? "сум" : "so'm");
   return [
     `📊 <b>${esc(ctx.center.name)}</b> · ${formatDate(today)}`,
@@ -270,6 +280,9 @@ export async function ownerReport(userId: string, today: ISODate = todayISO()): 
     `${t("reports.totalDebt")}: <b>${money(aging.total)}</b>`,
     `${t("reports.new")}: +${newStudents} · ${t("reports.left")}: −${left}`,
     `${t("reports.missing")}: ${missing}`,
+    ...(came || absent ? [t("reports.attendanceToday", { came, absent })] : []),
+    ...(trials ? [t("reports.trialsToday", { n: trials })] : []),
+    ...(homework ? [t("reports.homeworkToday", { n: homework })] : []),
     ...(agentLeads ? [`${t("reports.agentLeads", { n: agentLeads, noPhone: agentNoPhone })}${agentNoPhone ? `\n${appUrl()}/leads?nophone=1` : ""}`] : []),
   ].join("\n");
 }

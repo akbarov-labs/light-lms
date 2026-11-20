@@ -22,6 +22,7 @@ const schema = z.object({
   pricingType: z.enum(["SUBSCRIPTION", "PACKAGE"]),
   price: zMoney,
   renewal: z.enum(["CALENDAR", "GROUP_START", "STUDENT_START"]).default("CALENDAR"),
+  renewalDay: zOptInt(1, 28),
   packageLessons: zOptInt(1, 1000),
   installments: zOptInt(1, 24),
   priceFrom: zOptDate,
@@ -39,6 +40,7 @@ export async function saveCourseAction(_: ActionState, fd: FormData): Promise<Ac
       durationMonths: f.durationMonths ?? null,
       pricingType: f.pricingType,
       renewal: f.renewal,
+      renewalDay: f.pricingType === "SUBSCRIPTION" && f.renewal === "CALENDAR" ? (f.renewalDay ?? 1) : 1,
       packageLessons: f.pricingType === "PACKAGE" ? (f.packageLessons ?? null) : null,
       installments: f.pricingType === "PACKAGE" ? (f.installments ?? 1) : 1,
     };
@@ -53,7 +55,7 @@ export async function saveCourseAction(_: ActionState, fd: FormData): Promise<Ac
       if (!c) throw new UserError("error.notFound");
       const used = await tx.enrollment.count({ where: { group: { courseId: c.id } } });
       const billingShapeChanged =
-        c.pricingType !== data.pricingType || c.renewal !== data.renewal || c.packageLessons !== data.packageLessons || c.installments !== data.installments;
+        c.pricingType !== data.pricingType || c.renewal !== data.renewal || c.renewalDay !== data.renewalDay || c.packageLessons !== data.packageLessons || c.installments !== data.installments;
       if (used > 0 && billingShapeChanged) throw new UserError("courses.locked");
       let history = parsePriceHistory(c.priceHistory);
       if (f.price !== c.price) {

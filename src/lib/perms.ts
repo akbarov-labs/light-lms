@@ -10,6 +10,7 @@ export const PERMS = [
   "groups.edit",
   "staff.manage",
   "settings",
+  "discounts",
 ] as const;
 
 export type Perm = (typeof PERMS)[number];

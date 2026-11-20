@@ -44,7 +44,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
         </Select>
         <Select name="method" aria-label={t("common.method")} defaultValue={sp.method ?? ""}>
           <option value="">{t("common.method")}: {t("common.all")}</option>
-          {(["CASH", "CARD", "TRANSFER", "PAYME", "CLICK", "UZUM"] as const).map((m) => <option key={m} value={m}>{t(`method.${m}`)}</option>)}
+          {(["CASH", "CARD", "TRANSFER", "PAYNET", "PAYME", "CLICK", "UZUM"] as const).map((m) => <option key={m} value={m}>{t(`method.${m}`)}</option>)}
         </Select>
         <Select name="cashier" aria-label={t("pay.cashier")} defaultValue={sp.cashier ?? ""}>
           <option value="">{t("payments.cashierAll")}</option>

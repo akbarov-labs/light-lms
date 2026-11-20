@@ -11,7 +11,7 @@ import { formatMoney, LARGE_PAYMENT, needsLargeConfirm, parseMoney } from "@/lib
 import { UserError } from "@/lib/user-error";
 import { refund, reversePayment, takePayment } from "@/lib/services/payments";
 
-const METHODS = z.enum(["CASH", "CARD", "TRANSFER"]);
+const METHODS = z.enum(["CASH", "CARD", "TRANSFER", "PAYNET"]);
 
 export async function takePaymentAction(_: ActionState, fd: FormData): Promise<ActionState> {
   let entryId = "";

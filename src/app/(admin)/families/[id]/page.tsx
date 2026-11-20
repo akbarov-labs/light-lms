@@ -84,7 +84,7 @@ export default async function FamilyPage({ params, searchParams }: { params: Pro
                   <FormGrid>
                     <Field label={t("common.amount")}><MoneyInput name="amount" required /></Field>
                     <Field label={t("common.method")}>
-                      <Select name="method">{(["CASH", "CARD", "TRANSFER"] as const).map((m) => <option key={m} value={m}>{t(`method.${m}`)}</option>)}</Select>
+                      <Select name="method">{(["CASH", "CARD", "TRANSFER", "PAYNET"] as const).map((m) => <option key={m} value={m}>{t(`method.${m}`)}</option>)}</Select>
                     </Field>
                     <Field label={t("common.date")}><Input type="date" name="date" defaultValue={todayISO()} required /></Field>
                     <Field label={t("common.reason")}><Input name="reason" required /></Field>

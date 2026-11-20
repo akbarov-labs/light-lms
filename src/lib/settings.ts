@@ -30,6 +30,8 @@ export const centerSettingsSchema = z.object({
       payment: z.boolean().default(true),
       reminder: z.boolean().default(true),
       debt: z.boolean().default(true),
+      /** debt reminders every day from the due date (Telegram); SMS still only on days 3, 7, 14, 30 */
+      debtDaily: z.boolean().default(false),
       absence: z.boolean().default(true),
       trial: z.boolean().default(true),
       teacherReminder: z.boolean().default(true),

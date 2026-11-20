@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { addDays, fromISODate, toISODate, todayISO } from "@/lib/dates";
 import { familyAllocation } from "@/lib/services/wallet";
 import { loadBillingInput } from "@/lib/billing/sync";
-import { computeExpected } from "@/lib/billing/engine";
+import { computeExpected, renewalAnchor } from "@/lib/billing/engine";
 import { nextPeriodStart, periodContaining } from "@/lib/billing/periods";
 import { payLinkForFamily } from "@/lib/payments/links";
 import { fullName } from "@/lib/format";
@@ -40,9 +40,9 @@ export interface PortalData {
   payments: { date: string; amount: number; method: string | null; reversed: boolean }[];
 }
 
-async function nextCharge(e: { id: string; activatedAt: Date | null; group: { startDate: Date; course: { pricingType: string; renewal: string } } }, today: string) {
+async function nextCharge(e: { id: string; activatedAt: Date | null; group: { startDate: Date; course: { pricingType: string; renewal: "CALENDAR" | "GROUP_START" | "STUDENT_START"; renewalDay: number } } }, today: string) {
   if (e.group.course.pricingType !== "SUBSCRIPTION" || !e.activatedAt) return null;
-  const anchor = e.group.course.renewal === "CALENDAR" ? 1 : e.group.course.renewal === "GROUP_START" ? Number(toISODate(e.group.startDate).slice(8)) : Number(toISODate(e.activatedAt).slice(8));
+  const anchor = renewalAnchor(e.group.course, toISODate(e.group.startDate), toISODate(e.activatedAt));
   const next = nextPeriodStart(periodContaining(today, anchor).start, anchor);
   const { input } = await loadBillingInput(db, e.id, next);
   const unit = computeExpected(input).find((u) => u.start === next);

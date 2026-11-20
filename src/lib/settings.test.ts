@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readSettings } from "./settings";
 
-const notifyAll = { payment: true, reminder: true, debt: true, absence: true, trial: true, teacherReminder: true, dailyReport: true, reportCard: true, examResult: true };
+const notifyAll = { payment: true, reminder: true, debt: true, debtDaily: false, absence: true, trial: true, teacherReminder: true, dailyReport: true, reportCard: true, examResult: true };
 const defaults = {
   trialLessons: 1,
   excusedAbsenceCredit: false,

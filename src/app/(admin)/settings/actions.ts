@@ -90,7 +90,7 @@ function parseFiscal(f: { fiscalIkpu?: string; fiscalPackageCode?: string; fisca
   return r.data;
 }
 
-const NOTIFY = ["payment", "reminder", "debt", "absence", "trial", "teacherReminder", "dailyReport", "reportCard", "examResult"] as const;
+const NOTIFY = ["payment", "reminder", "debt", "debtDaily", "absence", "trial", "teacherReminder", "dailyReport", "reportCard", "examResult"] as const;
 
 export async function saveCenterAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction("settings", async (ctx) => {

@@ -71,6 +71,7 @@ const courseSchema = z.object({
   pricingType: z.enum(["SUBSCRIPTION", "PACKAGE"]),
   price: zMoney,
   renewal: z.enum(["CALENDAR", "GROUP_START", "STUDENT_START"]).default("CALENDAR"),
+  renewalDay: zOptInt(1, 28),
   packageLessons: zOptInt(1, 1000),
   installments: zOptInt(1, 24),
 });
@@ -89,6 +90,7 @@ export async function setupCourseAction(_: ActionState, fd: FormData): Promise<A
           pricingType: f.pricingType,
           price: f.price,
           renewal: f.renewal,
+          renewalDay: f.pricingType === "SUBSCRIPTION" && f.renewal === "CALENDAR" ? (f.renewalDay ?? 1) : 1,
           packageLessons: f.pricingType === "PACKAGE" ? (f.packageLessons ?? null) : null,
           installments: f.pricingType === "PACKAGE" ? (f.installments ?? 1) : 1,
         },

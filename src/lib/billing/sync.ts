@@ -73,6 +73,7 @@ export function buildInput(p: {
       pricingType: g.course.pricingType,
       price: g.course.price,
       renewal: g.course.renewal,
+      renewalDay: g.course.renewalDay,
       packageLessons: g.course.packageLessons,
       installments: g.course.installments,
       durationMonths: g.course.durationMonths,

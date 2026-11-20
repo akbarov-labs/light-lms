@@ -4,7 +4,12 @@ import { allowedBranches, DEFAULT_PERMS, effectivePerms } from "./perms";
 describe("permissions", () => {
   it("owner has everything, regardless of stored switches", () => {
     expect(effectivePerms("OWNER", []).has("settings")).toBe(true);
-    expect(effectivePerms("OWNER", []).size).toBe(10);
+    expect(effectivePerms("OWNER", []).size).toBe(11);
+  });
+  it("discounts are the owner's and the manager's by default, not an admin's", () => {
+    expect(effectivePerms("OWNER", []).has("discounts")).toBe(true);
+    expect(DEFAULT_PERMS.MANAGER).toContain("discounts");
+    expect(DEFAULT_PERMS.ADMIN).not.toContain("discounts");
   });
   it("manager never gets center settings", () => {
     expect(effectivePerms("MANAGER", ["settings", "finance.view"]).has("settings")).toBe(false);

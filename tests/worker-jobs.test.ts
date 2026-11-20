@@ -237,3 +237,31 @@ describe("owner report scope (F2)", () => {
     expect(Number(minus)).toBe(2);
   });
 });
+
+describe("daily debt reminders (first pilot)", () => {
+  it("off: only days 3, 7, 14, 30; on: every day from the due day, Telegram only between escalation days", async () => {
+    const day = addDays(today, 40);
+    const fam = await db.family.create({ data: { centerId, name: "Daily debtor" } });
+    await db.guardian.create({ data: { familyId: fam.id, name: "Daily", phone: "998902005", telegramChatId: "2005" } });
+    await db.ledgerEntry.create({ data: { centerId, familyId: fam.id, type: "CHARGE", amount: -70_000, method: "SYSTEM", description: "month", date: fromISODate(addDays(day, -5)) } });
+    const notes = (d: string, channel: "TELEGRAM" | "SMS" = "TELEGRAM") => db.notification.count({ where: { centerId, channel, dedupeKey: { startsWith: `debt-overdue:${fam.id}:${d}` } } });
+
+    await reminders(day);
+    expect(await notes(day)).toBe(0);
+
+    const c = await db.center.findUniqueOrThrow({ where: { id: centerId } });
+    const s = (c.settings ?? {}) as Record<string, unknown>;
+    await db.center.update({ where: { id: centerId }, data: { settings: { ...s, notify: { ...((s.notify as object) ?? {}), debtDaily: true } } } });
+    try {
+      await reminders(day);
+      expect(await notes(day)).toBe(1);
+      expect(await notes(day, "SMS")).toBe(0);
+      // the due day itself counts too
+      const due = addDays(day, -5);
+      await reminders(due);
+      expect(await notes(due)).toBe(1);
+    } finally {
+      await db.center.update({ where: { id: centerId }, data: { settings: c.settings ?? {} } });
+    }
+  });
+});

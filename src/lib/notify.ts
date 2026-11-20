@@ -99,12 +99,12 @@ export async function enqueueSms(tx: Tx, centerId: string, target: SmsTarget, te
  */
 export async function notifyFamily(
   tx: Tx,
-  p: { centerId: string; familyId: string; studentId?: string | null; event: SmsEvent; text: (l: Locale) => string; rich?: (l: Locale) => string; dedupeKey?: string },
+  p: { centerId: string; familyId: string; studentId?: string | null; event: SmsEvent; text: (l: Locale) => string; rich?: (l: Locale) => string; dedupeKey?: string; noSms?: boolean },
 ): Promise<number> {
   const chats = await familyChats(tx, p.familyId, p.studentId);
   let n = await enqueue(tx, p.centerId, chats, p.text, p.dedupeKey, p.rich);
   // linked chats only count as "reads Telegram" when this installation has a bot to deliver them
-  const target = await familySmsTarget(tx, p.centerId, p.familyId, p.event, p.studentId, chats.length > 0 && !!telegramBotToken());
+  const target = p.noSms ? null : await familySmsTarget(tx, p.centerId, p.familyId, p.event, p.studentId, chats.length > 0 && !!telegramBotToken());
   if (target) n += await enqueueSms(tx, p.centerId, target, p.text, p.dedupeKey);
   return n;
 }

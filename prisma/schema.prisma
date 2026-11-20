@@ -80,6 +80,7 @@ enum PaymentMethod {
   CLICK
   UZUM
   SYSTEM
+  PAYNET
 }
 
 enum SalaryModel {
@@ -305,6 +306,8 @@ model Course {
   pricingType    PricingType
   price          Int
   renewal        Renewal     @default(CALENDAR)
+  /// CALENDAR only: the day of the month each billing month starts (1 = calendar months; 15 = the 15th to the 14th).
+  renewalDay     Int         @default(1)
   packageLessons Int?
   installments   Int         @default(1)
   /// [{ from: "YYYY-MM-DD", price: Int }] — earlier prices; `price` applies after the last entry.

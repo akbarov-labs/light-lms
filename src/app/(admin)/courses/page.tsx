@@ -21,6 +21,8 @@ function CourseForm({ ctx, course }: { ctx: Ctx; course?: Course }) {
     CALENDAR: t("renewal.CALENDAR"),
     GROUP_START: t("renewal.GROUP_START"),
     STUDENT_START: t("renewal.STUDENT_START"),
+    renewalDay: t("courses.renewalDay"),
+    renewalDayHint: t("courses.renewalDayHint"),
     pricePerMonth: t("courses.pricePerMonth"),
     pricePackage: t("courses.pricePackage"),
     packageLessons: t("courses.packageLessons"),
@@ -41,7 +43,7 @@ function CourseForm({ ctx, course }: { ctx: Ctx; course?: Course }) {
       </FormGrid>
       <PricingFields
         l={l}
-        initial={course ? { pricingType: course.pricingType, price: course.price, renewal: course.renewal, packageLessons: course.packageLessons, installments: course.installments, isEdit: true } : undefined}
+        initial={course ? { pricingType: course.pricingType, price: course.price, renewal: course.renewal, renewalDay: course.renewalDay, packageLessons: course.packageLessons, installments: course.installments, isEdit: true } : undefined}
       />
       <Field label={t("common.description")}><Textarea name="description" defaultValue={course?.description ?? ""} /></Field>
       <SubmitButton>{course ? t("common.save") : t("common.create")}</SubmitButton>
@@ -88,7 +90,7 @@ export default async function CoursesPage() {
                       <Badge tone={c.pricingType === "SUBSCRIPTION" ? "blue" : "violet"}>{t(`pricing.${c.pricingType}`)}</Badge>
                       <div className="mt-1 text-xs text-zinc-500">
                         {c.pricingType === "SUBSCRIPTION"
-                          ? t(`renewal.${c.renewal}`)
+                          ? c.renewal === "CALENDAR" && c.renewalDay > 1 ? t("courses.fromDay", { d: c.renewalDay }) : t(`renewal.${c.renewal}`)
                           : `${c.packageLessons === 1 ? t("courses.perLesson") : c.packageLessons ? t("courses.lessonsN", { n: c.packageLessons }) : t("courses.wholeCourse")}${c.installments > 1 ? ` · ${c.installments}×` : ""}`}
                       </div>
                     </Td>

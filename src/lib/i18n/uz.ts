@@ -9,6 +9,7 @@ import { v2Uz } from "./extra-v2";
 import { botsUz } from "./extra-bots";
 import { homeworkUz } from "./extra-homework";
 import { questionsUz } from "./extra-questions";
+import { pilotUz } from "./extra-pilot";
 
 export const uz = {
   ...saasUz,
@@ -20,6 +21,7 @@ export const uz = {
   ...botsUz,
   ...homeworkUz,
   ...questionsUz,
+  ...pilotUz,
   "app.name": BRAND.name as string,
   "common.save": "Saqlash",
   "common.cancel": "Bekor qilish",
@@ -221,6 +223,7 @@ export const uz = {
   "method.PAYME": "Payme",
   "method.CLICK": "Click",
   "method.UZUM": "Uzum",
+  "method.PAYNET": "Paynet",
   "method.SYSTEM": "Tizim",
   "pricing.SUBSCRIPTION": "Oylik obuna",
   "pricing.PACKAGE": "Paket",
@@ -613,8 +616,8 @@ export const uz = {
   "t.lastPayslip": "Oxirgi oylik varaqasi",
   "t.notTeacher": "Siz o'qituvchi emassiz",
   "import.title": "Excel / CSV dan import",
-  "import.hint": "Excel faylni \"CSV UTF-8\" qilib saqlang. Ustunlar tartibi: Familiya, Ism, Telefon, Ota-ona telefoni, Guruh kodi (#), Balans (qarz manfiy, masalan −300000). Birinchi qator sarlavha bo'lishi mumkin.",
-  "import.billingHint": "O'quvchi guruhga faol holatda qo'shiladi, to'lov keyingi oyning 1-sanasidan boshlanadi. Balans \"boshlang'ich qoldiq\" bo'lib yoziladi.",
+  "import.hint": "Excel faylni \"CSV UTF-8\" qilib saqlang. Ustunlar tartibi: Familiya, Ism, Telefon, Ota-ona telefoni, Guruh kodi (#), Balans (qarz manfiy, masalan −300000). Birinchi qator sarlavha bo'lishi mumkin. Sarlavhada \"Sinf\" ustuni bo'lsa (masalan 9), bot 4–5-sinflar bilan ota-ona orqali, 9–11-sinflar bilan o'quvchining o'zi bilan gaplashadi.",
+  "import.billingHint": "O'quvchi guruhga faol holatda qo'shiladi, to'lov guruh kursining keyingi to'lov oyidan boshlanadi (odatda 1-sana, kurs 15-sanadan hisoblansa 15-sana). Balans \"boshlang'ich qoldiq\" bo'lib yoziladi.",
   "import.file": "CSV fayl",
   "import.dryRun": "Faqat tekshirish (hech narsa yozilmaydi)",
   "import.run": "Import qilish",
