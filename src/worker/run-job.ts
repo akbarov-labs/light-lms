@@ -2,6 +2,7 @@
 // Takes the same advisory lock as the worker, so it is skipped (exit code 2) while that job is running.
 import { db } from "@/lib/db";
 import { generateAllLessons } from "@/lib/services/lessons";
+import { homeworkJob } from "@/lib/services/homework";
 import { billingSync, dailyReport, nightly, reminders, reportCardsJob, teacherReminders } from "./jobs";
 import { processNotifications, telegramSender } from "./notifications";
 import { resetDemo } from "./demo-reset";
@@ -23,6 +24,7 @@ const jobs: Record<string, () => Promise<unknown>> = {
   "teacher-reminders": () => teacherReminders(today),
   "daily-report": () => dailyReport(today),
   "report-cards": () => reportCardsJob(today),
+  homework: () => homeworkJob(),
   "demo-reset": async () => ({ ...(await resetDemo()), ...(await nightly(today)) }),
   notifications: async () => {
     const token = telegramBotToken();

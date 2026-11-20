@@ -15,7 +15,7 @@ import { createResetCodeForChat } from "@/lib/auth/password";
 import { B, buttonKey } from "./texts";
 import { CANCEL, PICK, agentOnCancel, agentOnContact, agentOnPick, agentOnRestart, agentOnStart, agentOnText } from "./agent";
 import { answerFromTelegram } from "@/lib/agent/service";
-import { HOMEWORK_CB, homeworkMenu, homeworkOnCallback, homeworkOnText } from "./homework";
+import { HOMEWORK_CB, homeworkMenu, homeworkOnCallback, homeworkOnPhoto, homeworkOnText } from "./homework";
 import { SALES_ACCESS, salesOnAccess, salesOnContact, salesOnFile, salesOnStart, salesOnTeamReply, salesOnText } from "./sales";
 import { appUrl, telegramRichMessages } from "@/lib/env";
 import { richRefused } from "../notifications";
@@ -144,11 +144,13 @@ export function createBot(token: string): Bot {
     }
   });
 
-  // files: only a stranger setting up their center in the chat sends them (student list, homework PDFs)
+  // files: a family's notebook photo for the homework it has open; a stranger setting up their center
+  // in the chat (student list, homework PDFs)
   bot.on(["message:document", "message:photo"], async (ctx) => {
     if (ctx.chat.type !== "private") return;
     const roles = await chatRoles(String(ctx.chat.id));
-    if (roles.family || roles.teacher || roles.owner) return;
+    if (roles.family) return void (await homeworkOnPhoto(ctx, await localeOf(ctx)));
+    if (roles.teacher || roles.owner) return;
     await salesOnFile(ctx, await localeOf(ctx));
   });
 
