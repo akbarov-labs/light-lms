@@ -5,6 +5,7 @@ import type { Bot } from "grammy";
 import { db } from "@/lib/db";
 import { TZ, todayISO } from "@/lib/dates";
 import { homeworkJob } from "@/lib/services/homework";
+import { quizJob } from "@/lib/services/quizzes";
 import { ALLOWED_UPDATES, createBot, miniAppUrl } from "./bot";
 import { BotPool } from "./bot/pool";
 import { managedBotsOn } from "@/lib/managed-bots/service";
@@ -148,6 +149,8 @@ async function main() {
   schedule("0 * * * *", "daily-report", () => dailyReport(todayISO(), tashkentHour()), (r) => !r.sent);
   // homework: reminders before the deadline, the teacher's summary at it
   schedule("*/5 * * * *", "homework", () => homeworkJob(), (r) => !r.reminded && !r.summaries);
+  // timed tests: attempts whose time ran out are graded and the owner told, even if the student never comes back
+  schedule("* * * * *", "quizzes", () => quizJob(), (r) => !r.finished);
   schedule("0 11 * * *", "report-cards", () => reportCardsJob());
   // family balance cache: pages refresh it themselves, this keeps that work off page views
   schedule("*/5 * * * *", "balances", () => refreshAllBalances(), (r) => !r.balancesRefreshed);

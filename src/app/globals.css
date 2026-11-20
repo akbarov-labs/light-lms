@@ -277,3 +277,34 @@
 .tg-tab-active {
   color: var(--tg-button, #2563eb);
 }
+/* Mini App tests (/tg/quiz, /tg/placement): answer buttons and inputs */
+.tg-choice {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 10px;
+  border: 1px solid var(--tg-sep);
+  background: var(--tg-bg, #ffffff);
+  padding: 8px 12px;
+  text-align: left;
+}
+.tg-choice[aria-pressed="true"] {
+  border-color: var(--tg-button, #2563eb);
+  background: color-mix(in srgb, var(--tg-button, #2563eb) 12%, var(--tg-bg, #ffffff));
+  font-weight: 600;
+}
+.tg-input {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--tg-sep);
+  background: var(--tg-bg, #ffffff);
+  color: inherit;
+  padding: 8px 12px;
+}
+.tg-timer {
+  background: var(--tg-bg, #ffffff);
+  border-bottom: 1px solid var(--tg-sep);
+}

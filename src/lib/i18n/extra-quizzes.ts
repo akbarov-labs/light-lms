@@ -105,6 +105,7 @@ export const quizzesUz = {
   "quizzes.notFinished": "Test hali yakunlanmagan.",
   "quizzes.alreadyPlaced": "Bu o'quvchi allaqachon guruhga yozilgan.",
 
+  "tg.quizzes": "📝 Testlar",
   "quiz.tg.title": "Testlar",
   "quiz.tg.loading": "Yuklanmoqda…",
   "quiz.tg.outside": "Bu sahifa Telegram ichida ochiladi.",
@@ -248,6 +249,7 @@ export const quizzesRu: Record<keyof typeof quizzesUz, string> = {
   "quizzes.notFinished": "Тест ещё не завершён.",
   "quizzes.alreadyPlaced": "Этот ученик уже записан в группу.",
 
+  "tg.quizzes": "📝 Тесты",
   "quiz.tg.title": "Тесты",
   "quiz.tg.loading": "Загрузка…",
   "quiz.tg.outside": "Эта страница открывается внутри Telegram.",
