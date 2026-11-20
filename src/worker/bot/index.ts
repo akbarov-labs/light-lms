@@ -17,8 +17,8 @@ import { CANCEL, PICK, agentOnCancel, agentOnCenterStart, agentOnContact, agentO
 import { withBotScope, type BotScope } from "@/lib/managed-bots/scope";
 import { CODE_PREFIX, markBotBlocked, markBotChat, onManagedBotUpdate, openBotRequest, suggestedUsername, type UpdateResult } from "@/lib/managed-bots/service";
 import { answerFromTelegram } from "@/lib/agent/service";
-import { HOMEWORK_CB, homeworkMenu, homeworkOnCallback, homeworkOnText } from "./homework";
-import { salesOnContact, salesOnStart, salesOnTeamReply, salesOnText } from "./sales";
+import { HOMEWORK_CB, homeworkMenu, homeworkOnCallback, homeworkOnPhoto, homeworkOnText } from "./homework";
+import { SALES_ACCESS, salesOnAccess, salesOnContact, salesOnFile, salesOnStart, salesOnTeamReply, salesOnText } from "./sales";
 import { appUrl, telegramRichMessages } from "@/lib/env";
 import { richRefused } from "../notifications";
 import {
@@ -225,6 +225,16 @@ export function createBot(token: string, opts: BotOptions = {}): Bot {
     }
   });
 
+  // files: a family's notebook photo for the homework it has open; a stranger setting up their center
+  // in the chat (student list, homework PDFs)
+  bot.on(["message:document", "message:photo"], async (ctx) => {
+    if (ctx.chat.type !== "private") return;
+    const roles = await chatRoles(String(ctx.chat.id));
+    if (roles.family) return void (await homeworkOnPhoto(ctx, await localeOf(ctx)));
+    if (roles.teacher || roles.owner) return;
+    await salesOnFile(ctx, await localeOf(ctx));
+  });
+
   bot.on("message:text", async (ctx) => {
     const chatId = String(ctx.chat.id);
     const l = await localeOf(ctx);
@@ -323,6 +333,8 @@ export function createBot(token: string, opts: BotOptions = {}): Bot {
 
   // a group card's "book a trial" button (AI lead agent); registered first, the generic handler below is attendance
   bot.callbackQuery(PICK, async (ctx) => agentOnPick(ctx, ctx.match[1], await localeOf(ctx)));
+  // the Sabaq team approving or rejecting a "try Sabaq" application (team chat only)
+  bot.callbackQuery(SALES_ACCESS, async (ctx) => salesOnAccess(ctx, ctx.match[1] === "a", ctx.match[2]));
   // the agent's "cancel this trial?" buttons: the booking is cancelled only here, by the person's press
   bot.callbackQuery(CANCEL, async (ctx) => agentOnCancel(ctx, ctx.match[1] === "y", ctx.match[2], await localeOf(ctx)));
   // homework answers (pilot): open / letter / go to question / summary

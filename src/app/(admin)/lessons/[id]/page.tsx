@@ -30,7 +30,7 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
     lessonRoster(id),
     listTeachers(ctx.centerId),
     db.room.findMany({ where: { branchId: lesson.group.branchId, archivedAt: null }, orderBy: { name: "asc" } }),
-    homeworkOn ? lessonHomework(lesson) : null,
+    homeworkOn ? lessonHomework(lesson, ctx.settings.homework) : null,
   ]);
   const canEdit = ctx.can("groups.edit");
   const ownTeacher = ctx.isTeacher && (lesson.teacherId === ctx.userId || lesson.group.teacherId === ctx.userId);

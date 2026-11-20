@@ -62,6 +62,22 @@ export default async function CenterSettings() {
           <Field label={t("settings.homeworkDirectFromGrade")} hint={t("settings.homeworkDirectHint")}>
             <Input type="number" min={1} max={12} name="homeworkDirectFromGrade" defaultValue={s.homework.directFromGrade} />
           </Field>
+          <Field label={t("settings.homeworkDueMinutes")} hint={t("settings.homeworkDueMinutesHint")}>
+            <Input type="number" min={0} max={720} step={15} name="homeworkDueMinutes" defaultValue={s.homework.dueMinutesBefore} />
+          </Field>
+          <Field label={t("settings.homeworkLateDays")} hint={t("settings.homeworkLateDaysHint")}>
+            <Input type="number" min={0} max={7} name="homeworkLateDays" defaultValue={s.homework.lateDays} />
+          </Field>
+          <Field label={t("settings.homeworkAttempts")} hint={t("settings.homeworkAttemptsHint")}>
+            <Input type="number" min={0} max={5} name="homeworkAttempts" defaultValue={s.homework.attempts} />
+          </Field>
+          <Field label={t("settings.homeworkRemindHours")} hint={t("settings.homeworkRemindHoursHint")}>
+            <Input type="number" min={0} max={48} name="homeworkRemindHours" defaultValue={s.homework.remindHoursBefore} />
+          </Field>
+          <div className="sm:col-span-2">
+            <Checkbox name="homeworkPhotos" label={t("settings.homeworkPhotos")} defaultChecked={s.homework.photos} />
+            <p className="mt-1 text-xs text-zinc-500">{t("settings.homeworkPhotosHint")}</p>
+          </div>
         </div>
       </Card>
       <Card title={t("settings.expenseCategories")}>
@@ -72,6 +88,11 @@ export default async function CenterSettings() {
           {(["payment", "reminder", "debt", "absence", "trial", "teacherReminder", "dailyReport", "reportCard", "examResult"] as const).map((k) => (
             <Checkbox key={k} name={`notify.${k}`} label={t(`settings.notify.${k}`)} defaultChecked={s.notify[k]} />
           ))}
+        </div>
+        <div className="mt-3 max-w-xs">
+          <Field label={t("settings.dailyReportHour")}>
+            <Input type="number" min={6} max={23} name="dailyReportHour" defaultValue={s.dailyReportHour} />
+          </Field>
         </div>
       </Card>
       <Card title={t("settings.payme")}>

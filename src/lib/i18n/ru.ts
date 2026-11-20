@@ -8,6 +8,7 @@ import { uiRu } from "./extra-ui";
 import { v2Ru } from "./extra-v2";
 import { botsRu } from "./extra-bots";
 import { homeworkRu } from "./extra-homework";
+import { questionsRu } from "./extra-questions";
 
 // Russian. Types guarantee the same keys as uz.ts.
 export const ru: Record<DictKey, string> = {
@@ -19,6 +20,7 @@ export const ru: Record<DictKey, string> = {
   ...v2Ru,
   ...botsRu,
   ...homeworkRu,
+  ...questionsRu,
   "app.name": BRAND.name,
   "common.save": "Сохранить",
   "common.cancel": "Отмена",

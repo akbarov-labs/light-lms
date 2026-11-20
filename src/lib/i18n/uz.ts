@@ -8,6 +8,7 @@ import { uiUz } from "./extra-ui";
 import { v2Uz } from "./extra-v2";
 import { botsUz } from "./extra-bots";
 import { homeworkUz } from "./extra-homework";
+import { questionsUz } from "./extra-questions";
 
 export const uz = {
   ...saasUz,
@@ -18,6 +19,7 @@ export const uz = {
   ...v2Uz,
   ...botsUz,
   ...homeworkUz,
+  ...questionsUz,
   "app.name": BRAND.name as string,
   "common.save": "Saqlash",
   "common.cancel": "Bekor qilish",

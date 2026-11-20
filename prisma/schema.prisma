@@ -179,28 +179,30 @@ model Center {
   onboarding      Json      @default("{}")
   createdAt       DateTime  @default(now())
 
-  branches      Branch[]
-  users         User[]
-  courses       Course[]
-  groups        Group[]
-  holidays      Holiday[]
-  families      Family[]
-  students      Student[]
-  ledger        LedgerEntry[]
-  expenses      Expense[]
-  leads         Lead[]
-  auditLogs     AuditLog[]
-  paymeTxs      PaymeTransaction[]
-  clickTxs      ClickTransaction[]
-  uzumTxs       UzumTransaction[]
-  notifications Notification[]
-  reportCards   ReportCard[]
-  exams         Exam[]
-  certificates  Certificate[]
-  agentChats    AgentChat[]
-  agentUsage    AgentUsage[]
-  bot           CenterBot?
-  homeworks     Homework[]
+  branches       Branch[]
+  users          User[]
+  courses        Course[]
+  groups         Group[]
+  holidays       Holiday[]
+  families       Family[]
+  students       Student[]
+  ledger         LedgerEntry[]
+  expenses       Expense[]
+  leads          Lead[]
+  auditLogs      AuditLog[]
+  paymeTxs       PaymeTransaction[]
+  clickTxs       ClickTransaction[]
+  uzumTxs        UzumTransaction[]
+  notifications  Notification[]
+  reportCards    ReportCard[]
+  exams          Exam[]
+  certificates   Certificate[]
+  agentChats     AgentChat[]
+  agentUsage     AgentUsage[]
+  bot            CenterBot?
+  homeworks      Homework[]
+  questionTopics QuestionTopic[]
+  questions      Question[]
 }
 
 model Branch {
@@ -803,6 +805,8 @@ model SalesChat {
   messages         Json     @default("[]")
   /// the bot's messages to the team about this chat: a reply to one of them goes back to the person
   teamMessageIds   Int[]    @default([])
+  /// center setup done in the chat (src/lib/sales-agent/onboarding.ts): status, the draft, the files' Telegram ids
+  onboarding       Json     @default("{}")
   inputTokens      Int      @default(0)
   outputTokens     Int      @default(0)
   cacheReadTokens  Int      @default(0)
@@ -1189,18 +1193,112 @@ model Homework {
 /// in the bot) and changeable until the deadline. No grade is stored: it is computed from the current key,
 /// so a corrected key re-grades everyone.
 model HomeworkSubmission {
-  id         String   @id @default(cuid())
-  homeworkId String
-  homework   Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
-  studentId  String
-  student    Student  @relation(fields: [studentId], references: [id])
+  id              String    @id @default(cuid())
+  homeworkId      String
+  homework        Homework  @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  studentId       String
+  student         Student   @relation(fields: [studentId], references: [id])
   /// in question order; "" = not answered
-  answers    String[]
+  answers         String[]
   /// the Telegram chat that answered last (the student's or a parent's)
-  chatId     String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  chatId          String?
+  /// times the student pressed "check" (settings.homework.attempts at most)
+  checks          Int       @default(0)
+  /// the answers at the first check: the class report is built from them, so retries do not hide mistakes
+  firstAnswers    String[]  @default([])
+  /// the answers at the last check: questions right here are locked
+  checkedAnswers  String[]  @default([])
+  /// the first non-empty answer: after the deadline it marks the submission as late
+  firstAnsweredAt DateTime?
+  checkedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@unique([homeworkId, studentId])
   @@index([studentId])
+}
+
+// ------------------------------------------------------------------ question bank
+
+/// Where a question came from.
+enum QuestionSource {
+  /// read from the center's own book or test collection (scripts/import-questions.ts)
+  BOOK
+  /// written by the center's AI agent at a teacher's request
+  AGENT
+  /// typed by a teacher
+  TEACHER
+}
+
+/// A question is used (placement and topic tests) only once someone at the center approved it.
+enum QuestionStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+}
+
+/// How sure the key is, before a person approves it. The model only proposes keys; a person decides.
+enum KeyCheck {
+  /// the book prints the answer (a worked solution's "Javob", an answer table) and two independent solves agree with it
+  STATED
+  /// no printed answer; two independent model solves agree
+  AGREED
+  /// the solves disagree with each other or with the printed answer: a person must pick the key
+  CONFLICT
+  /// no key could be found (the model could not solve it, or the question needs a picture)
+  UNKNOWN
+}
+
+/// A topic of the center's question bank, in teaching order: "1.1.1 Hisoblashga oid misollar" (the book's
+/// own section numbers). Sub-topics are found by code prefix ("1.1" holds "1.1.1"…).
+model QuestionTopic {
+  id        String   @id @default(cuid())
+  centerId  String
+  center    Center   @relation(fields: [centerId], references: [id])
+  /// "1", "1.1", "1.1.1"; sorts by its numeric parts
+  code      String
+  title     String
+  createdAt DateTime @default(now())
+
+  questions Question[]
+
+  @@unique([centerId, code])
+}
+
+/// One test question of a center: multiple choice (options A–E, key a letter) or open (no options, key a
+/// number as in homework keys). Plain text with simple math (x², √(x+1), 3/4) so Telegram can show it.
+model Question {
+  id           String         @id @default(cuid())
+  centerId     String
+  center       Center         @relation(fields: [centerId], references: [id])
+  topicId      String
+  topic        QuestionTopic  @relation(fields: [topicId], references: [id])
+  /// the question's number within its topic in the source ("1.1.1" no. 7)
+  number       Int?
+  text         String
+  /// A, B, C… in order; [] = open answer
+  options      String[]
+  /// the key in homework-key form: "B", "-4", "2|-2"; "" = none yet
+  answer       String
+  keyCheck     KeyCheck
+  /// what the book prints as the answer, when it does
+  statedAnswer String?
+  /// the two independent model solves ("B", "C"); kept for the reviewer
+  solves       String[]       @default([])
+  /// the book's worked solution, when it has one
+  solution     String?
+  /// the question needs a picture (a graph, a drawing) that the text cannot carry
+  needsFigure  Boolean        @default(false)
+  source       QuestionSource
+  /// "96-3-1" (DTM bulletin 1996, no. 3, question 1) or "p. 12"
+  sourceRef    String?
+  page         Int?
+  status       QuestionStatus @default(DRAFT)
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@unique([topicId, number])
+  @@index([centerId, status])
 }

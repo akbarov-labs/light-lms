@@ -62,8 +62,8 @@ export const centerSettingsSchema = z.object({
     .prefault({})
     .catch(() => smsDefaults()),
   /**
-   * AI lead agent (phase 1). Off by default: conversations go to an external API (Anthropic), and
-   * real centers' personal data must stay in Uzbekistan (DEPLOY.md §0) until that is settled.
+   * AI lead agent (phase 1). Off by default: conversations go to an external paid API (Anthropic, USA; the
+   * USA is on the equivalent-protection list since 2026, DEPLOY.md §0), so each center opts in.
    */
   agent: z
     .object({
@@ -84,14 +84,30 @@ export const centerSettingsSchema = z.object({
       enabled: z.boolean().default(false),
       /** school grade from which the student hears about homework directly; below it the parents do */
       directFromGrade: z.number().int().min(1).max(12).default(9),
+      /** answers close this many minutes before the next lesson starts (0 = at its start) */
+      dueMinutesBefore: z.number().int().min(0).max(720).default(0),
+      /** days after the deadline a student who had not answered may still answer, marked late (0 = never) */
+      lateDays: z.number().int().min(0).max(7).default(0),
+      /** times a student may check the answers and fix the wrong ones (0 = no checking, results only in class) */
+      attempts: z.number().int().min(0).max(5).default(3),
+      /** hours before the deadline those who have not answered are reminded, with their parents (0 = no reminder) */
+      remindHoursBefore: z.number().int().min(0).max(48).default(3),
+      /** students may send a photo of the notebook: an AI model reads the answers (an external paid API, DEPLOY.md §0) */
+      photos: z.boolean().default(false),
     })
     .prefault({})
-    .catch(() => ({ enabled: false, directFromGrade: 9 })),
+    .catch(() => homeworkDefaults()),
+  /** hour (Tashkent) of the owner's daily report in Telegram */
+  dailyReportHour: z.number().int().min(6).max(23).default(21).catch(21),
 });
 
 export type CenterSettings = z.infer<typeof centerSettingsSchema>;
 export type SmsEvent = Exclude<keyof CenterSettings["sms"], "onlyWithoutTelegram">;
 export const SMS_EVENTS: SmsEvent[] = ["payment", "reminder", "debt", "absence", "trial", "reportCard", "examResult"];
+
+function homeworkDefaults() {
+  return { enabled: false, directFromGrade: 9, dueMinutesBefore: 0, lateDays: 0, attempts: 3, remindHoursBefore: 3, photos: false };
+}
 
 function smsDefaults() {
   return { payment: false, reminder: true, debt: true, absence: false, trial: true, reportCard: false, examResult: false, onlyWithoutTelegram: true };

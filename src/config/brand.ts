@@ -12,7 +12,7 @@ export const BRAND = {
     /** e.g. "998901234567" — shown formatted, used for tel: links. */
     phone: "",
     /** Telegram username without @, e.g. "sabaq_support". */
-    telegram: "",
+    telegram: "sabaquz_bot",
     email: "",
   },
   legal: {

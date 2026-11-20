@@ -30,6 +30,20 @@ export function agentModel(): string {
   return str(process.env.AGENT_MODEL) ?? "claude-haiku-5-5";
 }
 
+/**
+ * Claude model that reads homework answers from notebook photos. Reading handwriting is where a model
+ * mistake costs a student a wrong mark, so the default is the most capable general model; ~1–2k image
+ * tokens per Telegram photo. Measure with scripts/homework-photo-eval.ts before lowering it.
+ */
+export function homeworkPhotoModel(): string {
+  return str(process.env.HOMEWORK_PHOTO_MODEL) ?? "claude-opus-5-5";
+}
+
+/** Reading a center's book into its question bank (scripts/import-questions.ts). */
+export function questionModel(): string {
+  return str(process.env.QUESTION_MODEL) ?? "claude-opus-5-5";
+}
+
 /** Sabaq's own sales agent on the shared bot: strangers who write without a center link get answers about
  * Sabaq. Off unless "true"; also needs ANTHROPIC_API_KEY. */
 export function salesAgentEnabled(): boolean {
@@ -43,6 +57,12 @@ export function salesTeamChatId(): string | undefined {
 }
 
 /** Monthly token cap of the sales agent (weighted like a center's cap). Default 5 000 000 (~$5–10 on Haiku). */
+/** Tokens one not-yet-approved sales chat may use (capTokens units); then a fixed reply, no model. */
+export function salesChatTokenCap(): number {
+  const n = Number(process.env.SALES_CHAT_TOKEN_CAP);
+  return Number.isFinite(n) && n > 0 ? n : 150_000;
+}
+
 export function salesMonthlyTokenCap(): number {
   const n = Number(process.env.SALES_MONTHLY_TOKEN_CAP);
   return Number.isFinite(n) && n > 0 ? n : 5_000_000;

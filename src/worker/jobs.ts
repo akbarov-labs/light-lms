@@ -274,14 +274,22 @@ export async function ownerReport(userId: string, today: ISODate = todayISO()): 
   ].join("\n");
 }
 
-/** 21:00 — daily report to owners and managers linked in Telegram. */
-export async function dailyReport(today: ISODate = todayISO()): Promise<JobResult> {
+/** Tashkent hour now (UTC+5 all year). */
+export const tashkentHour = (now = new Date()) => (now.getUTCHours() + 5) % 24;
+
+/**
+ * Hourly — the daily report to owners and managers linked in Telegram, at each center's hour
+ * (settings.dailyReportHour, 21:00 by default; the first pilot center wanted 19:00–20:00). Without `hour`
+ * (npm run job:daily-report) every center gets it now. Sent once a day per person (dedupe key).
+ */
+export async function dailyReport(today: ISODate = todayISO(), hour?: number): Promise<JobResult> {
   const users = await db.user.findMany({ where: { archivedAt: null, telegramChatId: { not: null }, role: { in: ["OWNER", "MANAGER"] } }, include: { center: { select: { settings: true } } } });
   let sent = 0;
   let reportsFailed = 0;
   for (const u of users) {
     await isolated(`daily-report ${u.id}`, async () => {
-      if (!readSettings(u.center.settings).notify.dailyReport) return;
+      const settings = readSettings(u.center.settings);
+      if (!settings.notify.dailyReport || (hour !== undefined && settings.dailyReportHour !== hour)) return;
       const text = await ownerReport(u.id, today);
       if (!text) return;
       sent += await db.$transaction(async (tx) => {

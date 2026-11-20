@@ -60,7 +60,7 @@ export interface TurnResult {
 export const MAX_STEPS = 8;
 
 /** Server-side fallback on a refusal exists for Sonnet / Opus 5.5, not for Haiku 5.5. */
-function fallbackParams(model: string): Pick<Anthropic.Beta.Messages.MessageCreateParamsNonStreaming, "betas" | "fallbacks"> {
+export function fallbackParams(model: string): Pick<Anthropic.Beta.Messages.MessageCreateParamsNonStreaming, "betas" | "fallbacks"> {
   if (model === "claude-opus-5-5" || model === "claude-sonnet-5-5") return { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" };
   return {};
 }

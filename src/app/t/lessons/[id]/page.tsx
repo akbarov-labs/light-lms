@@ -17,7 +17,7 @@ export default async function TeacherLesson({ params, searchParams }: { params: 
   const { t } = ctx;
   const lesson = await db.lesson.findUnique({ where: { id }, include: { group: true, room: true } });
   if (!lesson || lesson.group.centerId !== ctx.centerId || (lesson.teacherId !== ctx.userId && lesson.group.teacherId !== ctx.userId && !(ctx.can("groups.edit") && canAccessBranch(ctx, lesson.group.branchId)))) notFound();
-  const [rows, homework] = await Promise.all([lessonRoster(id), ctx.settings.homework.enabled ? lessonHomework(lesson) : null]);
+  const [rows, homework] = await Promise.all([lessonRoster(id), ctx.settings.homework.enabled ? lessonHomework(lesson, ctx.settings.homework) : null]);
   const date = toISODate(lesson.date);
   return (
     <div className="space-y-4">
