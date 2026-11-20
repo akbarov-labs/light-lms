@@ -115,6 +115,19 @@ export const centerSettingsSchema = z.object({
     .catch(() => ({ weekly: false, weekday: 7, hour: 18 })),
   /** ISO weekdays make-up lessons may be booked on (first pilot: Sunday only) */
   makeupWeekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7).default([1, 2, 3, 4, 5, 6, 7]).catch([1, 2, 3, 4, 5, 6, 7]),
+  /**
+   * Math tutor in the bot (src/lib/tutor): linked students and parents ask about any math topic and get hints
+   * step by step, never homework or test answers. Off by default: an external paid API (Anthropic, DEPLOY.md
+   * §0), metered against agent.monthlyTokenCap.
+   */
+  tutor: z
+    .object({
+      enabled: z.boolean().default(false),
+      /** messages one chat may send the tutor per day (Tashkent date) */
+      dailyMessages: z.number().int().min(1).max(200).default(30),
+    })
+    .prefault({})
+    .catch(() => ({ enabled: false, dailyMessages: 30 })),
   /** hour (Tashkent) of the owner's daily report in Telegram */
   dailyReportHour: z.number().int().min(6).max(23).default(21).catch(21),
 });

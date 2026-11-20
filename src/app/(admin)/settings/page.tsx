@@ -96,6 +96,15 @@ export default async function CenterSettings() {
           </div>
         </div>
       </Card>
+      <Card title={t("settings.tutor")}>
+        <p className="mb-3 text-sm text-zinc-500">{t("settings.tutorHint")}</p>
+        <div className="grid items-end gap-3 sm:grid-cols-2">
+          <Checkbox name="tutorEnabled" label={t("settings.tutorEnabled")} defaultChecked={s.tutor.enabled} />
+          <Field label={t("settings.tutorDaily")} hint={t("settings.tutorDailyHint")}>
+            <Input type="number" min={1} max={200} name="tutorDailyMessages" defaultValue={s.tutor.dailyMessages} />
+          </Field>
+        </div>
+      </Card>
       <Card title={t("settings.expenseCategories")}>
         <Field hint={t("expenses.categoriesHint")}><Textarea name="expenseCategories" rows={6} defaultValue={s.expenseCategories.join("\n")} /></Field>
       </Card>

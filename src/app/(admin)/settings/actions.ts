@@ -68,6 +68,8 @@ const centerSchema = z.object({
   homeworkAttempts: zOptInt(0, 5),
   homeworkRemindHours: zOptInt(0, 48),
   homeworkPhotos: zBool,
+  tutorEnabled: zBool,
+  tutorDailyMessages: zOptInt(1, 200),
   dailyReportHour: zOptInt(6, 23),
   smsLogin: zOptStr,
   smsPassword: zOptStr,
@@ -142,6 +144,7 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
         remindHoursBefore: f.homeworkRemindHours ?? old.homework.remindHoursBefore,
         photos: f.homeworkPhotos,
       },
+      tutor: { enabled: f.tutorEnabled, dailyMessages: f.tutorDailyMessages ?? old.tutor.dailyMessages },
       dailyReportHour: f.dailyReportHour ?? old.dailyReportHour,
       sms: { ...Object.fromEntries(SMS_EVENTS.map((k) => [k, fd.get(`sms.${k}`) === "on"])), onlyWithoutTelegram: fd.get("sms.onlyWithoutTelegram") === "on" } as typeof old.sms,
     };

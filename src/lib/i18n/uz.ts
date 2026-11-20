@@ -10,6 +10,7 @@ import { botsUz } from "./extra-bots";
 import { homeworkUz } from "./extra-homework";
 import { questionsUz } from "./extra-questions";
 import { pilotUz } from "./extra-pilot";
+import { tutorUz } from "./extra-tutor";
 
 export const uz = {
   ...saasUz,
@@ -22,6 +23,7 @@ export const uz = {
   ...homeworkUz,
   ...questionsUz,
   ...pilotUz,
+  ...tutorUz,
   "app.name": BRAND.name as string,
   "common.save": "Saqlash",
   "common.cancel": "Bekor qilish",

@@ -408,6 +408,12 @@ async function savePhoto(ctx: Context, chatId: string, s: AnswerSheet, l: Locale
   return show(ctx, view, true);
 }
 
+/** A homework sheet is open in this chat (a question or its summary shown, touched within the last 30 minutes). */
+export function homeworkSheetOpen(chatId: string, now = Date.now()): boolean {
+  const t = typing.get(chatId);
+  return !!t && now - t.at <= TTL;
+}
+
 /** For tests: forget every chat's open sheet and pending photo. */
 export function resetHomeworkTyping() {
   typing.clear();

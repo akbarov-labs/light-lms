@@ -44,6 +44,11 @@ export function questionModel(): string {
   return str(process.env.QUESTION_MODEL) ?? "claude-opus-5-5";
 }
 
+/** The math tutor in the bot (src/lib/tutor). Explaining math step by step without slips needs a strong model. */
+export function tutorModel(): string {
+  return str(process.env.TUTOR_MODEL) ?? "claude-opus-5-5";
+}
+
 /** Sabaq's own sales agent on the shared bot: strangers who write without a center link get answers about
  * Sabaq. Off unless "true"; also needs ANTHROPIC_API_KEY. */
 export function salesAgentEnabled(): boolean {

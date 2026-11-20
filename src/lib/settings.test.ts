@@ -20,6 +20,7 @@ const defaults = {
   homework: { enabled: false, directFromGrade: 9, dueMinutesBefore: 0, lateDays: 0, attempts: 3, remindHoursBefore: 3, photos: false },
   parentReports: { weekly: false, weekday: 7, hour: 18 },
   makeupWeekdays: [1, 2, 3, 4, 5, 6, 7],
+  tutor: { enabled: false, dailyMessages: 30 },
   dailyReportHour: 21,
 };
 
@@ -46,6 +47,13 @@ describe("readSettings (Center.settings JSON)", () => {
     expect(readSettings({ dailyReportHour: 19 }).dailyReportHour).toBe(19);
     expect(readSettings({ dailyReportHour: 3 }).dailyReportHour).toBe(21);
     expect(readSettings({ trialLessons: 2, homework: { directFromGrade: 40 } })).toEqual({ ...defaults, trialLessons: 2 });
+  });
+
+  it("keeps the math tutor off by default; a broken tutor block does not reset other settings", () => {
+    expect(readSettings({}).tutor).toEqual({ enabled: false, dailyMessages: 30 });
+    expect(readSettings({ tutor: { enabled: true } }).tutor).toEqual({ enabled: true, dailyMessages: 30 });
+    expect(readSettings({ tutor: { enabled: true, dailyMessages: 10 } }).tutor).toEqual({ enabled: true, dailyMessages: 10 });
+    expect(readSettings({ trialLessons: 2, tutor: { enabled: true, dailyMessages: 0 } })).toEqual({ ...defaults, trialLessons: 2 });
   });
 
   it("fills nested notify defaults when notify is partial or empty", () => {

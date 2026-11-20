@@ -18,6 +18,7 @@ import { withBotScope, type BotScope } from "@/lib/managed-bots/scope";
 import { CODE_PREFIX, markBotBlocked, markBotChat, onManagedBotUpdate, openBotRequest, suggestedUsername, type UpdateResult } from "@/lib/managed-bots/service";
 import { answerFromTelegram } from "@/lib/agent/service";
 import { HOMEWORK_CB, homeworkMenu, homeworkOnCallback, homeworkOnPhoto, homeworkOnText } from "./homework";
+import { chatTutorOn, tutorButton, tutorOnPhoto, tutorOnText } from "./tutor";
 import { SALES_ACCESS, salesOnAccess, salesOnContact, salesOnFile, salesOnStart, salesOnTeamReply, salesOnText } from "./sales";
 import { appUrl, telegramRichMessages } from "@/lib/env";
 import { richRefused } from "../notifications";
@@ -80,7 +81,12 @@ async function menu(chatId: string, l: Locale): Promise<Keyboard> {
   const roles = await chatRoles(chatId);
   const kb = new Keyboard();
   if (roles.family) kb.text(B.balanceBtn[l]).text(B.scheduleBtn[l]).row().text(B.attendanceBtn[l]).text(B.paymentsBtn[l]).text(B.centerBtn[l]).row();
-  if (roles.family && (await chatHomeworkOn(chatId))) kb.text(B.homeworkBtn[l]).row();
+  if (roles.family) {
+    const [homework, tutor] = await Promise.all([chatHomeworkOn(chatId), chatTutorOn(chatId)]);
+    if (homework) kb.text(B.homeworkBtn[l]);
+    if (tutor) kb.text(B.tutorBtn[l]);
+    if (homework || tutor) kb.row();
+  }
   if (roles.teacher) kb.text(B.todayBtn[l]).text(B.salaryBtn[l]).text(B.weekBtn[l]).row();
   if (roles.owner) kb.text(B.reportBtn[l]).row();
   return kb.resized();
@@ -230,7 +236,12 @@ export function createBot(token: string, opts: BotOptions = {}): Bot {
   bot.on(["message:document", "message:photo"], async (ctx) => {
     if (ctx.chat.type !== "private") return;
     const roles = await chatRoles(String(ctx.chat.id));
-    if (roles.family) return void (await homeworkOnPhoto(ctx, await localeOf(ctx)));
+    if (roles.family) {
+      const l = await localeOf(ctx);
+      // no homework sheet open and the tutor on: a photo of a problem is not read (yet), the tutor says so
+      if (await tutorOnPhoto(ctx, l)) return;
+      return void (await homeworkOnPhoto(ctx, l));
+    }
     if (roles.teacher || roles.owner) return;
     await salesOnFile(ctx, await localeOf(ctx));
   });
@@ -283,6 +294,9 @@ export function createBot(token: string, opts: BotOptions = {}): Bot {
       case "homeworkBtn":
         await homeworkMenu(ctx, chatId, l);
         return;
+      case "tutorBtn":
+        await tutorButton(ctx, chatId, l);
+        return;
       case "todayBtn": {
         const teacher = await teacherFor(chatId);
         if (!teacher) return void (await ctx.reply(B.forbidden[l]));
@@ -323,6 +337,8 @@ export function createBot(token: string, opts: BotOptions = {}): Bot {
         // a typed answer to the homework question this chat is on
         if (await homeworkOnText(ctx, ctx.message.text, l)) return;
         if (await agentOnText(ctx, ctx.message.text, l)) return;
+        // a linked student's or parent's math question (their center turned the tutor on)
+        if (await tutorOnText(ctx, ctx.message.text, l)) return;
         {
           const roles = await chatRoles(chatId);
           if (!scope && !roles.family && !roles.teacher && !roles.owner && (await salesOnText(ctx, ctx.message.text, l))) return;
