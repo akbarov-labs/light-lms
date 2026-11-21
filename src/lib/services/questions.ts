@@ -4,7 +4,7 @@
 import { db } from "@/lib/db";
 import { UserError } from "@/lib/user-error";
 import { approvable, codeChain, compareCodes, decideKey, keyOf } from "@/lib/questions/keys";
-import type { ExtractedQuestion } from "@/lib/questions/extract";
+import { MAX_THEORY, type BookSection, type ExtractedQuestion } from "@/lib/questions/extract";
 
 // ------------------------------------------------------------------ import
 
@@ -19,8 +19,9 @@ export interface ImportItem {
  * A question already in the bank (same topic and number) is left as it is, so a re-run never undoes a
  * person's review.
  */
-export async function saveImported(centerId: string, sections: { code: string; title: string }[], items: ImportItem[]): Promise<{ created: number; skipped: number }> {
+export async function saveImported(centerId: string, sections: BookSection[], items: ImportItem[]): Promise<{ created: number; skipped: number }> {
   const titles = new Map(sections.map((s) => [s.code, s.title]));
+  const theories = new Map(sections.flatMap((s) => (s.theory ? [[s.code, s.theory] as const] : [])));
   const codes = new Set<string>();
   for (const s of sections) codeChain(s.code).forEach((c) => codes.add(c));
   for (const i of items) codeChain(i.q.section).forEach((c) => codes.add(c));
@@ -32,8 +33,11 @@ export async function saveImported(centerId: string, sections: { code: string; t
         where: { centerId_code: { centerId, code } },
         // a title read later replaces the code standing in for it
         update: title ? { title } : {},
-        create: { centerId, code, title: title ?? code },
+        create: { centerId, code, title: title ?? code, theory: theories.get(code) ?? null },
       });
+      // the book's explanation fills an empty one; it never overwrites what the owner edited
+      const theory = theories.get(code);
+      if (theory && !t.theory) await tx.questionTopic.update({ where: { id: t.id }, data: { theory } });
       topicId.set(code, t.id);
     }
     let created = 0;
@@ -99,6 +103,12 @@ export interface QuestionEdit {
 }
 
 /** Fix what the book reading got wrong: the text, the options, the key. A changed question goes back to draft. */
+/** The owner's correction of a topic's explanation; empty clears it. */
+export async function editTopicTheory(r: Reviewer, topicId: string, theory: string): Promise<void> {
+  const res = await db.questionTopic.updateMany({ where: { id: topicId, centerId: r.centerId }, data: { theory: theory.trim() ? theory.trim().slice(0, MAX_THEORY) : null } });
+  if (res.count === 0) throw new UserError("error.notFound");
+}
+
 export async function editQuestion(r: Reviewer, id: string, e: QuestionEdit): Promise<void> {
   const q = await own(r, id);
   const options = e.options ?? q.options;

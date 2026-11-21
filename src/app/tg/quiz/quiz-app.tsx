@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DictKey } from "@/lib/i18n";
 import type { AttemptView, ChatQuiz } from "@/lib/services/quizzes";
 import { launchParams, postEvent, THEME_VARS, type MiniLabels } from "../mini-app";
+import { MathText } from "@/components/math-text";
 
 type Mode = "topic" | "placement";
 type PlacementInfo = { minutes: number; count: number; topics: { id: string; code: string; title: string; depth: number }[]; known: string | null; running: string | null };
@@ -266,12 +267,12 @@ function Attempt({ view, receivedAt, t, call, onView, onBack }: { view: AttemptV
       <main className="mx-auto max-w-lg space-y-3 p-3">
         {view.questions.map((q, i) => (
           <section key={q.n} className="tg-card">
-            <p className="whitespace-pre-wrap text-[15px] leading-relaxed"><span className="tnum font-semibold">{q.n}.</span> {q.text}</p>
+            <p className="whitespace-pre-wrap text-[15px] leading-relaxed"><span className="tnum font-semibold">{q.n}.</span> <MathText text={q.text} /></p>
             {q.options.length > 0 ? (
               <div className="mt-3 grid gap-2">
                 {q.options.map((o, k) => (
                   <button key={k} type="button" className="tg-choice" aria-pressed={answers[i] === LETTERS[k]} onClick={() => answer(i, answers[i] === LETTERS[k] ? "" : LETTERS[k])}>
-                    <span className="tnum font-semibold">{LETTERS[k]})</span> <span>{o}</span>
+                    <span className="tnum font-semibold">{LETTERS[k]})</span> <MathText text={o} />
                   </button>
                 ))}
               </div>

@@ -8,6 +8,7 @@ import { quizDetail } from "@/lib/services/quizzes";
 import { Badge, Card, cx, EmptyState, PageHeader, Table, Td, Th, Tr, type Tone } from "@/components/ui";
 import { Field, Input } from "@/components/fields";
 import { ActionForm, Modal, ModalForm, SubmitButton } from "@/components/client";
+import { MathText } from "@/components/math-text";
 import { closeQuizAction, deleteQuizAction, publishQuizAction, removeQuestionAction, replaceQuestionAction, sendParentsAction, updateQuizAction } from "../actions";
 import { MAX_MINUTES } from "@/lib/quizzes/timing";
 
@@ -134,11 +135,11 @@ export default async function QuizPage({ params }: { params: Promise<{ id: strin
               {q.status !== "APPROVED" && <Badge tone="red">{t(`questions.status.${q.status}`)}</Badge>}
               {!draft && wrongCount[i] > 0 && <Badge tone="amber">{t("quizzes.wrongBy", { n: wrongCount[i] })}</Badge>}
             </div>
-            <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-zinc-900">{q.text}</p>
+            <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-zinc-900"><MathText text={q.text} /></p>
             {q.options.length > 0 && (
               <ol className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
                 {q.options.map((o, k) => (
-                  <li key={k} className={cx("rounded px-2 py-0.5", q.answer === LETTERS[k] && "bg-emerald-50 font-medium text-emerald-900")}>{LETTERS[k]}) {o}</li>
+                  <li key={k} className={cx("rounded px-2 py-0.5", q.answer === LETTERS[k] && "bg-emerald-50 font-medium text-emerald-900")}>{LETTERS[k]}) <MathText text={o} /></li>
                 ))}
               </ol>
             )}
