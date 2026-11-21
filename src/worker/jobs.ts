@@ -20,6 +20,7 @@ import { zonedRange } from "@/lib/queries/period";
 import { formatMoney } from "@/lib/money";
 import { purgeOldAttempts } from "@/lib/auth/attempts-db";
 import { purgeOldNotifications } from "./notifications";
+import { pruneBotLog } from "@/lib/services/bot-log";
 import { errText } from "./util";
 import { appUrl } from "@/lib/env";
 
@@ -79,6 +80,8 @@ export async function nightly(today: ISODate = todayISO()): Promise<JobResult> {
     const p = await purgeOldNotifications();
     return { sentNotificationsPurged: p.sent, failedNotificationsPurged: p.failed };
   });
+  // the AI chats' log (/conversations) is kept 90 days: children's and parents' messages, not an archive
+  await step("botLogRetention", async () => ({ botMessagesPruned: await pruneBotLog() }));
   if (failed.length) out.failedSteps = failed.join(",");
   return out;
 }

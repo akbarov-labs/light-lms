@@ -19,6 +19,7 @@ import { windowOf } from "@/lib/services/homework";
 import { leakedQuestion, looksLikeSheet } from "./guard";
 import { TUTOR_SYSTEM, turnNote } from "./prompt";
 import { TUTOR_HISTORY, nextDayCount, toTelegramHtml, trimTurns, type TutorMessage } from "./turns";
+import { logBotMessages, plainText } from "@/lib/services/bot-log";
 
 /** One message from the student: longer is cut (a pasted page is not a question). */
 export const MAX_QUESTION_CHARS = 2000;
@@ -110,28 +111,43 @@ export interface TutorReply {
   html: string;
   /** the question number whose key was in the model's reply (outcome "leak") */
   leakedQ?: number;
+  /** the center whose tutor answered (none when the chat has no tutor) */
+  centerId?: string;
 }
 
 export interface TutorInput {
   chatId: string;
   text: string;
   locale: Locale;
+  /** the person's Telegram name, for the conversation log */
+  personName?: string;
   now?: Date;
 }
 
 export async function handleTutorMessage(h: TutorInput): Promise<TutorReply> {
+  const r = await tutorTurn(h);
+  // the conversation log for /conversations: every exchange of a chat that has a tutor, refusals included
+  if (r.centerId) {
+    await logBotMessages(r.centerId, h.chatId, "TUTOR", [{ from: "PERSON", text: h.text, name: h.personName }, { from: "BOT", text: plainText(r.html) }], h.now);
+  }
+  return r;
+}
+
+async function tutorTurn(h: TutorInput): Promise<TutorReply> {
   const now = h.now ?? new Date();
   const t = makeT(h.locale);
   const say = (outcome: TutorOutcome, html: string, extra: Partial<TutorReply> = {}): TutorReply => ({ outcome, html, ...extra });
   const target = await tutorFor(h.chatId);
   if (!target) return say("off", t("tutor.off"));
+  // every answer from here on is this center's tutor
+  const centered = (outcome: TutorOutcome, html: string, extra: Partial<TutorReply> = {}) => say(outcome, html, { ...extra, centerId: target.centerId });
   const text = h.text.trim().slice(0, MAX_QUESTION_CHARS);
-  if (looksLikeSheet(text)) return say("sheet", t("tutor.sheet"));
+  if (looksLikeSheet(text)) return centered("sheet", t("tutor.sheet"));
 
   const settings = readSettings((await db.center.findUniqueOrThrow({ where: { id: target.centerId }, select: { settings: true } })).settings);
   const month = monthKey(todayISO(now));
   const used = await db.agentUsage.findUnique({ where: { centerId_month: { centerId: target.centerId, month } } });
-  if (used && capTokens(used) >= settings.agent.monthlyTokenCap) return say("paused", t("tutor.paused"));
+  if (used && capTokens(used) >= settings.agent.monthlyTokenCap) return centered("paused", t("tutor.paused"));
 
   const row = await db.tutorChat.upsert({
     where: { centerId_chatId: { centerId: target.centerId, chatId: h.chatId } },
@@ -140,13 +156,13 @@ export async function handleTutorMessage(h: TutorInput): Promise<TutorReply> {
   });
   const today = todayISO(now);
   const next = nextDayCount(row, today, target.dailyMessages);
-  if (next === null) return say("limit", t("tutor.dailyLimit", { n: target.dailyMessages }));
+  if (next === null) return centered("limit", t("tutor.dailyLimit", { n: target.dailyMessages }));
   // a new day resets; otherwise the slot is taken only while the count is still below the limit
   const took =
     next === 1 && row.day !== today
       ? await db.tutorChat.updateMany({ where: { id: row.id, day: row.day }, data: { day: today, dayMessages: 1 } })
       : await db.tutorChat.updateMany({ where: { id: row.id, day: today, dayMessages: { lt: target.dailyMessages } }, data: { dayMessages: { increment: 1 } } });
-  if (took.count === 0) return say("limit", t("tutor.dailyLimit", { n: target.dailyMessages }));
+  if (took.count === 0) return centered("limit", t("tutor.dailyLimit", { n: target.dailyMessages }));
 
   const history = trimTurns((row.messages ?? []) as unknown as TutorMessage[], TUTOR_HISTORY - 1);
   const model = tutorModel();
@@ -168,7 +184,7 @@ export async function handleTutorMessage(h: TutorInput): Promise<TutorReply> {
     });
   } catch (e) {
     console.error("[tutor] model call failed", e);
-    return say("error", t("tutor.error"));
+    return centered("error", t("tutor.error"));
   }
 
   const u = res.usage;
@@ -184,9 +200,9 @@ export async function handleTutorMessage(h: TutorInput): Promise<TutorReply> {
   ]);
 
   // a refused answer is not kept: the next message starts from the history before it
-  if (res.stop_reason === "refusal") return say("refused", t("tutor.refused"));
+  if (res.stop_reason === "refusal") return centered("refused", t("tutor.refused"));
   const reply = res.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n").trim();
-  if (!reply) return say("error", t("tutor.error"));
+  if (!reply) return centered("error", t("tutor.error"));
 
   // the guard: the student's recent messages say which question they mean ("5-misol"), the keys say its answer
   const asked = [...history.filter((m) => m.role === "user").map((m) => m.content), text].join("\n");
@@ -198,5 +214,5 @@ export async function handleTutorMessage(h: TutorInput): Promise<TutorReply> {
     where: { id: row.id },
     data: { messages: JSON.parse(JSON.stringify(messages)), ...(leakedQ !== null ? { blockedReplies: { increment: 1 } } : {}) },
   });
-  return leakedQ === null ? say("reply", toTelegramHtml(reply)) : say("leak", kept, { leakedQ });
+  return leakedQ === null ? centered("reply", toTelegramHtml(reply)) : centered("leak", kept, { leakedQ });
 }

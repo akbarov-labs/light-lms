@@ -10,6 +10,7 @@ import { botsUz } from "./extra-bots";
 import { homeworkUz } from "./extra-homework";
 import { questionsUz } from "./extra-questions";
 import { pilotUz } from "./extra-pilot";
+import { conversationsUz } from "./extra-conversations";
 import { tutorUz } from "./extra-tutor";
 import { quizzesUz } from "./extra-quizzes";
 
@@ -24,6 +25,7 @@ export const uz = {
   ...homeworkUz,
   ...questionsUz,
   ...pilotUz,
+  ...conversationsUz,
   ...tutorUz,
   ...quizzesUz,
   "app.name": BRAND.name as string,

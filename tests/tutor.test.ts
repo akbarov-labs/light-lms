@@ -204,6 +204,15 @@ describe("a turn", () => {
       { role: "assistant", content: "Avval **3** ni o'ng tomonga o'tkazing: 2x = 11 − 3. Endi nima chiqadi?" },
       { role: "user", content: "2x = 8" },
     ]);
+
+    // the conversation log (/conversations): both exchanges, as the student read them, in order
+    const log = await db.botMessage.findMany({ where: { centerId, chatId: String(CHAT.ali), kind: "TUTOR" }, orderBy: { createdAt: "asc" } });
+    expect(log.map((m) => [m.from, m.text])).toEqual([
+      ["PERSON", "2x + 3 = 11 ni qanday yechaman?"],
+      ["BOT", "Avval 3 ni o'ng tomonga o'tkazing: 2x = 11 − 3. Endi nima chiqadi?"],
+      ["PERSON", "2x = 8"],
+      ["BOT", "To'g'ri! Endi ikkala tomonni 2 ga bo'ling."],
+    ]);
   });
 
   it("a parent asking for a child: the model hears it is a parent and the child's grade", async () => {

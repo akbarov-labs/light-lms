@@ -1,0 +1,36 @@
+// Strings of the conversation log (/conversations): the AI chats as the person saw them. Spread into uz.ts / ru.ts.
+export const conversationsUz = {
+  "nav.conversations": "Bot suhbatlari",
+  "conv.subtitle": "AI yordamchi va matematika yordamchisining yozishmalari, odam ko'rgandek. {days} kun saqlanadi.",
+  "conv.all": "Hammasi",
+  "conv.kind.AGENT": "AI yordamchi",
+  "conv.kind.TUTOR": "Matematika yordamchisi",
+  "conv.from.PERSON": "Mijoz",
+  "conv.from.BOT": "Bot",
+  "conv.from.STAFF": "Xodim",
+  "conv.none": "Hali suhbat yo'q. Botga kimdir yozganda shu yerda chiqadi.",
+  "conv.pick": "Chapdan suhbatni tanlang.",
+  "conv.messages": "{n} ta xabar",
+  "conv.unknown": "Ismsiz",
+  "conv.toLead": "Lid sahifasi",
+  "conv.center": "Markaz: {name}",
+  "conv.platformLink": "Suhbatlar",
+} as const;
+
+export const conversationsRu: Record<keyof typeof conversationsUz, string> = {
+  "nav.conversations": "Переписки бота",
+  "conv.subtitle": "Переписки AI-помощника и помощника по математике, как их видел человек. Хранятся {days} дней.",
+  "conv.all": "Все",
+  "conv.kind.AGENT": "AI-помощник",
+  "conv.kind.TUTOR": "Помощник по математике",
+  "conv.from.PERSON": "Клиент",
+  "conv.from.BOT": "Бот",
+  "conv.from.STAFF": "Сотрудник",
+  "conv.none": "Переписок пока нет. Они появятся здесь, когда кто-то напишет боту.",
+  "conv.pick": "Выберите переписку слева.",
+  "conv.messages": "{n} сообщ.",
+  "conv.unknown": "Без имени",
+  "conv.toLead": "Страница лида",
+  "conv.center": "Центр: {name}",
+  "conv.platformLink": "Переписки",
+};
