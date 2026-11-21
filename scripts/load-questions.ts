@@ -15,7 +15,10 @@
 //                 (src/lib/questions/extract.ts), with `page` the page number in the whole book and
 //                 `answer` the reader's own solve;
 //   solve-*.json  { answers: [{section, number, answer}] }: a second solve by someone who saw only the
-//                 question and its options, never the book's answer.
+//                 question and its options, never the book's answer;
+//   answers-*.json (optional) the book's answer tables: { sections: {"1.1.4": {"1": "B"}}, bulletins:
+//                 {"97-5": {"10": "A"}} } — a question without a printed answer takes its section's table
+//                 entry, else its bulletin's by its source code (97-5-10 → year 97, bulletin 5, question 10).
 // Files are read in name order; a question read twice (pages overlap) keeps its first reading. A question
 // already in the bank is left as it is, so loading again never undoes a review.
 import { readdirSync, readFileSync } from "node:fs";
@@ -32,13 +35,16 @@ const keyOfQ = (section: string, number: number) => `${section.trim()}#${number}
 interface Bundle {
   reads: unknown[];
   solves: unknown[];
+  answers?: unknown[];
 }
+
+const TABLES = z.object({ sections: z.record(z.string(), z.record(z.string(), z.string())), bulletins: z.record(z.string(), z.record(z.string(), z.string())) });
 
 /** The read-* and solve-* files of a folder, in name order. */
 function packDir(dir: string): Bundle {
   const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
   const load = (f: string) => JSON.parse(readFileSync(join(dir, f), "utf8")) as unknown;
-  return { reads: files.filter((f) => f.startsWith("read-")).map(load), solves: files.filter((f) => f.startsWith("solve-")).map(load) };
+  return { reads: files.filter((f) => f.startsWith("read-")).map(load), solves: files.filter((f) => f.startsWith("solve-")).map(load), answers: files.filter((f) => f.startsWith("answers-")).map(load) };
 }
 
 async function main() {
@@ -74,6 +80,21 @@ async function main() {
     }
     for (const q of got.questions) if (!questions.has(keyOfQ(q.section, q.number))) questions.set(keyOfQ(q.section, q.number), q);
   }
+  // the book's answer tables stand in for a printed answer the page itself does not show
+  let fromTables = 0;
+  for (const file of bundle.answers ?? []) {
+    const t = TABLES.parse(file);
+    for (const q of questions.values()) {
+      if (q.stated) continue;
+      const [yy, b, n] = q.ref?.split("-") ?? [];
+      const raw = t.sections[q.section]?.[String(q.number)] ?? (yy && b && n ? t.bulletins[`${yy}-${Number(b)}`]?.[String(Number(n))] : undefined);
+      const key = keyOf(raw, q.options.length);
+      if (key) {
+        q.stated = key;
+        fromTables++;
+      }
+    }
+  }
   const second = new Map<string, string>();
   for (const file of bundle.solves) for (const a of SOLVES.parse(file).answers) second.set(keyOfQ(a.section, a.number), a.answer);
 
@@ -85,7 +106,7 @@ async function main() {
   }
   const noSecond = items.filter((i) => i.solve2 === null).length;
   console.log(`${center.name}: ${items.length} questions from ${bundle.reads.length} readings, ${dropped} dropped by the checks, ${noSecond} without a second solve`);
-  console.log(`topics with an explanation: ${theories.size}`);
+  console.log(`topics with an explanation: ${theories.size}, printed answers taken from the book's tables: ${fromTables}`);
   console.log(`keys: ${Object.entries(checks).map(([k, n]) => `${k} ${n}`).join(", ")}`);
   if (dryRun || !items.length) {
     if (dryRun) console.log("dry run: nothing saved");
