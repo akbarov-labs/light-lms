@@ -8,7 +8,7 @@ import { esc } from "@/lib/messages";
 import { richAttendance, type AttendanceSummary } from "@/lib/rich-messages";
 import { familyAllocation } from "@/lib/services/wallet";
 import { loadBillingInput } from "@/lib/billing/sync";
-import { computeExpected } from "@/lib/billing/engine";
+import { computeExpected, renewalAnchor } from "@/lib/billing/engine";
 import { nextPeriodStart, periodContaining } from "@/lib/billing/periods";
 import { payLinkForFamily } from "@/lib/payments/links";
 import { attendanceMark, fullName } from "@/lib/format";
@@ -125,7 +125,7 @@ export async function balanceText(chatId: string, l: Locale): Promise<{ text: st
         const eb = alloc.enrollments.get(e.id);
         lines.push(`• ${esc(e.group.name)}: ${B.charged[l]} ${money(eb?.charged ?? 0, l)}, ${B.paid[l]} ${money(eb?.paid ?? 0, l)}${(eb?.debt ?? 0) > 0 ? `, <b>${B.debt[l]} ${money(eb!.debt, l)}</b>` : ""}`);
         if (e.group.course.pricingType === "SUBSCRIPTION" && e.activatedAt) {
-          const anchor = e.group.course.renewal === "CALENDAR" ? 1 : e.group.course.renewal === "GROUP_START" ? Number(toISODate(e.group.startDate).slice(8)) : Number(toISODate(e.activatedAt).slice(8));
+          const anchor = renewalAnchor(e.group.course, toISODate(e.group.startDate), toISODate(e.activatedAt));
           const next = nextPeriodStart(periodContaining(todayISO(), anchor).start, anchor);
           const { input } = await loadBillingInput(db, e.id, next);
           const unit = computeExpected(input).find((u) => u.start === next);

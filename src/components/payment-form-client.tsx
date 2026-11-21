@@ -15,7 +15,7 @@ export interface PayOption {
   debt: number;
 }
 
-type Labels = Record<"amount" | "method" | "date" | "forGroup" | "anyGroup" | "note" | "continue" | "confirm" | "edit" | "confirmTitle" | "debtNow" | "family" | "remaining" | "overpay" | "closes", string> & { methods: Record<"CASH" | "CARD" | "TRANSFER", string> };
+type Labels = Record<"amount" | "method" | "date" | "forGroup" | "anyGroup" | "note" | "continue" | "confirm" | "edit" | "confirmTitle" | "debtNow" | "family" | "remaining" | "overpay" | "closes", string> & { methods: Record<"CASH" | "CARD" | "TRANSFER" | "PAYNET", string> };
 
 function Submit({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -85,7 +85,7 @@ export function PaymentFormClient({ familyId, studentId, options, defaultOption,
   const setAmount = (n: number | null) => setAmountRaw(n ?? 0);
   const large = amount > LARGE_PAYMENT;
   const [amountKey, setAmountKey] = useState(0);
-  const [method, setMethod] = useState<"CASH" | "CARD" | "TRANSFER">("CASH");
+  const [method, setMethod] = useState<"CASH" | "CARD" | "TRANSFER" | "PAYNET">("CASH");
   const [date, setDate] = useState(today);
   const who = chosen ? chosen.who : `${familyWho} (${labels.family})`;
   const debtNow = useMemo(() => (chosen ? chosen.debt : familyDebt), [chosen, familyDebt]);
@@ -131,8 +131,8 @@ export function PaymentFormClient({ familyId, studentId, options, defaultOption,
         </div>
         <fieldset>
           <legend className="mb-1.5 block text-[13px] font-medium text-zinc-700">{labels.method}</legend>
-          <div className="grid grid-cols-3 gap-1 rounded-lg bg-zinc-100 p-1">
-            {(["CASH", "CARD", "TRANSFER"] as const).map((m) => (
+          <div className="grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1 sm:grid-cols-4">
+            {(["CASH", "CARD", "TRANSFER", "PAYNET"] as const).map((m) => (
               <button key={m} type="button" aria-pressed={method === m} onClick={() => setMethod(m)} className={cx("h-8 rounded-md text-[13px] font-medium transition-colors", method === m ? "bg-white text-zinc-950 shadow-xs" : "text-zinc-600 hover:text-zinc-900")}>
                 {labels.methods[m]}
               </button>

@@ -58,6 +58,9 @@ const centerSchema = z.object({
   uzumPassword: zOptStr,
   reportCardsAuto: zBool,
   reportCardsDay: zOptInt(1, 28),
+  weeklyReport: zBool,
+  weeklyDay: zOptInt(1, 7),
+  weeklyHour: zOptInt(8, 22),
   homeworkEnabled: zBool,
   homeworkDirectFromGrade: zOptInt(1, 12),
   homeworkDueMinutes: zOptInt(0, 720),
@@ -65,6 +68,8 @@ const centerSchema = z.object({
   homeworkAttempts: zOptInt(0, 5),
   homeworkRemindHours: zOptInt(0, 48),
   homeworkPhotos: zBool,
+  tutorEnabled: zBool,
+  tutorDailyMessages: zOptInt(1, 200),
   dailyReportHour: zOptInt(6, 23),
   smsLogin: zOptStr,
   smsPassword: zOptStr,
@@ -90,7 +95,7 @@ function parseFiscal(f: { fiscalIkpu?: string; fiscalPackageCode?: string; fisca
   return r.data;
 }
 
-const NOTIFY = ["payment", "reminder", "debt", "absence", "trial", "teacherReminder", "dailyReport", "reportCard", "examResult"] as const;
+const NOTIFY = ["payment", "reminder", "debt", "debtDaily", "absence", "trial", "teacherReminder", "dailyReport", "reportCard", "examResult"] as const;
 
 export async function saveCenterAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction("settings", async (ctx) => {
@@ -125,6 +130,11 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
       notify: Object.fromEntries(NOTIFY.map((k) => [k, fd.get(`notify.${k}`) === "on"])) as typeof old.notify,
       paymeFiscal,
       reportCards: { autoSend: f.reportCardsAuto, sendDay: f.reportCardsDay ?? old.reportCards.sendDay },
+      makeupWeekdays: (() => {
+        const days = formList(fd, "makeupDays").map(Number).filter((d) => Number.isInteger(d) && d >= 1 && d <= 7);
+        return days.length ? [...new Set(days)].sort() : old.makeupWeekdays;
+      })(),
+      parentReports: { weekly: f.weeklyReport, weekday: f.weeklyDay ?? old.parentReports.weekday, hour: f.weeklyHour ?? old.parentReports.hour },
       homework: {
         enabled: f.homeworkEnabled,
         directFromGrade: f.homeworkDirectFromGrade ?? old.homework.directFromGrade,
@@ -134,6 +144,7 @@ export async function saveCenterAction(_: ActionState, fd: FormData): Promise<Ac
         remindHoursBefore: f.homeworkRemindHours ?? old.homework.remindHoursBefore,
         photos: f.homeworkPhotos,
       },
+      tutor: { enabled: f.tutorEnabled, dailyMessages: f.tutorDailyMessages ?? old.tutor.dailyMessages },
       dailyReportHour: f.dailyReportHour ?? old.dailyReportHour,
       sms: { ...Object.fromEntries(SMS_EVENTS.map((k) => [k, fd.get(`sms.${k}`) === "on"])), onlyWithoutTelegram: fd.get("sms.onlyWithoutTelegram") === "on" } as typeof old.sms,
     };

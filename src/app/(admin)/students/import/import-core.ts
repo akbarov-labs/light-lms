@@ -6,11 +6,13 @@ import { assertFamilyAccess, canAccessBranch, UserError, type Ctx } from "@/lib/
 import { parseCsv } from "@/lib/csv-parse";
 import { normalizePhone } from "@/lib/phone";
 import { formatMoney, MAX_AMOUNT, parseMoney } from "@/lib/money";
-import { fromISODate, monthRange, shiftMonth, todayISO, type ISODate } from "@/lib/dates";
+import { fromISODate, monthRange, shiftMonth, toISODate, todayISO, type ISODate } from "@/lib/dates";
 import { makeT } from "@/lib/i18n";
 import { centerUsage } from "@/lib/services/plan-usage";
 import { assertBillable } from "@/lib/services/enrollments";
-import { debtSinceColumn, parseImportDate } from "./import-parse";
+import { debtSinceColumn, gradeColumn, parseGrade, parseImportDate } from "./import-parse";
+import { renewalAnchor } from "@/lib/billing/engine";
+import { nextPeriodStart, periodContaining } from "@/lib/billing/periods";
 
 /** Marker of an opening balance on LedgerEntry.period (no billingKey: it is not an engine unit). */
 export const OPENING_PERIOD = "opening";
@@ -83,10 +85,17 @@ export async function importStudents(ctx: Ctx, text: string, dry: boolean): Prom
   let header: string[] | null = null;
   if (rows.length && !/^[-−–]?[\d\s,.'  ]*$/.test(rows[0][5] ?? "0") && !/^\d+$/.test((rows[0][4] ?? "").replace("#", ""))) header = rows.shift() ?? null;
   const sinceCol = debtSinceColumn(header);
-  const groups = await db.group.findMany({ where: { centerId: ctx.centerId }, select: { id: true, code: true, branchId: true } });
+  const gradeCol = gradeColumn(header);
+  const groups = await db.group.findMany({ where: { centerId: ctx.centerId }, select: { id: true, code: true, branchId: true, startDate: true, course: { select: { renewal: true, renewalDay: true } } } });
   const byCode = new Map(groups.map((g) => [String(g.code), g]));
   const today = todayISO();
   const nextMonth = monthRange(shiftMonth(today.slice(0, 7), 1)).start;
+  // billing starts with the group's next billing month (the 1st, or e.g. the 15th for a course billed from the 15th)
+  const firstBilled = (g: (typeof groups)[number]): ISODate => {
+    if (g.course.renewal === "STUDENT_START") return nextMonth;
+    const anchor = renewalAnchor(g.course, toISODate(g.startDate), today);
+    return nextPeriodStart(periodContaining(today, anchor).start, anchor);
+  };
   const errors: string[] = [];
   const warnings: string[] = [];
   const existingRows: string[] = [];
@@ -99,6 +108,7 @@ export async function importStudents(ctx: Ctx, text: string, dry: boolean): Prom
     const n = i + 1;
     const [lastName, firstName, phoneRaw, parentRaw, codeRaw, balanceRaw] = r;
     const sinceRaw = r[sinceCol] ?? "";
+    const grade = gradeCol >= 0 ? parseGrade(r[gradeCol]) : null;
     if (!lastName || !firstName) {
       errors.push(t("import.row", { n, msg: t("import.noName") }));
       continue;
@@ -180,9 +190,11 @@ export async function importStudents(ctx: Ctx, text: string, dry: boolean): Prom
         const existing = await findExisting(tx, ctx.centerId, identity);
         if (existing) {
           await assertFamilyAccess(ctx, existing.familyId);
+          // a grade fills an empty one; it never overwrites what staff typed
+          if (grade) await tx.student.updateMany({ where: { id: existing.id, schoolGrade: null }, data: { schoolGrade: grade } });
           let enrolled = false;
           if (group && !(await tx.enrollment.findFirst({ where: { studentId: existing.id, groupId: group.id, endDate: null }, select: { id: true } }))) {
-            const en = await tx.enrollment.create({ data: { studentId: existing.id, groupId: group.id, startDate: fromISODate(today), activatedAt: fromISODate(nextMonth), status: "ACTIVE" } });
+            const en = await tx.enrollment.create({ data: { studentId: existing.id, groupId: group.id, startDate: fromISODate(today), activatedAt: fromISODate(firstBilled(group)), status: "ACTIVE" } });
             await billableOrRowError(tx, en.id, t);
             enrolled = true;
           }
@@ -209,9 +221,9 @@ export async function importStudents(ctx: Ctx, text: string, dry: boolean): Prom
           familyId = f.id;
           if (parent) await tx.guardian.create({ data: { familyId, name: parent === phone ? `${firstName} ${lastName}` : `${lastName} (ota-ona)`, phone: parent, isPrimary: true, relation: parent === phone ? "self" : null } });
         }
-        const s = await tx.student.create({ data: { centerId: ctx.centerId, familyId, branchId: group?.branchId ?? ctx.activeBranchId ?? ctx.branchIds?.[0] ?? null, firstName, lastName, phone, source: IMPORT_SOURCE } });
+        const s = await tx.student.create({ data: { centerId: ctx.centerId, familyId, branchId: group?.branchId ?? ctx.activeBranchId ?? ctx.branchIds?.[0] ?? null, firstName, lastName, phone, schoolGrade: grade, source: IMPORT_SOURCE } });
         if (group) {
-          const en = await tx.enrollment.create({ data: { studentId: s.id, groupId: group.id, startDate: fromISODate(today), activatedAt: fromISODate(nextMonth), status: "ACTIVE" } });
+          const en = await tx.enrollment.create({ data: { studentId: s.id, groupId: group.id, startDate: fromISODate(today), activatedAt: fromISODate(firstBilled(group)), status: "ACTIVE" } });
           await billableOrRowError(tx, en.id, t);
         }
         if (balance !== 0) {

@@ -18,7 +18,7 @@ const STORE = "tg-init-data";
 const DAYS = { uz: ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"], ru: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"] };
 
 /** Telegram's documented web events (core.telegram.org/api/web-events), without loading telegram-web-app.js. */
-function postEvent(eventType: string, eventData: object = {}) {
+export function postEvent(eventType: string, eventData: object = {}) {
   const w = window as unknown as { TelegramWebviewProxy?: { postEvent: (t: string, d: string) => void }; external?: { notify?: (s: string) => void } };
   try {
     if (w.TelegramWebviewProxy?.postEvent) w.TelegramWebviewProxy.postEvent(eventType, JSON.stringify(eventData));
@@ -35,7 +35,7 @@ function openLink(url: string) {
   else window.open(url, "_blank", "noopener");
 }
 
-function launchParams(): { initData: string | null; theme: Record<string, string> | null } {
+export function launchParams(): { initData: string | null; theme: Record<string, string> | null } {
   const hash = new URLSearchParams(window.location.hash.slice(1));
   let initData = hash.get("tgWebAppData");
   try {
@@ -53,7 +53,7 @@ function launchParams(): { initData: string | null; theme: Record<string, string
   return { initData, theme };
 }
 
-const THEME_VARS: Record<string, string> = { bg_color: "--tg-bg", text_color: "--tg-text", hint_color: "--tg-hint", link_color: "--tg-link", button_color: "--tg-button", button_text_color: "--tg-button-text", secondary_bg_color: "--tg-secondary-bg" };
+export const THEME_VARS: Record<string, string> = { bg_color: "--tg-bg", text_color: "--tg-text", hint_color: "--tg-hint", link_color: "--tg-link", button_color: "--tg-button", button_text_color: "--tg-button-text", secondary_bg_color: "--tg-secondary-bg" };
 
 export function MiniApp({ labels }: { labels: { uz: MiniLabels; ru: MiniLabels } }) {
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -108,6 +108,8 @@ export function MiniApp({ labels }: { labels: { uz: MiniLabels; ru: MiniLabels }
           </section>
         )}
         {d.adminUrl && <button type="button" className="tg-button tg-button-secondary" onClick={() => openLink(d.adminUrl!)}>{t("tg.adminOpen")}</button>}
+        {/* timed tests open in the same Mini App (the init data is kept in sessionStorage); ?b= keeps a center bot's check */}
+        {d.family && tab === "balance" && <a href={`/tg/quiz${window.location.search}`} className="tg-button tg-button-secondary text-center">{t("tg.quizzes")}</a>}
 
         {d.family && tab === "balance" && (
           <>

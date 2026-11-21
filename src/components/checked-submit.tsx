@@ -19,6 +19,11 @@ export function CheckedCountSubmit({ name, label, confirm, selectAllLabel }: { n
     return () => form?.removeEventListener("change", count);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // after a submit the page re-renders without the sent rows: count what is still ticked
+  useEffect(() => {
+    if (!pending) setN(boxes().filter((b) => b.checked).length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending]);
   return (
     <div ref={ref} className="flex items-center gap-3">
       <button

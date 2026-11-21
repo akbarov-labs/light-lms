@@ -66,15 +66,20 @@ export function groupLabel(input: Pick<BillingInput, "group">): string {
   return `${input.group.name} (#${input.group.code})`;
 }
 
-function anchorDay(input: BillingInput): number {
-  switch (input.course.renewal) {
+/** Day of the month a subscription period starts on (CALENDAR: the course's renewal day, 1 = calendar months). */
+export function renewalAnchor(course: { renewal: BillingInput["course"]["renewal"]; renewalDay?: number }, groupStart: ISODate, enrollmentStart: ISODate): number {
+  switch (course.renewal) {
     case "GROUP_START":
-      return parts(input.group.startDate).d;
+      return parts(groupStart).d;
     case "STUDENT_START":
-      return parts(input.enrollment.activatedAt ?? input.enrollment.startDate).d;
+      return parts(enrollmentStart).d;
     default:
-      return 1;
+      return Math.min(28, Math.max(1, course.renewalDay ?? 1));
   }
+}
+
+function anchorDay(input: BillingInput): number {
+  return renewalAnchor(input.course, input.group.startDate, input.enrollment.activatedAt ?? input.enrollment.startDate);
 }
 
 function lessonsIn(lessons: BillingLesson[], p: Period): BillingLesson[] {

@@ -47,6 +47,7 @@ const enrollSchema = z.object({
 export async function enrollAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction("students.edit", async (ctx) => {
     const f = enrollSchema.parse(formObject(fd));
+    if ((f.priceOverride != null || f.discountPercent || f.discountAmount) && !ctx.can("discounts")) throw new UserError("error.forbidden");
     await assertStudentAccess(ctx, f.studentId);
     await enrollStudent(actor(ctx), f, (branchId) => assertBranch(ctx, branchId));
     done(f.studentId, f.groupId);
@@ -102,7 +103,8 @@ export async function leaveAction(_: ActionState, fd: FormData): Promise<ActionS
 }
 
 export async function termsAction(_: ActionState, fd: FormData): Promise<ActionState> {
-  return runAction("students.edit", async (ctx) => {
+  // discounts and special prices are the owner's call (first pilot): a permission of their own, not students.edit
+  return runAction("discounts", async (ctx) => {
     const f = z
       .object({ enrollmentId: zId, priceOverride: zOptMoney, discountPercent: zOptInt(0, 100), discountAmount: zOptMoney, discountUntil: zOptDate, discountReason: zOptStr, from: zOptDate })
       .parse(formObject(fd));

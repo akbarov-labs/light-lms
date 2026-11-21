@@ -13,6 +13,20 @@ export function debtSinceColumn(header: string[] | null): number {
   return DEBT_SINCE_COLUMN;
 }
 
+/** Column of the optional school grade (1–11), by header name only: decides who the bot talks to. */
+const GRADE_HEADER = /^(grade|sinf|sinfi|класс)$/i;
+
+export function gradeColumn(header: string[] | null): number {
+  return header ? header.findIndex((h) => GRADE_HEADER.test(h.trim())) : -1;
+}
+
+/** "9", "9-sinf", "9 класс" → 9; null when empty or not a grade 1–11. */
+export function parseGrade(raw: string | undefined): number | null {
+  const m = /^\s*(\d{1,2})/.exec(raw ?? "");
+  const n = m ? Number(m[1]) : NaN;
+  return n >= 1 && n <= 11 ? n : null;
+}
+
 /** "dd.MM.yyyy", "d.M.yyyy", "dd/MM/yyyy" or "yyyy-MM-dd" → ISO date; null when not a real date. */
 export function parseImportDate(raw: string): ISODate | null {
   const s = raw.trim();

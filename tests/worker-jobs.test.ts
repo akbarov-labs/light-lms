@@ -6,6 +6,8 @@ import { addDays, fromISODate, monthRange, shiftMonth, todayISO, type ISODate } 
 import { dailyReport, jobProblems, nightly, ownerReport, reminders, teacherReminders } from "@/worker/jobs";
 import { refreshFreezeStatuses } from "@/lib/services/enrollments";
 import { generateLessons } from "@/lib/services/lessons";
+import { weeklyParentReports } from "@/lib/services/weekly-report";
+import { weekdayOf } from "@/lib/dates";
 
 const today = todayISO();
 const SLUG = "jobs-test";
@@ -79,6 +81,8 @@ async function wipeCenter(centerId: string) {
   await db.ledgerEntry.deleteMany({ where: { centerId } });
   await db.enrollmentFreeze.deleteMany({ where: { enrollment } });
   await db.attendance.deleteMany({ where: { enrollment } });
+  await db.homeworkSubmission.deleteMany({ where: { homework: { centerId } } });
+  await db.homework.deleteMany({ where: { centerId } });
   await db.enrollment.deleteMany({ where: enrollment });
   await db.lesson.deleteMany({ where: { group: { centerId } } });
   await db.group.deleteMany({ where: { centerId } });
@@ -235,5 +239,74 @@ describe("owner report scope (F2)", () => {
     const [, plus, minus] = /: \+(\d+) · [^\n]*: −(\d+)\n/.exec((await ownerReport(owner.id, today))!)!;
     expect(Number(plus)).toBeGreaterThanOrEqual(2);
     expect(Number(minus)).toBe(2);
+  });
+});
+
+describe("daily debt reminders (first pilot)", () => {
+  it("off: only days 3, 7, 14, 30; on: every day from the due day, Telegram only between escalation days", async () => {
+    const day = addDays(today, 40);
+    const fam = await db.family.create({ data: { centerId, name: "Daily debtor" } });
+    await db.guardian.create({ data: { familyId: fam.id, name: "Daily", phone: "998902005", telegramChatId: "2005" } });
+    await db.ledgerEntry.create({ data: { centerId, familyId: fam.id, type: "CHARGE", amount: -70_000, method: "SYSTEM", description: "month", date: fromISODate(addDays(day, -5)) } });
+    const notes = (d: string, channel: "TELEGRAM" | "SMS" = "TELEGRAM") => db.notification.count({ where: { centerId, channel, dedupeKey: { startsWith: `debt-overdue:${fam.id}:${d}` } } });
+
+    await reminders(day);
+    expect(await notes(day)).toBe(0);
+
+    const c = await db.center.findUniqueOrThrow({ where: { id: centerId } });
+    const s = (c.settings ?? {}) as Record<string, unknown>;
+    await db.center.update({ where: { id: centerId }, data: { settings: { ...s, notify: { ...((s.notify as object) ?? {}), debtDaily: true } } } });
+    try {
+      await reminders(day);
+      expect(await notes(day)).toBe(1);
+      expect(await notes(day, "SMS")).toBe(0);
+      // the due day itself counts too
+      const due = addDays(day, -5);
+      await reminders(due);
+      expect(await notes(due)).toBe(1);
+    } finally {
+      await db.center.update({ where: { id: centerId }, data: { settings: c.settings ?? {} } });
+    }
+  });
+});
+
+describe("weekly report to families", () => {
+  it("off by default; on: the week's lessons and homework go to the family once, on the center's day", async () => {
+    const day = addDays(today, 60);
+    const g = await group("Weekly group");
+    const s = await enroll(g, "Weekly", "2006");
+    const lesson = (d: ISODate) => db.lesson.create({ data: { groupId: g, date: fromISODate(d), startTime: "14:00", endTime: "15:30", teacherId, status: "HELD" } });
+    const l1 = await lesson(addDays(day, -5));
+    const l2 = await lesson(addDays(day, -3));
+    const old = await lesson(addDays(day, -9));
+    for (const [l, status] of [[l1, "PRESENT"], [l2, "ABSENT"], [old, "ABSENT"]] as const) {
+      await db.attendance.create({ data: { lessonId: l.id, studentId: s.studentId, enrollmentId: s.enrollmentId, status } });
+    }
+    const hw = await db.homework.create({ data: { centerId, groupId: g, lessonId: l1.id, answers: ["A", "12", "C"] } });
+    await db.homeworkSubmission.create({ data: { homeworkId: hw.id, studentId: s.studentId, answers: ["A", "12", "B"], firstAnswers: ["A", "11", "B"], checks: 2 } });
+    await db.homework.create({ data: { centerId, groupId: g, lessonId: l2.id, answers: ["B"] } });
+
+    const notes = () => db.notification.findMany({ where: { centerId, dedupeKey: { startsWith: `weekly:${s.studentId}:` } }, select: { text: true } });
+    expect((await weeklyParentReports(day)).centers).toBe(0);
+    expect(await notes()).toEqual([]);
+
+    const c = await db.center.findUniqueOrThrow({ where: { id: centerId } });
+    const settings = (c.settings ?? {}) as Record<string, unknown>;
+    await db.center.update({ where: { id: centerId }, data: { settings: { ...settings, parentReports: { weekly: true, weekday: weekdayOf(day), hour: 18 } } } });
+    try {
+      expect((await weeklyParentReports(day, 17)).centers).toBe(0);
+      const r = await weeklyParentReports(day, 18);
+      expect(r).toMatchObject({ centers: 1, failed: 0 });
+      const [n] = await notes();
+      expect(n.text).toContain("Weekly Test");
+      // 2 lessons this week (the one 9 days ago is last week), came to 1
+      expect(n.text).toContain("2 tadan 1 tasiga keldi");
+      // first check counts: 1 of 3; the sheet nobody answered says so
+      expect(n.text).toContain("1/3");
+      expect(n.text).toContain("topshirilmadi");
+      expect((await weeklyParentReports(day, 18)).sent).toBe(0);
+    } finally {
+      await db.center.update({ where: { id: centerId }, data: { settings: c.settings ?? {} } });
+    }
   });
 });

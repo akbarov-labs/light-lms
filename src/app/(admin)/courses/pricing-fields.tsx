@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 
-type Labels = Record<"pricingType" | "SUBSCRIPTION" | "PACKAGE" | "renewal" | "CALENDAR" | "GROUP_START" | "STUDENT_START" | "pricePerMonth" | "pricePackage" | "packageLessons" | "packageLessonsHint" | "installments" | "priceFrom" | "priceFromHint", string>;
+type Labels = Record<"pricingType" | "SUBSCRIPTION" | "PACKAGE" | "renewal" | "CALENDAR" | "GROUP_START" | "STUDENT_START" | "renewalDay" | "renewalDayHint" | "pricePerMonth" | "pricePackage" | "packageLessons" | "packageLessonsHint" | "installments" | "priceFrom" | "priceFromHint", string>;
 
 const input =
   "block h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-900 transition-[border-color,box-shadow] hover:border-zinc-300 focus:border-accent focus:outline-hidden focus:ring-[3px] focus:ring-accent/15 sm:text-sm";
 const label = "mb-1.5 block text-[13px] font-medium text-zinc-700";
 
-export function PricingFields({ l, initial }: { l: Labels; initial?: { pricingType: string; price: number; renewal: string; packageLessons: number | null; installments: number; isEdit: boolean } }) {
+export function PricingFields({ l, initial }: { l: Labels; initial?: { pricingType: string; price: number; renewal: string; renewalDay: number; packageLessons: number | null; installments: number; isEdit: boolean } }) {
   const [type, setType] = useState(initial?.pricingType ?? "SUBSCRIPTION");
   const [price, setPrice] = useState(String(initial?.price ?? ""));
+  const [renewal, setRenewal] = useState(initial?.renewal ?? "CALENDAR");
   const priceChanged = initial?.isEdit && price.replace(/\D/g, "") !== String(initial.price);
   return (
     <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
@@ -33,14 +34,23 @@ export function PricingFields({ l, initial }: { l: Labels; initial?: { pricingTy
         </label>
       )}
       {type === "SUBSCRIPTION" ? (
-        <label className="block sm:col-span-2">
-          <span className={label}>{l.renewal}</span>
-          <select name="renewal" className={input} defaultValue={initial?.renewal ?? "CALENDAR"}>
-            <option value="CALENDAR">{l.CALENDAR}</option>
-            <option value="GROUP_START">{l.GROUP_START}</option>
-            <option value="STUDENT_START">{l.STUDENT_START}</option>
-          </select>
-        </label>
+        <>
+          <label className={renewal === "CALENDAR" ? "block" : "block sm:col-span-2"}>
+            <span className={label}>{l.renewal}</span>
+            <select name="renewal" className={input} value={renewal} onChange={(e) => setRenewal(e.target.value)}>
+              <option value="CALENDAR">{l.CALENDAR}</option>
+              <option value="GROUP_START">{l.GROUP_START}</option>
+              <option value="STUDENT_START">{l.STUDENT_START}</option>
+            </select>
+          </label>
+          {renewal === "CALENDAR" && (
+            <label className="block">
+              <span className={label}>{l.renewalDay}</span>
+              <input name="renewalDay" type="number" min={1} max={28} className={input} defaultValue={initial?.renewalDay ?? 1} />
+              <span className="mt-1.5 block text-xs text-zinc-500">{l.renewalDayHint}</span>
+            </label>
+          )}
+        </>
       ) : (
         <>
           <label className="block">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { debtSinceColumn, parseImportDate } from "./import-parse";
+import { debtSinceColumn, parseImportDate, gradeColumn, parseGrade } from "./import-parse";
 
 describe("import: debt-since date", () => {
   it("reads dd.MM.yyyy, d.M.yyyy, dd/MM/yyyy and yyyy-MM-dd", () => {
@@ -19,5 +19,22 @@ describe("import: debt-since date", () => {
     expect(debtSinceColumn(["Familiya", "Ism", "Telefon", "Ota-ona", "Guruh", "Balans", "Izoh", "qarz_sanasi"])).toBe(7);
     expect(debtSinceColumn(["a", "b", "c", "d", "e", "f", "debt_since"])).toBe(6);
     expect(debtSinceColumn(["a", "b", "c", "d", "e", "f", "g", "Дата долга"])).toBe(7);
+  });
+});
+
+describe("grade column", () => {
+  it("is found by its header only", () => {
+    expect(gradeColumn(["Familiya", "Ism", "Telefon", "Ota-ona", "Guruh", "Balans", "Sinf"])).toBe(6);
+    expect(gradeColumn(["Фамилия", "Имя", "Класс"])).toBe(2);
+    expect(gradeColumn(null)).toBe(-1);
+    expect(gradeColumn(["a", "b"])).toBe(-1);
+  });
+  it("reads 1–11, with or without a word after", () => {
+    expect(parseGrade("9")).toBe(9);
+    expect(parseGrade(" 4-sinf")).toBe(4);
+    expect(parseGrade("11 класс")).toBe(11);
+    expect(parseGrade("12")).toBeNull();
+    expect(parseGrade("")).toBeNull();
+    expect(parseGrade(undefined)).toBeNull();
   });
 });

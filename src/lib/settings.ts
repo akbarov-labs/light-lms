@@ -30,6 +30,8 @@ export const centerSettingsSchema = z.object({
       payment: z.boolean().default(true),
       reminder: z.boolean().default(true),
       debt: z.boolean().default(true),
+      /** debt reminders every day from the due date (Telegram); SMS still only on days 3, 7, 14, 30 */
+      debtDaily: z.boolean().default(false),
       absence: z.boolean().default(true),
       trial: z.boolean().default(true),
       teacherReminder: z.boolean().default(true),
@@ -97,6 +99,35 @@ export const centerSettingsSchema = z.object({
     })
     .prefault({})
     .catch(() => homeworkDefaults()),
+  /**
+   * Weekly report to families (first pilot: "hafta oxiri"): the week's attendance and homework results per
+   * student. Off by default — turning it on is the owner's permission for parents to see results.
+   */
+  parentReports: z
+    .object({
+      weekly: z.boolean().default(false),
+      /** ISO weekday it goes out (7 = Sunday) */
+      weekday: z.number().int().min(1).max(7).default(7),
+      /** Tashkent hour */
+      hour: z.number().int().min(8).max(22).default(18),
+    })
+    .prefault({})
+    .catch(() => ({ weekly: false, weekday: 7, hour: 18 })),
+  /** ISO weekdays make-up lessons may be booked on (first pilot: Sunday only) */
+  makeupWeekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7).default([1, 2, 3, 4, 5, 6, 7]).catch([1, 2, 3, 4, 5, 6, 7]),
+  /**
+   * Math tutor in the bot (src/lib/tutor): linked students and parents ask about any math topic and get hints
+   * step by step, never homework or test answers. Off by default: an external paid API (Anthropic, DEPLOY.md
+   * §0), metered against agent.monthlyTokenCap.
+   */
+  tutor: z
+    .object({
+      enabled: z.boolean().default(false),
+      /** messages one chat may send the tutor per day (Tashkent date) */
+      dailyMessages: z.number().int().min(1).max(200).default(30),
+    })
+    .prefault({})
+    .catch(() => ({ enabled: false, dailyMessages: 30 })),
   /** hour (Tashkent) of the owner's daily report in Telegram */
   dailyReportHour: z.number().int().min(6).max(23).default(21).catch(21),
 });

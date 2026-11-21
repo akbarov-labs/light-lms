@@ -1,5 +1,6 @@
 // Bot texts (uz / ru). Button labels are matched in both languages.
 import { HOMEWORK_BTN } from "@/lib/homework/texts";
+import { tutorRu, tutorUz } from "@/lib/i18n/extra-tutor";
 
 export const B = {
   welcome: {
@@ -32,6 +33,7 @@ export const B = {
   weekBtn: { uz: "📅 Hafta jadvali", ru: "📅 Расписание недели" },
   reportBtn: { uz: "📊 Hisobot", ru: "📊 Отчёт" },
   homeworkBtn: HOMEWORK_BTN,
+  tutorBtn: { uz: tutorUz["tutor.btn"], ru: tutorRu["tutor.btn"] },
   hwNone: { uz: "Hozir ochiq uy vazifasi yo'q. Yangi vazifa berilganda xabar keladi.", ru: "Сейчас открытых домашних заданий нет. Когда зададут новое, придёт сообщение." },
   hwListTitle: { uz: "Ochiq uy vazifalari", ru: "Открытые домашние задания" },
   hwAnswered: { uz: "Javob berilgan: {a}/{n}", ru: "Отвечено: {a}/{n}" },
@@ -162,7 +164,7 @@ export type BotLocale = "uz" | "ru";
 
 /** Which button was pressed, whatever the language. */
 export function buttonKey(text: string): keyof typeof B | null {
-  const keys = ["balanceBtn", "scheduleBtn", "attendanceBtn", "paymentsBtn", "centerBtn", "todayBtn", "salaryBtn", "weekBtn", "reportBtn", "homeworkBtn"] as const;
+  const keys = ["balanceBtn", "scheduleBtn", "attendanceBtn", "paymentsBtn", "centerBtn", "todayBtn", "salaryBtn", "weekBtn", "reportBtn", "homeworkBtn", "tutorBtn"] as const;
   for (const k of keys) if (B[k].uz === text || B[k].ru === text) return k;
   return null;
 }

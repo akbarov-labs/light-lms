@@ -9,6 +9,9 @@ import { v2Ru } from "./extra-v2";
 import { botsRu } from "./extra-bots";
 import { homeworkRu } from "./extra-homework";
 import { questionsRu } from "./extra-questions";
+import { pilotRu } from "./extra-pilot";
+import { tutorRu } from "./extra-tutor";
+import { quizzesRu } from "./extra-quizzes";
 
 // Russian. Types guarantee the same keys as uz.ts.
 export const ru: Record<DictKey, string> = {
@@ -21,6 +24,9 @@ export const ru: Record<DictKey, string> = {
   ...botsRu,
   ...homeworkRu,
   ...questionsRu,
+  ...pilotRu,
+  ...tutorRu,
+  ...quizzesRu,
   "app.name": BRAND.name,
   "common.save": "Сохранить",
   "common.cancel": "Отмена",
@@ -222,10 +228,11 @@ export const ru: Record<DictKey, string> = {
   "method.PAYME": "Payme",
   "method.CLICK": "Click",
   "method.UZUM": "Uzum",
+  "method.PAYNET": "Paynet",
   "method.SYSTEM": "Система",
   "pricing.SUBSCRIPTION": "Ежемесячная подписка",
   "pricing.PACKAGE": "Пакет",
-  "renewal.CALENDAR": "Каждое 1-е число",
+  "renewal.CALENDAR": "Каждый месяц в один день (1-е или выбранное число)",
   "renewal.GROUP_START": "В день старта группы",
   "renewal.STUDENT_START": "В день начала ученика",
   "salary.PERCENT_EARNED": "% от начисленной оплаты",
@@ -614,8 +621,8 @@ export const ru: Record<DictKey, string> = {
   "t.lastPayslip": "Последний расчётный лист",
   "t.notTeacher": "Вы не преподаватель",
   "import.title": "Импорт из Excel / CSV",
-  "import.hint": "Сохраните Excel как \"CSV UTF-8\". Порядок столбцов: Фамилия, Имя, Телефон, Телефон родителя, Код группы (#), Баланс (долг с минусом, например −300000). Первая строка может быть заголовком.",
-  "import.billingHint": "Ученик добавляется в группу активным, оплата начинается с 1-го числа следующего месяца. Баланс записывается как «начальный остаток».",
+  "import.hint": "Сохраните Excel как \"CSV UTF-8\". Порядок столбцов: Фамилия, Имя, Телефон, Телефон родителя, Код группы (#), Баланс (долг с минусом, например −300000). Первая строка может быть заголовком. Если в заголовке есть столбец \"Класс\" (например 9), бот общается с 4–5 классами через родителей, с 9–11 — с самим учеником.",
+  "import.billingHint": "Ученик добавляется в группу активным, оплата начинается со следующего платёжного месяца курса группы (обычно 1-е число, для курса с 15-го — 15-е). Баланс записывается как «начальный остаток».",
   "import.file": "CSV-файл",
   "import.dryRun": "Только проверить (ничего не записывать)",
   "import.run": "Импортировать",

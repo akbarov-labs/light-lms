@@ -30,6 +30,7 @@ const METHOD_LABEL: Record<PaymentMethod, string> = {
   PAYME: "Payme",
   CLICK: "Click",
   UZUM: "Uzum",
+  PAYNET: "Paynet",
   SYSTEM: "tizim",
 };
 

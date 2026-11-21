@@ -10,6 +10,8 @@ export interface BillingCourse {
   pricingType: PricingType;
   price: number;
   renewal: Renewal;
+  /** CALENDAR: the day each billing month starts (1..28); missing = 1. */
+  renewalDay?: number;
   /** Package size; null = the whole course (all lessons of the group). */
   packageLessons: number | null;
   installments: number;

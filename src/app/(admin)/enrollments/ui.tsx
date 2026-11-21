@@ -100,7 +100,7 @@ export function EnrollmentActions({ ctx, e, groups }: { ctx: Ctx; e: EnrollmentL
           </ModalForm>
         </Modal>
       )}
-      <ActionMenu items={items} label={t("shell.more")} />
+      <ActionMenu items={items.filter((i) => i.key !== "terms" || ctx.can("discounts"))} label={t("shell.more")} />
     </div>
   );
 }
