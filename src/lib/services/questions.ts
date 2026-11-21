@@ -14,10 +14,15 @@ export interface ImportItem {
   solve2: string | null;
 }
 
+/** Questions written per statement: one insert per batch keeps a whole book far from any timeout. */
+const SAVE_BATCH = 200;
+
 /**
  * Saves a batch read from the book: topics (with the chapters above them) and new questions as drafts.
  * A question already in the bank (same topic and number) is left as it is, so a re-run never undoes a
- * person's review.
+ * person's review. Topics are written first in one short transaction; questions follow in batches, each
+ * one insert that skips what is there, so a book of thousands of questions never hits the 5 s
+ * transaction limit on a slower database, and a stopped run is finished by running it again.
  */
 export async function saveImported(centerId: string, sections: BookSection[], items: ImportItem[]): Promise<{ created: number; skipped: number }> {
   const titles = new Map(sections.map((s) => [s.code, s.title]));
@@ -25,53 +30,52 @@ export async function saveImported(centerId: string, sections: BookSection[], it
   const codes = new Set<string>();
   for (const s of sections) codeChain(s.code).forEach((c) => codes.add(c));
   for (const i of items) codeChain(i.q.section).forEach((c) => codes.add(c));
-  return db.$transaction(async (tx) => {
-    const topicId = new Map<string, string>();
-    for (const code of [...codes].sort(compareCodes)) {
-      const title = titles.get(code);
-      const t = await tx.questionTopic.upsert({
-        where: { centerId_code: { centerId, code } },
-        // a title read later replaces the code standing in for it
-        update: title ? { title } : {},
-        create: { centerId, code, title: title ?? code, theory: theories.get(code) ?? null },
-      });
-      // the book's explanation fills an empty one; it never overwrites what the owner edited
-      const theory = theories.get(code);
-      if (theory && !t.theory) await tx.questionTopic.update({ where: { id: t.id }, data: { theory } });
-      topicId.set(code, t.id);
-    }
-    let created = 0;
-    let skipped = 0;
-    for (const { q, solve2 } of items) {
-      const tid = topicId.get(q.section)!;
-      const exists = await tx.question.findUnique({ where: { topicId_number: { topicId: tid, number: q.number } }, select: { id: true } });
-      if (exists) {
-        skipped++;
-        continue;
+  const topicId = await db.$transaction(
+    async (tx) => {
+      const ids = new Map<string, string>();
+      for (const code of [...codes].sort(compareCodes)) {
+        const title = titles.get(code);
+        const t = await tx.questionTopic.upsert({
+          where: { centerId_code: { centerId, code } },
+          // a title read later replaces the code standing in for it
+          update: title ? { title } : {},
+          create: { centerId, code, title: title ?? code, theory: theories.get(code) ?? null },
+        });
+        // the book's explanation fills an empty one; it never overwrites what the owner edited
+        const theory = theories.get(code);
+        if (theory && !t.theory) await tx.questionTopic.update({ where: { id: t.id }, data: { theory } });
+        ids.set(code, t.id);
       }
+      return ids;
+    },
+    // a whole book has a hundred or so topics: well inside this, even at several ms a query
+    { timeout: 60_000 },
+  );
+  let created = 0;
+  for (let i = 0; i < items.length; i += SAVE_BATCH) {
+    const data = items.slice(i, i + SAVE_BATCH).map(({ q, solve2 }) => {
       const key = decideKey(q.stated, [q.solve, solve2], q.figure);
-      await tx.question.create({
-        data: {
-          centerId,
-          topicId: tid,
-          number: q.number,
-          text: q.text,
-          options: q.options,
-          answer: key.answer,
-          keyCheck: key.keyCheck,
-          statedAnswer: q.stated,
-          solves: [q.solve ?? "", solve2 ?? ""],
-          solution: q.solution,
-          needsFigure: q.figure,
-          source: "BOOK",
-          sourceRef: q.ref,
-          page: q.page,
-        },
-      });
-      created++;
-    }
-    return { created, skipped };
-  });
+      return {
+        centerId,
+        topicId: topicId.get(q.section)!,
+        number: q.number,
+        text: q.text,
+        options: q.options,
+        answer: key.answer,
+        keyCheck: key.keyCheck,
+        statedAnswer: q.stated,
+        solves: [q.solve ?? "", solve2 ?? ""],
+        solution: q.solution,
+        needsFigure: q.figure,
+        source: "BOOK" as const,
+        sourceRef: q.ref,
+        page: q.page,
+      };
+    });
+    // (topicId, number) is unique: a question already in the bank is skipped, never overwritten
+    created += (await db.question.createMany({ data, skipDuplicates: true })).count;
+  }
+  return { created, skipped: items.length - created };
 }
 
 // ------------------------------------------------------------------ review
