@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { UserError } from "@/lib/user-error";
 import { importBook } from "@/lib/questions/import";
 import type { CreateMessage } from "@/lib/questions/extract";
-import { approveSure, bankOverview, editQuestion, setQuestionStatus, topicQuestions } from "@/lib/services/questions";
+import { approveSure, bankOverview, editQuestion, saveImported, setQuestionStatus, topicQuestions, type ImportItem } from "@/lib/services/questions";
 
 let centerId = "";
 let otherCenterId = "";
@@ -180,5 +180,39 @@ describe("the owner's review", () => {
     expect(await bankOverview(otherCenterId)).toEqual([]);
     await expect(setQuestionStatus(other, await qid("1.1", 4), "REJECTED")).rejects.toThrow(UserError);
     await expect(approveSure(other, top.id)).rejects.toThrow(UserError);
+  });
+});
+
+describe("a whole book in one load", () => {
+  // 2,742 questions in one transaction ran past the 5 s limit on production (about 6 ms a query there):
+  // topics go first, questions in batches, so the size of a book no longer matters
+  const topics = Array.from({ length: 12 }, (_, i) => ({ code: `7.${i + 1}`, title: `Mavzu ${i + 1}`, theory: `${i + 1}-qoida: $a^${i + 1}$` }));
+  const items: ImportItem[] = topics.flatMap((t) =>
+    Array.from({ length: 110 }, (_, n) => ({
+      q: { section: t.code, number: n + 1, ref: null, text: `${t.code} · ${n + 1}-savol`, options: ["1", "2", "3", "4"], stated: "B", solution: null, figure: false, page: 1, solve: "B" },
+      solve2: "B",
+    })),
+  );
+  let bigCenterId = "";
+
+  beforeAll(async () => {
+    bigCenterId = (await db.center.create({ data: { name: "Katta kitob", slug: "questions-big" } })).id;
+  });
+
+  it("saves every question and every explanation, then a run again changes nothing a person touched", async () => {
+    const first = await saveImported(bigCenterId, [{ code: "7", title: "Bob" }, ...topics], items);
+    expect(first).toEqual({ created: 1320, skipped: 0 });
+    expect(await db.question.count({ where: { centerId: bigCenterId, keyCheck: "STATED" } })).toBe(1320);
+    expect(await db.questionTopic.count({ where: { centerId: bigCenterId, theory: { not: null } } })).toBe(12);
+
+    const one = await db.question.findFirstOrThrow({ where: { centerId: bigCenterId, number: 5 }, include: { topic: true } });
+    await db.question.update({ where: { id: one.id }, data: { text: "egasi tuzatdi" } });
+    await db.questionTopic.update({ where: { id: one.topicId }, data: { theory: "egasining tushuntirishi" } });
+
+    const again = await saveImported(bigCenterId, topics, items);
+    expect(again).toEqual({ created: 0, skipped: 1320 });
+    expect((await db.question.findUniqueOrThrow({ where: { id: one.id } })).text).toBe("egasi tuzatdi");
+    expect((await db.questionTopic.findUniqueOrThrow({ where: { id: one.topicId } })).theory).toBe("egasining tushuntirishi");
+    expect(await db.question.count({ where: { centerId: bigCenterId } })).toBe(1320);
   });
 });
