@@ -91,6 +91,23 @@ async function chatFor(chatId = newChatId()) {
 const turn = (chatRowId: string, t: string, create: CreateMessage) =>
   handleAgentMessage({ chatRowId, text: t, personName: "Sarvar Aliyev", locale: "uz", create, fromPerson: t !== MARK.start });
 
+describe("lead agent: the conversation log", () => {
+  it("keeps what the person wrote and everything they saw, staff replies too; /start itself is not the person speaking", async () => {
+    const chat = await chatFor();
+    const m = model(msg([text("Assalomu alaykum! Qanday yordam beray?")], "end_turn"), msg([text("Oyiga 650 000 so'm.")], "end_turn"));
+    await turn(chat.id, MARK.start, m.create);
+    await turn(chat.id, "Narxi qancha?", m.create);
+    await sendStaffMessage({ centerId, chatRowId: chat.id, userId: ownerId, staffName: "Ega", text: "Chegirma haqida o'zim yozaman." });
+    const log = await db.botMessage.findMany({ where: { centerId, chatId: chat.chatId, kind: "AGENT" }, orderBy: { createdAt: "asc" } });
+    expect(log.map((x) => [x.from, x.text, x.name])).toEqual([
+      ["BOT", "Assalomu alaykum! Qanday yordam beray?", null],
+      ["PERSON", "Narxi qancha?", "Sarvar Aliyev"],
+      ["BOT", "Oyiga 650 000 so'm.", null],
+      ["STAFF", "Chegirma haqida o'zim yozaman.", "Ega"],
+    ]);
+  });
+});
+
 describe("lead agent: the whole path to a trial lesson", () => {
   it("lists real groups, asks for the phone with a button, books the trial, tells the teacher — and never shows the phone to the model", async () => {
     const chat = await chatFor();

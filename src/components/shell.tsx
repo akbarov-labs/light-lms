@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Award, Banknote, CalendarClock, BarChart3, BookOpen, Building2, CircleAlert, ClipboardCheck, LayoutDashboard, Library, ListChecks, Receipt, ScrollText, Settings, Smartphone, Sun, UserPlus, Users, UsersRound, Wallet } from "lucide-react";
+import { Award, Banknote, CalendarClock, BarChart3, MessagesSquare, BookOpen, Building2, CircleAlert, ClipboardCheck, LayoutDashboard, Library, ListChecks, Receipt, ScrollText, Settings, Smartphone, Sun, UserPlus, Users, UsersRound, Wallet } from "lucide-react";
 import type { Ctx } from "@/lib/ctx";
 import type { DictKey } from "@/lib/i18n";
 import type { Perm } from "@/lib/perms";
@@ -21,6 +21,8 @@ interface NavItem {
   teacherOnly?: boolean;
   unscopedOnly?: boolean;
   platformOnly?: boolean;
+  /** owners only: the AI chats hold children's and parents' messages */
+  ownerOnly?: boolean;
 }
 
 const NAV: { group?: DictKey; items: NavItem[] }[] = [
@@ -35,6 +37,7 @@ const NAV: { group?: DictKey; items: NavItem[] }[] = [
     items: [
       { href: "/leads", key: "nav.leads", icon: UserPlus, any: ["leads"] },
       { href: "/students", key: "nav.students", icon: Users },
+      { href: "/conversations", key: "nav.conversations", icon: MessagesSquare, ownerOnly: true },
     ],
   },
   {
@@ -73,6 +76,7 @@ const NAV: { group?: DictKey; items: NavItem[] }[] = [
 function allowed(ctx: Ctx, n: NavItem): boolean {
   if (n.platformOnly) return ctx.isPlatformAdmin;
   if (n.teacherOnly) return ctx.isTeacher;
+  if (n.ownerOnly) return ctx.role === "OWNER";
   if (ctx.role === "TEACHER") return false;
   if (n.unscopedOnly && ctx.branchIds) return false;
   if (n.any) return n.any.some((p) => ctx.can(p));

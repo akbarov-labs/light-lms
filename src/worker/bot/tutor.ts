@@ -49,11 +49,12 @@ export async function tutorOnText(ctx: Context, text: string, l: Locale): Promis
     return true;
   }
   const api = ctx.api;
+  const personName = [ctx.from?.first_name, ctx.from?.last_name].filter(Boolean).join(" ") || undefined;
   // messages that arrive while a turn runs are merged into the next one (queueTurn)
   const p = queueTurn(`tutor:${chatId}`, text, async (merged) => {
     try {
       await api.sendChatAction(chatId, "typing").catch(() => {});
-      const r = await handleTutorMessage({ chatId, text: merged, locale: l });
+      const r = await handleTutorMessage({ chatId, text: merged, locale: l, personName });
       console.log(`[tutor] chat=${chatId} ${r.outcome}${r.leakedQ ? ` q=${r.leakedQ}` : ""}`);
       await api.sendMessage(chatId, r.html, html);
     } catch (e) {

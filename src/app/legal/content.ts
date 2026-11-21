@@ -96,6 +96,7 @@ const uz: Docs = {
           "Markaz kiritgan ma'lumotlar: o'quvchilar va ota-onalarning ismi, telefoni, tug'ilgan sanasi (ixtiyoriy), guruhlar, davomat, baholar, to'lovlar va qarzlar.",
           "Texnik ma'lumotlar: IP-manzil (kirish urinishlarini cheklash uchun), sessiya cookie fayli, amallar jurnali (audit).",
           "Telegram bot ishlatilsa — Telegram chat identifikatori va ulangan telefon raqami.",
+          "Markaz AI yordamchi yoki matematika yordamchisini yoqsa — bot bilan yozishmalar (odam yozgan va bot javob bergan matn). Ularni faqat markaz rahbari va Ijrochining texnik yordam jamoasi bot javoblarini tekshirish uchun ko'radi; 90 kundan keyin avtomatik o'chiriladi.",
         ],
       },
       {
@@ -237,6 +238,7 @@ const ru: Docs = {
           "Данные, вносимые центром: имена и телефоны учеников и родителей, дата рождения (по желанию), группы, посещаемость, оценки, оплаты и долги.",
           "Технические данные: IP-адрес (для ограничения попыток входа), cookie сессии, журнал действий (аудит).",
           "При использовании Telegram-бота — идентификатор чата Telegram и привязанный номер телефона.",
+          "Если центр включает AI-помощника или помощника по математике — переписка с ботом (текст, который написал человек, и ответы бота). Её видят только руководитель центра и служба поддержки Исполнителя, чтобы проверять ответы бота; через 90 дней она удаляется автоматически.",
         ],
       },
       {

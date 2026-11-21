@@ -207,6 +207,7 @@ model Center {
   agentChats     AgentChat[]
   agentUsage     AgentUsage[]
   tutorChats     TutorChat[]
+  botMessages    BotMessage[]
   bot            CenterBot?
   homeworks      Homework[]
   questionTopics QuestionTopic[]
@@ -808,6 +809,37 @@ model AgentUsage {
   calls            Int    @default(0)
 
   @@id([centerId, month])
+}
+
+enum BotChatKind {
+  AGENT
+  TUTOR
+}
+
+enum BotMessageFrom {
+  PERSON
+  BOT
+  STAFF
+}
+
+/// Every message of a center's AI chats (the lead agent and the tutor), as the person saw it, for the owner
+/// and the platform team to read on /conversations. Separate from AgentChat/TutorChat.messages, which are
+/// the model's working history and get trimmed. Deleted after 90 days by the nightly job.
+model BotMessage {
+  id        String         @id @default(cuid())
+  centerId  String
+  center    Center         @relation(fields: [centerId], references: [id])
+  chatId    String
+  kind      BotChatKind
+  from      BotMessageFrom
+  /// the person's Telegram name, or the staff member's name
+  name      String?
+  text      String
+  createdAt DateTime       @default(now())
+
+  @@index([centerId, createdAt])
+  @@index([centerId, chatId, kind, createdAt])
+  @@index([createdAt])
 }
 
 /// The math tutor (settings.tutor): a linked student's or parent's chat asking about math. Only the last

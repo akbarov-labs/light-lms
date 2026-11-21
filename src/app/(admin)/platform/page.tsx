@@ -137,6 +137,8 @@ export default async function PlatformPage({ searchParams }: { searchParams: Pro
                       <div className="font-medium text-zinc-900">{c.name}</div>
                       <div className="text-xs text-zinc-500">
                         <Link href={`/f/${c.slug}`} className="underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-900">/f/{c.slug}</Link>
+                        {" · "}
+                        <Link href={`/conversations?center=${c.id}`} className="underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-900">{t("conv.platformLink")}</Link>
                         {!o.completedAt && ` · ${t("platform.setup", { done: doneCount(o), total: SETUP_STEPS.length })}`}
                       </div>
                     </Td>

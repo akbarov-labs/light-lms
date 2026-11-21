@@ -24,6 +24,7 @@ import { AgentToolError, runTurn, type CreateMessage, type TurnUsage } from "./l
 import { buildStateBlock, buildSystemPrompt, conversationScript } from "./prompt";
 import { cancelDoneMarker, cancelFailedMarker, cancelKeptMarker, staffMarker } from "./markers";
 import { AGENT_TOOLS, cancelConfirmedTrial, chatState, ensureLead, executeTool, trialOfButton, type AgentCtx, type Outbound } from "./tools";
+import { logBotMessages, plainText, type BotLogEntry } from "@/lib/services/bot-log";
 
 export { MARK } from "./markers";
 
@@ -172,7 +173,29 @@ export interface HandleInput {
   now?: Date;
 }
 
+/** What the person saw of one outbound item, as plain text for the conversation log. */
+function seenText(o: Outbound): string {
+  if (o.kind === "text") return o.text;
+  if (o.kind === "card") return `${plainText(o.html)}\n[${o.button}]`;
+  if (o.kind === "confirm") return `${plainText(o.html)}\n[${o.yes}] [${o.no}]`;
+  return `📍 ${o.title}${o.address ? `, ${o.address}` : ""}`;
+}
+
 export async function handleAgentMessage(h: HandleInput): Promise<AgentReply> {
+  const r = await agentTurn(h);
+  // the conversation log for /conversations: what the person wrote (not system events) and what they saw
+  const chat = await db.agentChat.findUnique({ where: { id: h.chatRowId }, select: { centerId: true, chatId: true } });
+  if (chat) {
+    const entries: BotLogEntry[] = [
+      ...(h.fromPerson ? [{ from: "PERSON" as const, text: h.text, name: h.personName }] : []),
+      ...r.out.map((o) => ({ from: "BOT" as const, text: seenText(o) })),
+    ];
+    await logBotMessages(chat.centerId, chat.chatId, "AGENT", entries, h.now);
+  }
+  return r;
+}
+
+async function agentTurn(h: HandleInput): Promise<AgentReply> {
   const now = h.now ?? new Date();
   const chat = await db.agentChat.findUniqueOrThrow({
     where: { id: h.chatRowId },
@@ -341,7 +364,8 @@ export async function sendStaffMessage(a: { centerId: string; chatRowId: string;
       await tx.lead.updateMany({ where: { id: chat.leadId, stage: "NEW" }, data: { stage: "CONTACTED" } });
       await audit(tx, { centerId: a.centerId, userId: a.userId, entity: "Lead", entityId: chat.leadId, action: "agent.staffMessage", after: { chat: chat.id, length: text.length } });
     }
-  });
+    return chat.chatId;
+  }).then((chatId) => logBotMessages(a.centerId, chatId, "AGENT", [{ from: "STAFF", text, name: a.staffName }], now));
 }
 
 /** First line of an ask_teacher notification, and the link in it (written by tools.ts askTeacher). */
