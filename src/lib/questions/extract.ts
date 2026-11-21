@@ -24,7 +24,7 @@ export interface Usage {
 const usageOf = (m: Anthropic.Beta.BetaMessage): Usage => ({ inputTokens: m.usage.input_tokens + (m.usage.cache_read_input_tokens ?? 0) + (m.usage.cache_creation_input_tokens ?? 0), outputTokens: m.usage.output_tokens });
 const textOf = (m: Anthropic.Beta.BetaMessage) => m.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
 
-const MATH_STYLE = `Write every question as plain text a phone shows correctly: keep the book's words (Uzbek), and write math with plain characters — powers as x², 2³, aⁿ or 2^(n+1); roots as √(x+1) or ∛8; fractions as 3/4 or (a+b)/(a−b); multiplication as ·; division as the book does (: or /); a repeating decimal as 0,(3); mixed numbers as 2 1/3. Keep decimal commas as written.`;
+const MATH_STYLE = `Keep the book's words (Uzbek) as plain text and put every formula, number expression or variable between $…$ as LaTeX, so the app can draw it: powers $2^{100}$, $a^{n+1}$; roots $\\sqrt{x+1}$, $\\sqrt[3]{8}$; fractions $\\frac{3}{4}$; mixed numbers $2\\frac{1}{3}$; multiplication $\\cdot$; division as the book does ($:$ or $/$); a number written by its digits with a bar over them $\\overline{a_1a_2\\ldots a_n}$; indices $a_1$; repeating decimals $0,(3)$; keep decimal commas ($2{,}5$). Plain whole numbers and intervals may stay as text ([4; 8]). Answer options follow the same rule.`;
 
 // ------------------------------------------------------------------ reading pages
 
@@ -36,7 +36,16 @@ const EXTRACT_SCHEMA = {
     sections: {
       type: "array",
       description: "every section heading that appears on these pages, with the chapters and sections above it",
-      items: { type: "object", additionalProperties: false, required: ["code", "title"], properties: { code: { type: "string", description: "the book's number: \"1\", \"1.2\", \"1.2.3\"" }, title: { type: "string" } } },
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["code", "title", "theory"],
+        properties: {
+          code: { type: "string", description: "the book's number: \"1\", \"1.2\", \"1.2.3\"" },
+          title: { type: "string" },
+          theory: { type: "string", description: "the explanation under the heading before its questions (definitions, rules, examples), formulas in $…$; empty when none or not on these pages" },
+        },
+      },
     },
     questions: {
       type: "array",
@@ -61,8 +70,8 @@ const EXTRACT_SCHEMA = {
   },
 } as const;
 
-const EXTRACTED = z.object({
-  sections: z.array(z.object({ code: z.string(), title: z.string() })).max(200),
+export const EXTRACTED = z.object({
+  sections: z.array(z.object({ code: z.string(), title: z.string(), theory: z.string().optional() })).max(200),
   questions: z
     .array(
       z.object({
@@ -92,11 +101,11 @@ List every numbered question on these pages:
 - text: the question only (not the options); ${MATH_STYLE}
 - options: the answer options in order A, B, C, D (E), without the letters;
 - stated: when the book itself gives the answer to this question (a worked solution ending "Javob: …"), the option letter (the number for a question without options); else empty;
-- solution: the worked solution ("Yechish") as plain text when there is one, else empty;
+- solution: the worked solution ("Yechish") when there is one, formulas in $…$ as above, else empty;
 - figure: true when the question depends on a picture or drawing;
 - answer: solve the question yourself and give the option letter (the number for a question without options). Do not copy the printed answer: work it out, so a misprint can be caught. Empty if you cannot.
 
-Leave out a question the first page continues from an earlier page, and a question cut off at the end of the last page: neighbouring pages are read separately. Leave out theory, formulas and headings that are not numbered questions. List the section headings you see (and the chapter above them) in "sections".`;
+Leave out a question the first page continues from an earlier page, and a question cut off at the end of the last page: neighbouring pages are read separately. Theory, rules and formulas that are not numbered questions are not questions. List the section headings you see (and the chapter above them) in "sections", each with its theory: the explanation printed under the heading before its questions (definitions, rules with their numbers, worked examples), copied whole with formulas in $…$ and "\\n" between paragraphs and rules; empty when there is none or when it is above the first page; when it runs past the last page, copy what is there.`;
 }
 
 export interface ExtractedQuestion {
@@ -115,8 +124,17 @@ export interface ExtractedQuestion {
   solve: string | null;
 }
 
+/** Longest topic explanation kept. */
+export const MAX_THEORY = 20_000;
+
+export interface BookSection {
+  code: string;
+  title: string;
+  theory?: string;
+}
+
 export interface ExtractResult {
-  sections: { code: string; title: string }[];
+  sections: BookSection[];
   questions: ExtractedQuestion[];
   usage: Usage;
   /** "max_tokens": too many questions for one call — read fewer pages at a time */
@@ -125,7 +143,9 @@ export interface ExtractResult {
 
 /** The model's list → what the bank can take: known sections, 2–5 options, keys that fit their options. */
 export function toExtracted(raw: z.infer<typeof EXTRACTED>, firstPage: number, pageCount: number): Pick<ExtractResult, "sections" | "questions"> {
-  const sections = raw.sections.filter((s) => isTopicCode(s.code.trim()) && s.title.trim()).map((s) => ({ code: s.code.trim(), title: s.title.trim().slice(0, 200) }));
+  const sections = raw.sections
+    .filter((s) => isTopicCode(s.code.trim()) && s.title.trim())
+    .map((s) => ({ code: s.code.trim(), title: s.title.trim().slice(0, 200), ...(s.theory?.trim() ? { theory: s.theory.trim().slice(0, MAX_THEORY) } : {}) }));
   const questions: ExtractedQuestion[] = [];
   for (const q of raw.questions) {
     const options = q.options.map((o) => o.trim()).filter(Boolean);

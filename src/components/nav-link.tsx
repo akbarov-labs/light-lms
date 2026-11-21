@@ -3,6 +3,7 @@
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, KeyRound, Loader2, LogOut, Menu, X } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 import { LanguageOptions } from "./language-menu";
@@ -51,13 +52,21 @@ export function MobileNav({ children, label, closeLabel }: { children: ReactNode
   const [open, setOpen] = useState(false);
   const path = usePathname();
   useEffect(() => setOpen(false), [path]);
+  useEffect(() => {
+    if (!open) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [open]);
   return (
     <>
       <button type="button" className="-ml-1 flex h-11 w-11 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-100 lg:hidden" onClick={() => setOpen(true)} aria-label={label} aria-expanded={open}>
         <Menu className="h-5 w-5" aria-hidden />
       </button>
-      {open && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={label}>
+      {/* on <body>: the sticky header's backdrop blur makes a `fixed` child fill the header, not the screen */}
+      {open &&
+        createPortal(
+          <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={label}>
           <div className="absolute inset-0 bg-zinc-950/30" onClick={() => setOpen(false)} />
           <div className="absolute inset-y-0 left-0 w-72 max-w-[85vw] overflow-y-auto bg-white shadow-pop">
             <button type="button" onClick={() => setOpen(false)} className="absolute right-2 top-3 flex h-10 w-10 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100" aria-label={closeLabel}>
@@ -65,8 +74,9 @@ export function MobileNav({ children, label, closeLabel }: { children: ReactNode
             </button>
             {children}
           </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

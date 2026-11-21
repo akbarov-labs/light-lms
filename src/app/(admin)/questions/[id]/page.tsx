@@ -6,7 +6,9 @@ import { FILTERS, topicQuestions, type QuestionFilter } from "@/lib/services/que
 import { Badge, Card, cx, EmptyState, PageHeader, type Tone } from "@/components/ui";
 import { Field, Input, Textarea } from "@/components/fields";
 import { ActionForm, Modal, ModalForm, SubmitButton } from "@/components/client";
-import { approveSureAction, editQuestionAction, setQuestionStatusAction } from "../actions";
+import { MathText } from "@/components/math-text";
+import { approveSureAction, editQuestionAction, editTheoryAction, setQuestionStatusAction } from "../actions";
+import { MAX_THEORY } from "@/lib/questions/extract";
 
 const KEY_TONE: Record<string, Tone> = { STATED: "green", AGREED: "green", CONFLICT: "red", UNKNOWN: "amber" };
 const STATUS_TONE: Record<string, Tone> = { DRAFT: "gray", APPROVED: "green", REJECTED: "red" };
@@ -50,6 +52,30 @@ export default async function TopicQuestionsPage({ params, searchParams }: { par
           ))}
         </div>
       )}
+      {(topic.theory || canEdit) && (
+        <details className="mb-4 rounded-xl border border-line bg-white" open={!!topic.theory && counts.all < 1}>
+          <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-zinc-900">
+            {t("questions.theory")}
+            {!topic.theory && <span className="ml-2 font-normal text-zinc-500">{t("questions.theoryNone")}</span>}
+          </summary>
+          <div className="border-t border-zinc-100 px-4 py-3">
+            {topic.theory && <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-zinc-800"><MathText text={topic.theory} /></div>}
+            {canEdit && (
+              <div className="mt-3">
+                <Modal label={t("questions.theoryEdit")} title={`${t("questions.theoryEdit")}: ${topic.code}. ${topic.title}`} variant="secondary" size="sm" wide>
+                  <ModalForm action={editTheoryAction} className="space-y-3">
+                    <input type="hidden" name="topicId" value={topic.id} />
+                    <Field label={t("questions.theory")} hint={t("questions.mathHint")}>
+                      <Textarea name="theory" defaultValue={topic.theory ?? ""} rows={14} maxLength={MAX_THEORY} />
+                    </Field>
+                    <SubmitButton>{t("common.save")}</SubmitButton>
+                  </ModalForm>
+                </Modal>
+              </div>
+            )}
+          </div>
+        </details>
+      )}
       <nav className="mb-4 flex flex-wrap gap-1" aria-label={t("common.filter")}>
         {FILTERS.map((f) => (
           <Link
@@ -83,12 +109,12 @@ export default async function TopicQuestionsPage({ params, searchParams }: { par
                   {q.status === "DRAFT" && <Badge tone={KEY_TONE[q.keyCheck]}>{t(`questions.key.${q.keyCheck}`)}</Badge>}
                   {q.needsFigure && <Badge tone="violet">{t("questions.figure")}</Badge>}
                 </div>
-                <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-zinc-900">{q.text}</p>
+                <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-zinc-900"><MathText text={q.text} /></p>
                 {q.options.length > 0 && (
                   <ol className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
                     {q.options.map((o, i) => (
                       <li key={i} className={cx("rounded px-2 py-0.5", q.answer === LETTERS[i] && "bg-emerald-50 font-medium text-emerald-900")}>
-                        {LETTERS[i]}) {o}
+                        {LETTERS[i]}) <MathText text={o} />
                       </li>
                     ))}
                   </ol>
@@ -104,7 +130,7 @@ export default async function TopicQuestionsPage({ params, searchParams }: { par
                 {q.solution && (
                   <details className="mt-2 text-sm">
                     <summary className="cursor-pointer text-zinc-500">{t("questions.solution")}</summary>
-                    <p className="mt-1 whitespace-pre-wrap text-zinc-700">{q.solution}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-zinc-700"><MathText text={q.solution} /></p>
                   </details>
                 )}
                 {canEdit && (
@@ -118,7 +144,7 @@ export default async function TopicQuestionsPage({ params, searchParams }: { par
                       <ModalForm action={editQuestionAction} className="space-y-3">
                         <input type="hidden" name="id" value={q.id} />
                         <input type="hidden" name="topicId" value={topic.id} />
-                        <Field label={t("questions.text")}>
+                        <Field label={t("questions.text")} hint={t("questions.mathHint")}>
                           <Textarea name="text" defaultValue={q.text} rows={5} required maxLength={4000} />
                         </Field>
                         <Field label={t("questions.options")} hint={t("questions.optionsHint")}>

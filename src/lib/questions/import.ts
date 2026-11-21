@@ -75,6 +75,7 @@ export async function importBook(o: ImportOptions): Promise<ImportReport> {
   const held = await db.question.findMany({ where: { centerId: o.centerId, number: { not: null } }, select: { number: true, topic: { select: { code: true } } } });
   const seen = new Set(held.map((q) => keyOfQ(q.topic.code, q.number!)));
   const titles = new Map((await db.questionTopic.findMany({ where: { centerId: o.centerId }, select: { code: true, title: true } })).map((t) => [t.code, t.title]));
+  const theories = new Map<string, string>();
   let sectionAtStart: { code: string; title: string } | null = null;
 
   const pagesOf = async ([a, b]: [number, number]) => {
@@ -88,7 +89,11 @@ export async function importBook(o: ImportOptions): Promise<ImportReport> {
     const [a, b] = range;
     const r = await extractPages({ pdf: await pagesOf(range), firstPage: a, pageCount: b - a + 1, sectionAtStart, model: o.model, create: o.create });
     add(r.usage);
-    r.sections.forEach((s) => titles.set(s.code, s.title));
+    r.sections.forEach((s) => {
+      titles.set(s.code, s.title);
+      // a range that cuts an explanation off reads less of it than the next one: keep the longer reading
+      if (s.theory && s.theory.length > (theories.get(s.code)?.length ?? 0)) theories.set(s.code, s.theory);
+    });
     if (r.failed === "max_tokens" && a !== b) {
       log(`  pages ${a}–${b}: too long for one answer, reading in smaller parts`);
       const out: ExtractedQuestion[] = [];
@@ -136,7 +141,7 @@ export async function importBook(o: ImportOptions): Promise<ImportReport> {
     if (!o.dryRun && items.length) {
       // with the chapters above each section, so they get their titles too
       const codes = new Set(items.flatMap((i) => codeChain(i.q.section)));
-      const sections = [...codes].filter((code) => titles.has(code)).map((code) => ({ code, title: titles.get(code)! }));
+      const sections = [...codes].filter((code) => titles.has(code)).map((code) => ({ code, title: titles.get(code)!, theory: theories.get(code) }));
       const saved = await saveImported(o.centerId, sections, items);
       report.created += saved.created;
       report.skipped += saved.skipped;

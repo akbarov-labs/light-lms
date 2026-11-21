@@ -1305,6 +1305,8 @@ model QuestionTopic {
   /// "1", "1.1", "1.1.1"; sorts by its numeric parts
   code      String
   title     String
+  /// the book's explanation under the heading (rules, definitions, examples); $…$ formulas
+  theory    String?
   createdAt DateTime @default(now())
 
   questions Question[]

@@ -79,6 +79,13 @@ describe("toExtracted", () => {
     // a stated answer in key form is kept
     expect(toExtracted({ sections: [], questions: [q({ stated: "b" })] } as never, 1, 4).questions[0].stated).toBe("B");
   });
+  it("keeps a topic's explanation, trimmed, and none when it is empty", () => {
+    const r = toExtracted({ sections: [{ code: "1.1.4", title: "Bo'linish belgilari", theory: "  1. Oxirgi raqami $0$ yoki $5$ bo'lsa ...  " }, { code: "1.1.5", title: "Qoldiqli bo'lish", theory: " " }], questions: [] } as never, 1, 4);
+    expect(r.sections).toEqual([
+      { code: "1.1.4", title: "Bo'linish belgilari", theory: "1. Oxirgi raqami $0$ yoki $5$ bo'lsa ..." },
+      { code: "1.1.5", title: "Qoldiqli bo'lish" },
+    ]);
+  });
   it("drops what the bank cannot take", () => {
     const r = toExtracted({ sections: [{ code: "x", title: "y" }], questions: [q({ options: ["only one"] }), q({ section: "bob" }), q({ text: " " }), q({ number: 0 }), q({ options: ["1", "2", "3", "4", "5", "6"] })] } as never, 1, 4);
     expect(r.sections).toEqual([]);
